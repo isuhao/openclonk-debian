@@ -1,7 +1,8 @@
-This package was debianized by Sebastian Rühl <sebastian.ruehl@mni.fh-giessen.de> on
-Sun, 31 May 2009 21:15:05 +0200.
+This package was debianized by Sebastian Rühl
+<sebastian.ruehl@mni.fh-giessen.de> on Sun, 31 May 2009 21:15:05 +0200.
 
-It was downloaded from http://wiki.openclonk.org/
+It was downloaded from the Mercurial repository at
+`http://hg.openclonk.org/openclonk/'.
 
 Upstream Authors:
 
@@ -31,30 +32,27 @@ Upstream Authors:
 
 Copyright:
 
-   redwolf Design
+   Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+
+   Portions are copyrighted by other authors who have contributed
+   to OpenClonk.  The complete copyright statements can be found
+   in the corresponding source files.
 
 License:
 
-    This package is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2 of the License, or (at your option) any later version.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-    This package is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-    You should have received a copy of the GNU Lesser General Public
-    License along with this package; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
-
-On Debian systems, the complete text of the GNU Lesser General
-Public License can be found in `/usr/share/common-licenses/LGPL'.
-
-The Debian packaging is copyright 2009, Sebastian Rühl <sebastian.ruehl@mni.fh-giessen.de> and
-is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
-
-
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
+The Debian packaging is copyright 2009, Sebastian Rühl
+<sebastian.ruehl@mni.fh-giessen.de> and copyright 2011, Philipp Kern
+<pkern@debian.org> and is licensed under the GPL, see
+`/usr/share/common-licenses/GPL'.
