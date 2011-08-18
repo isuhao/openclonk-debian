@@ -21,6 +21,7 @@ Description: a multiplayer game of strategy, action and skill
 Package: openclonk-data
 Architecture: all
 Depends: ${misc:Depends}
+Recommends: openclonk
 Description: a multiplayer game of strategy, action and skill - data
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
