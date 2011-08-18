@@ -1,6 +1,6 @@
 [Desktop Entry]
 Version=1.0
-Name=Open Clonk
+Name=OpenClonk
 GenericName=Game
 Comment=OpenClonk is mainly about mining, settling and fast-paced melees.
 Exec=clonk
@@ -8,4 +8,4 @@ Icon=c4x
 StartupNotify=true
 Terminal=false
 Type=Application
-Categories=GNOME;GTK;Game;JumpNRun;
+Categories=Game;ActionGame;
