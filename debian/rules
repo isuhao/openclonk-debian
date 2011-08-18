@@ -25,6 +25,7 @@ override_dh_auto_install:
 		base="$$(basename $$datafile)"; \
 		ln -s ../../share/games/openclonk/$$base "$(CURDIR)"/debian/tmp/usr/lib/openclonk/; \
 	done
+	install "$(CURDIR)"/build/c4group "$(CURDIR)"/usr/bin
 	# Install the wrapper.
 	install "$(CURDIR)"/debian/clonk.wrapper "$(CURDIR)"/debian/tmp/usr/games/openclonk
 
