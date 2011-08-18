@@ -8,7 +8,7 @@ Homepage: http://www.openclonk.org
 
 Package: openclonk
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, openclonk-data (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, openclonk-data (= ${source:Version})
 Description: a multiplayer game of strategy, action and skill
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
@@ -20,6 +20,7 @@ Description: a multiplayer game of strategy, action and skill
 
 Package: openclonk-data
 Architecture: all
+Depends: ${misc:Depends}
 Description: a multiplayer game of strategy, action and skill - data
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
