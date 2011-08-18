@@ -11,19 +11,19 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	# OpenClonk does not support `make install' yet.
-	install -d "$(CURDIR)"/debian/tmp/usr/share/openclonk
+	install -d "$(CURDIR)"/debian/tmp/usr/share/games/openclonk
 	install -d "$(CURDIR)"/debian/tmp/usr/lib/openclonk
 	# Pack the game files.
 	cp -r "$(CURDIR)"/planet "$(CURDIR)"/build/planet
 	build/c4group "$(CURDIR)"/build/planet/*.c4* -p
 	install -m 0644 "$(CURDIR)"/build/planet/*.c4* \
-		"$(CURDIR)"/debian/tmp/usr/share/openclonk
+		"$(CURDIR)"/debian/tmp/usr/share/games/openclonk
 	# Install the binaries.
 	install -d "$(CURDIR)"/debian/tmp/usr/games
 	install "$(CURDIR)"/build/clonk "$(CURDIR)"/debian/tmp/usr/lib/openclonk/
 	for datafile in "$(CURDIR)"/build/planet/*.c4*; do \
 		base="$$(basename $$datafile)"; \
-		ln -s ../../share/openclonk/$$base "$(CURDIR)"/debian/tmp/usr/lib/openclonk/; \
+		ln -s ../../share/games/openclonk/$$base "$(CURDIR)"/debian/tmp/usr/lib/openclonk/; \
 	done
 	# Install the wrapper.
 	install "$(CURDIR)"/debian/clonk.wrapper "$(CURDIR)"/debian/tmp/usr/games/openclonk
