@@ -29,3 +29,6 @@ override_dh_auto_install:
 	# Install the wrapper.
 	install "$(CURDIR)"/debian/clonk.wrapper "$(CURDIR)"/debian/tmp/usr/games/openclonk
 
+override_dh_strip:
+	dh_strip --dbg-package=openclonk-dbg
+

@@ -29,3 +29,16 @@ Description: a multiplayer game of strategy, action and skill - data
  possibilites to make own mods.
  .
  This package contains the game data.
+
+Package: openclonk-dbg
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, openclonk (= ${binary:Version})
+Description: a multiplayer game of strategy, action and skill - debug symbols
+ OpenClonk is a free multiplayer action game where you control clonks,
+ small but witty and nimble humanoid beings. The game is mainly about
+ mining, settling and fast-paced melees. OpenClonk is also not just a
+ game but also a versatile 2D game engine that offers countless
+ possibilites to make own mods.
+ .
+ This package contains the debugging symbols. It is usually not needed.
