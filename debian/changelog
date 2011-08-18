@@ -1,6 +1,6 @@
 openclonk (5.1.2-1) UNRELEASED; urgency=low
 
-  * Initial Debian release.  (Closes: #XXXXXX)
+  * Initial Debian release.  (Closes: #531324)
 
  -- Philipp Kern <pkern@debian.org>  Thu, 18 Aug 2011 22:22:41 +0200
 
