@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 %:
-	dh $@ --parallel -B
+	dh $@ --parallel --buildsystem=cmake -B
 
 override_dh_auto_configure:
 	dh_auto_configure -- -DWITH_AUTOMATIC_UPDATE=0
