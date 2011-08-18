@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>COMD_Stop</title>
+    <category>Objects</category>
+    <subcat>Movement</subcat>
+    <version>4.6.5.0 CP</version>
+    <syntax><rtype>int</rtype></syntax>
+    <desc>Movement direction: stop. For more information see <funclink>SetComDir</funclink>.</desc>
+    <remark>This value is also defined as a constant. Thus the parameter brackets can be omitted.</remark>
+    <remark><funclink>COMD_None</funclink> and COMD_Stop are identical and have the value 0.</remark>
+    <examples>
+      <example>
+        <code><funclink>SetComDir</funclink>(COMD_None, <funclink>GetCursor</funclink>());</code>
+        <text>Makes the currently selected clonk of the first player stop.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetComDir</funclink>
+      <funclink>SetComDir</funclink>
+      <funclink>COMD_None</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2003-06</date>
+</funcs>

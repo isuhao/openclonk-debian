@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>GetColor</title>
+    <category>Objects</category>
+    <subcat>Display</subcat>
+    <version>4.9.1.0 GWE</version>
+    <syntax><rtype>int</rtype></syntax>
+    <desc>Gets the RGB color value of the ColorByOwner areas of an object. These are controlled by <funclink>SetOwner</funclink>, <funclink>SetColor</funclink> or <placeholder-3/>.</desc>
+    <examples>
+      <example>
+        <code>caller-&gt;<funclink>SetColor</funclink>(GetColor());</code>
+        <text>Colors caller like the current object.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetPlrColor</funclink>
+      <funclink>SetColor</funclink>
+      <funclink>GetClrModulation</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2002-05</date>
+</funcs>

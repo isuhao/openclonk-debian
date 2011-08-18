@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>SetPlrView</title>
+    <category>Player</category>
+    <subcat>View</subcat>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>bool</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>player</name>
+          <desc>Player whose view distance to want to set.</desc>
+        </param>
+        <param>
+          <type>object</type>
+          <name>obj</name>
+          <desc>Object to which to want to set the view.</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Centers a player's view to the specified object. The view will follow this object until the next player command.</desc>
+    <examples>
+      <example>
+        <code>local oFeind;
+// TimerCall eines automatischen Aussichtsturms
+protected func Timer()
+{
+  // Bereits einen Feind gefunden?
+  <funclink>if</funclink>(!oFeind)
+  {
+    // Alarm schlagen?
+    <funclink>while</funclink>(oAlarm = <funclink>FindObject</funclink>(0, -100, -100, 200, 200, <funclink>OCF_CrewMember</funclink>(), 0, 0, 0, oAlarm))
+      <funclink>if</funclink>(<funclink>Hostile</funclink>(<funclink>GetOwner</funclink>(oAlarm), <funclink>GetOwner</funclink>()))
+      {
+        // Ein feindlicher Clonk!
+        SetPlrView(<funclink>GetOwner</funclink>(), oAlarm);
+        <funclink>Sound</funclink>(&quot;Bing&quot;);
+        break;
+      }
+  }
+  else
+  {
+    <funclink>if</funclink>(<funclink>ObjectDistance</funclink>(oFeind) &lt; 120)
+    {
+      // Noch einige ständige Effekte bei Alarm
+      <funclink>Sound</funclink>(&quot;Bing&quot;);
+      <funclink>Message</funclink>(&quot;!!! FEIND !!!&quot;);
+    }
+    else
+    {
+      // wenn er sich entfernt: Alarm beenden
+      oFeind = 0;
+    }
+  }
+}
+				</code>
+        <text>Automatic watch tower: if an enemy clonk gets near the tower the player's view will be set to the attacker. Also, a sound is played and a message is popped up while the enemy is in range.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetPlrView</funclink>
+      <funclink>GetPlrViewMode</funclink>
+      <funclink>SetPlrViewRange</funclink>
+      <funclink>SetFoW</funclink>
+    </related>
+  </func>
+  <author>PeterW</author><date>2003-04</date>
+</funcs>

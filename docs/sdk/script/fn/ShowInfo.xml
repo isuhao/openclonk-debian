@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>ShowInfo</title>
+    <category>Objects</category>
+    <subcat>Menu</subcat>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>bool</rtype>
+      <params>
+        <param>
+          <type>object</type>
+          <name>obj</name>
+          <desc>Object for which to display information. If unspecified, the calling object will be used.</desc>
+          <optional />
+        </param>
+      </params>
+    </syntax>
+    <desc>Displays the description text of an object in a popup window (a menu window).</desc>
+    <remark>The information window's background will be the definition image of the obect.</remark>
+    <examples>
+      <example>
+        <code>protected func ControlSpecial()
+  {
+  ShowInfo(<funclink>Contents</funclink>());
+  <funclink>return</funclink> 1;
+  }</code>
+        <text>A feature for a special clonk: pressing the 'special' key will display the description of the first inventory item in a popup window. If the clonk does not carry any objects, the clonk's own description will be displayed.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>SetCommand</funclink>
+      <funclink>GetDesc</funclink>
+      <funclink>CreateMenu</funclink>
+      <funclink>AddMenuItem</funclink>
+      <funclink>CloseMenu</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2002-08</date>
+</funcs>

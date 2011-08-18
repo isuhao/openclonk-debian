@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>SetPlayList</title>
+    <category>Music</category>
+    <version>4.9.1.0 GWE</version>
+    <syntax>
+      <rtype>int</rtype>
+      <params>
+        <param>
+          <type>string</type>
+          <name>playlist</name>
+          <desc>List of pieces of music to be played. The individual file names are separated with semicolons (";"). Wildcards are expanded. When 0, the standard playlist is restored.</desc>
+          <optional />
+        </param>
+      </params>
+    </syntax>
+    <desc>Sets the play list of pieces of music to be played in random order, if music is activated. The actual number of pieces of music in the playlist is returned, or 0 in network mode.</desc>
+    <remark>SetPlayList does not activate music playback when the player has turned the music off. If the player enables music, the new playlist takes effect.</remark>
+    <remark><code>SetPlayList("*.*")</code> is not identical to <code>SetPlayList()</code>. The former activates all music, the latter only those not starting with "@", the standard behavior.</remark>
+    <related><funclink>Music</funclink></related>
+  </func>
+  <author>PeterW</author><date>2003-01</date>
+</funcs>

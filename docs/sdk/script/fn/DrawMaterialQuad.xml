@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>DrawMaterialQuad</title>
+    <category>Landscape</category>
+    <version>4.9.1.0 GWE</version>
+    <syntax>
+      <rtype>bool</rtype>
+      <params>
+        <param>
+          <type>string</type>
+          <name>szMaterialTexture</name>
+          <desc>Material-Texture combination for the material to be drawn.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>x1</name>
+          <desc>X coordinate of the first corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y1</name>
+          <desc>Y coordinate of the first corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>x2</name>
+          <desc>X coordinate of the second corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y2</name>
+          <desc>Y coordinate of the second corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>x3</name>
+          <desc>X coordinate of the third corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y3</name>
+          <desc>Y coordinate of the third corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>x4</name>
+          <desc>X coordinate of the fourth corner. Always global.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y4</name>
+          <desc>Y coordinate of the fourth corner. Always global.</desc>
+        </param>
+        <param>
+          <type>bool</type>
+          <name>sub</name>
+          <desc>If true, the material will be drawn as 'underground'.</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Draws a four-cornered polygon of the specified material and texture into the landscape. If no texture is specified, Smooth is assumed.</desc>
+    <remark>The corners of the polygon should be specified in clockwise order and polygon boundaries should not intersect. For more complex or concave shapes you make multiple calls to this function.</remark>
+    <examples>
+      <example>
+        <code>DrawMaterialQuad(&quot;Gold-Rough&quot;, 0,0, <funclink>LandscapeWidth</funclink>()-1,0, <funclink>LandscapeWidth</funclink>()-1,<funclink>LandscapeHeight</funclink>()-1, 0,<funclink>LandscapeHeight</funclink>()-1);</code>
+        <text>Fills the complete landscape with gold.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>InsertMaterial</funclink>
+      <funclink>SetLandscapePixel</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2002-05</date>
+</funcs>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>Translate</title>
+    <category>Script</category>
+    <subcat>Strings</subcat>
+    <version>4.10.0.0 OC</version>
+    <syntax>
+      <rtype>string</rtype>
+      <params>
+        <param>
+          <type>string</type>
+          <name>text</name>
+          <desc>String to translate</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Looks up a text in <emlink href="lang.html">StringTbl??.txt</emlink> of the calling script and returns its translation.</desc>
+    <examples>
+      <example>
+        <code><funclink>Message</funclink>(Translate(&quot;I need a better example&quot;));</code>
+        <text>Displays "Ich benötige ein besseres Beispiel" for German users.</text>
+      </example>
+    </examples>
+  </func>
+  <author>Isilkor</author><date>2009-11</date>
+</funcs>

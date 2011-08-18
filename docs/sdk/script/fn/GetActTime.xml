@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>GetActTime</title>
+    <category>Objects</category>
+    <subcat>Activity</subcat>
+    <version>4.6.5.0 CP</version>
+    <syntax><rtype>int</rtype></syntax>
+    <desc>Returns the time (in frames) that the object is already executing this same action.</desc>
+    <examples>
+      <example>
+        <code>private func Burning()
+{
+  // Rauch
+  <funclink>Smoke</funclink>(+23, <funclink>Random</funclink>(3) - 24, <funclink>Random</funclink>(5) + 8);
+  // Noch nicht fertig
+  if (GetActTime() &lt; 150) <funclink>return</funclink> 1;
+  // Fertig
+  <funclink>SetAction</funclink>(&quot;Idle&quot;);
+  // Erz suchen
+  var ore;
+  <funclink>if</funclink> (!(ore = <funclink>FindContents</funclink>(Ore))) <funclink>return</funclink> 1;
+  // Erz verbrauchen
+  ore-&gt;<funclink>RemoveObject</funclink>();
+  // Metall auswerfen
+  <funclink>CreateContents</funclink>(Metal)-&gt;<funclink>Exit</funclink>(-27, +13, 0, -1);
+  // Sound
+  <funclink>Sound</funclink>(&quot;Pshshsh&quot;);
+}
+</code>
+        <text>From the foundry: after 150 frames the metal is complete.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetAction</funclink>
+      <funclink>GetActionTarget</funclink>
+      <funclink>GetPhase</funclink>
+      <funclink>SetAction</funclink>
+      <funclink>SetPhase</funclink>
+    </related>
+  </func>
+  <author>Günther</author><date>2002-04</date>
+</funcs>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>SetPlrViewRange</title>
+    <category>Player</category>
+    <subcat>View</subcat>
+    <version>4.9.1.0 GWE</version>
+    <syntax>
+      <rtype>void</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>range</name>
+          <desc>View distance in pixels.</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Sets the view distance of the object.</desc>
+    <remark>Due to the fuzzyness of the fog of war this will only be an approximation.</remark>
+    <examples>
+      <example>
+        <code>/* Wird bei Doppelklick auf Graben aufgerufen */
+protected func Activate(clonk)
+{
+	// Den Clonk blenden
+	clonk-&gt;SetPlrViewRange(0);
+	// Schmerzensschrei 
+	<funclink>Sound</funclink>(&quot;Scream&quot;, clonk);
+	return true;
+}
+				</code>
+        <text>Confused the acid phile with the eye drops, did ya?</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>SetPlrView</funclink>
+      <funclink>SetFoW</funclink>
+    </related>
+  </func>
+  <author>wipfmetz</author><date>2002-08</date>
+</funcs>

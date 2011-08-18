@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>GetTaggedPlayerName</title>
+    <category>Player</category>
+    <version>4.9.6.0 CR</version>
+    <syntax>
+      <rtype>string</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>player</name>
+          <desc>Number of the player whose name to get.</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Returns the name of a player, including color markup using the player color. If the specified player number is invalid, 0 is returned. Thus this function can also be used to determine whether a player of a given number exists.</desc>
+    <remark>The markup color is chosen so the player name will be readable on black background. Dark player names are brightened up.</remark>
+    <examples>
+      <example>
+        <code>protected func Activate(clonk)
+  {
+  <funclink>Log</funclink>(&quot;%s hat das Objekt aktiviert!&quot;, GetTaggedPlayerName(<funclink>GetController</funclink>(clonk)));
+  <funclink>return</funclink>(1);
+  }</code>
+        <text>Object script: When activated, a message will be shown which draws attention to the player.</text>
+      </example>
+    </examples>
+    <related><funclink>GetPlayerName</funclink></related>
+  </func>
+  <author>Sven2</author><date>2006-03</date>
+</funcs>

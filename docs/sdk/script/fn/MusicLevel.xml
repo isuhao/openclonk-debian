@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>MusicLevel</title>
+    <category>Music</category>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>int</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>level</name>
+          <desc>Desired volume (0-100).</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Sets the volume for playback of background music (see <funclink>Music</funclink>).</desc>
+    <examples>
+      <example>
+        <code>local volume;
+
+func Initialize()
+{
+  volume = 100;
+}
+
+func Timer()
+{
+  volume--;
+  MusicLevel(volume);
+  if(volume &lt;= 0)
+  {
+    <funclink>Music</funclink>();
+    <funclink>RemoveObject</funclink>();
+  }
+}</code>
+        <text>Script for an object which will fade out background music: the "Timer" function will decrease the volume step by step until it is 0. Then the music will be turned off and the helper object deleted.</text>
+      </example>
+    </examples>
+    <related><funclink>Music</funclink></related>
+  </func>
+  <author>PeterW</author><date>2003-02</date>
+</funcs>

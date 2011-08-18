@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>DigFree</title>
+    <category>Landscape</category>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>void</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>x</name>
+          <desc>X coordinate</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y</name>
+          <desc>Y coordinate</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>radius</name>
+          <desc>Radius</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Makes a circular hole in semi-solid materials.</desc>
+    <examples>
+      <example>
+        <code>DigFree(700, 1500, 5);</code>
+        <text>Makes a small hole in the middle of the landscape.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>DigFreeRect</funclink>
+      <funclink>Explode</funclink>
+    </related>
+  </func>
+  <author>jwk</author><date>2002-04</date>
+</funcs>

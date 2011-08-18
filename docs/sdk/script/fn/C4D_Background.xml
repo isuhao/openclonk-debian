@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>C4D_Background</title>
+    <category>Objects</category>
+    <subcat>Category</subcat>
+    <version>4.9.1.0 GWE</version>
+    <syntax><rtype>int </rtype></syntax>
+    <desc>Object category: object is drawn behind the landscape. Useful for effects like clouds or celestial bodies.</desc>
+    <remark>This value is also defined as a constant. Thus the parameter brackets can be omitted.</remark>
+    <remark>This category does not work in the old 8 bit graphics system.</remark>
+    <examples>
+      <example>
+        <code><funclink>SetCategory</funclink>(<funclink>GetCategory</funclink>() | C4D_Background());</code>
+        <text>Move the calling object into the background.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetCategory</funclink>
+      <funclink>SetCategory</funclink>
+      <funclink>GetDefinition</funclink>
+      <funclink>C4D_Parallax</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2003-06</date>
+</funcs>

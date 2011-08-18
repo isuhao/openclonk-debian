@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>IsNetwork</title>
+    <category>Global</category>
+    <version>4.6.5.0 CP</version>
+    <syntax><rtype>bool</rtype></syntax>
+    <desc>Returns whether the current game is a network game.</desc>
+    <examples>
+      <example>
+        <code>if(IsNetwork()) <funclink>Message</funclink>(&quot;Dieses Szenario benutzt netzwerkfeindliche Funktionen. Es kann zu Synchronisationsproblemen kommen; der Autor übernimmt keine Garantie für die Spielbarkeit.&quot;);</code>
+        <text>Displays a text if the current game is a network game.</text>
+      </example>
+    </examples>
+  </func>
+  <author>jwk</author><date>2002-04</date>
+</funcs>

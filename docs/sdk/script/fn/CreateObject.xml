@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>CreateObject</title>
+    <category>Objects</category>
+    <subcat>Creation</subcat>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>object</rtype>
+      <params>
+        <param>
+          <type>id</type>
+          <name>id</name>
+          <desc>Type of object to be created.</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>xoffset</name>
+          <desc>X coordinate</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>yoffset</name>
+          <desc>Y coordinate</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>owner</name>
+          <desc>Owner of the new object (valid player number or <funclink>NO_OWNER</funclink> for no-owner).</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Creates an object of the specified type at the specified position. The position will be the bottom center of the new object. xoffset and yoffset are relative to the calling object in local calls, otherwiese global.</desc>
+    <examples>
+      <example>
+        <code>CreateObject(WIPF, 100,100, <funclink>NO_OWNER</funclink>);</code>
+        <text>Creates a wipf at coordinates 100/100 with no owner.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>CreateConstruction</funclink>
+      <funclink>CreateContents</funclink>
+      <funclink>RemoveObject</funclink>
+    </related>
+  </func>
+  <author>springer</author><date>2002-04</date>
+</funcs>

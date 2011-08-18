@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>PathFree</title>
+    <category>Landscape</category>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>bool</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>x1</name>
+          <desc>X coordinate of the start point</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y1</name>
+          <desc>Y coordinate of the start point</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>x2</name>
+          <desc>X coordinate of the end point</desc>
+        </param>
+        <param>
+          <type>int</type>
+          <name>y2</name>
+          <desc>Y coordinate of the end point</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Determines whether the path from the start point to the end point is free, meaning that no solid material is intersected by a directly line between those points.</desc>
+    <remark>All coordinates are global, even in local calls.</remark>
+    <examples>
+      <example>
+        <code>protected func ControlSpecial2()
+  {
+  var i, base;
+  while (base=FindBase(GetOwner(), i++))
+    if (PathFree(GetX(), GetY(), GetX(base), GetY(base)))
+      {
+      Message(&quot;Ich sehe meine Basis!&quot;);
+      break;
+      }
+  if (!base) Message(&quot;Ich sehe meine Basis nicht :/&quot;);
+  }</code>
+        <text>Script of a special clonk: with key Special 2 he will tell you whether he can see one of his home bases.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetMaterial</funclink>
+      <funclink>GBackSolid</funclink>
+      <funclink>GetPathLength</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2002-08</date>
+</funcs>

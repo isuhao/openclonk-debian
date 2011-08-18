@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE funcs
+  SYSTEM '../../../clonk.dtd'>
+<?xml-stylesheet type="text/xsl" href="../../../clonk.xsl"?>
+<funcs>
+  <func>
+    <title>GetPlayerName</title>
+    <category>Player</category>
+    <version>4.6.5.0 CP</version>
+    <syntax>
+      <rtype>string</rtype>
+      <params>
+        <param>
+          <type>int</type>
+          <name>player</name>
+          <desc>Number of the player whose name to get.</desc>
+        </param>
+      </params>
+    </syntax>
+    <desc>Returns the name of a player. If the specified player number is invalid, 0 is returned. Thus this function can also be used to determine whether a player of a given number exists.</desc>
+    <examples>
+      <example>
+        <code>protected func Activate(clonk)
+  {
+  // Begrüßen
+  <funclink>Message</funclink>(&quot;Moin, %s. Was macht %s?&quot;, <funclink>GetName</funclink>(clonk), GetPlayerName(<funclink>GetOwner</funclink>(clonk)));
+  // Fertig
+  <funclink>return</funclink>(1);
+  }</code>
+        <text>Object script: when activated, the clonk asks what the player is doing.</text>
+      </example>
+    </examples>
+    <related>
+      <funclink>GetTaggedPlayerName</funclink>
+      <funclink>GetPlayerByName</funclink>
+      <funclink>GetPlayerCount</funclink>
+      <funclink>GetName</funclink>
+      <funclink>GetOwner</funclink>
+    </related>
+  </func>
+  <author>Sven2</author><date>2002-08</date>
+</funcs>
