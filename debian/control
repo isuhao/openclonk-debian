@@ -33,6 +33,7 @@ Description: a multiplayer game of strategy, action and skill - data
 
 Package: openclonk-dbg
 Section: debug
+Priority: extra
 Architecture: any
 Depends: ${misc:Depends}, openclonk (= ${binary:Version})
 Description: a multiplayer game of strategy, action and skill - debug symbols
