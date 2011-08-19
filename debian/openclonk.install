@@ -2,4 +2,3 @@ src/res/c4x.xpm usr/share/pixmaps
 debian/openclonk.desktop usr/share/applications
 usr/lib/openclonk
 usr/games
-usr/bin
