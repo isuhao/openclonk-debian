@@ -1,4 +1,4 @@
-openclonk (5.1.2-1) UNRELEASED; urgency=low
+openclonk (5.1.2.4.0-1) UNRELEASED; urgency=low
 
   * Initial Debian release.  (Closes: #531324)
 
