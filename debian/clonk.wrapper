@@ -1,2 +1,3 @@
 #!/bin/sh
-/usr/lib/openclonk/clonk $@
+echo "WARNING: Please call openclonk instead.  The clonk binary will go away!"
+openclonk
