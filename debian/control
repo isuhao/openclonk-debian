@@ -9,7 +9,7 @@ Homepage: http://www.openclonk.org
 Package: openclonk
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, openclonk-data (= ${source:Version})
-Description: a multiplayer game of strategy, action and skill
+Description: multiplayer game of strategy, action and skill
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
@@ -22,7 +22,7 @@ Package: openclonk-data
 Architecture: all
 Depends: ${misc:Depends}
 Recommends: openclonk
-Description: a multiplayer game of strategy, action and skill - data
+Description: multiplayer game of strategy, action and skill - data
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
@@ -36,7 +36,7 @@ Section: debug
 Priority: extra
 Architecture: any
 Depends: ${misc:Depends}, openclonk (= ${binary:Version})
-Description: a multiplayer game of strategy, action and skill - debug symbols
+Description: multiplayer game of strategy, action and skill - debug symbols
  OpenClonk is a free multiplayer action game where you control clonks,
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
