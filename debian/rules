@@ -15,13 +15,13 @@ override_dh_auto_install:
 	install -d "$(CURDIR)"/debian/tmp/usr/lib/openclonk
 	# Pack the game files.
 	cp -r "$(CURDIR)"/planet "$(CURDIR)"/build/planet
-	build/c4group -v "$(CURDIR)"/build/planet/*.c4* -p
-	install -m 0644 "$(CURDIR)"/build/planet/*.c4* \
+	build/c4group -v "$(CURDIR)"/build/planet/*.oc* -p
+	install -m 0644 "$(CURDIR)"/build/planet/*.oc* \
 		"$(CURDIR)"/debian/tmp/usr/share/games/openclonk
 	# Install the binaries.
 	install -d "$(CURDIR)"/debian/tmp/usr/games
 	install "$(CURDIR)"/build/clonk "$(CURDIR)"/debian/tmp/usr/lib/openclonk/
-	for datafile in "$(CURDIR)"/build/planet/*.c4*; do \
+	for datafile in "$(CURDIR)"/build/planet/*.oc*; do \
 		base="$$(basename $$datafile)"; \
 		ln -s ../../share/games/openclonk/$$base "$(CURDIR)"/debian/tmp/usr/lib/openclonk/; \
 	done
