@@ -3,7 +3,9 @@
  *
  * Copyright (c) 1998-2000, 2007  Matthes Bender
  * Copyright (c) 2001-2002, 2004-2007  Sven Eberhardt
- * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2005, 2010  Peter Wortmann
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -56,13 +58,6 @@ public:
 #define C4S_SAVE_OBJECTS   2
 #define C4S_KEEP_EFFECTS   4
 
-enum C4SForceFairCrew
-{
-	C4SFairCrew_Free       = 0,
-	C4SFairCrew_FairCrew   = 1,
-	C4SFairCrew_NormalCrew = 2
-};
-
 enum C4SFilmMode
 {
 	C4SFilm_None      = 0,
@@ -90,8 +85,6 @@ public:
 	char MissionAccess[C4MaxTitle+1];
 	bool NetworkGame;
 	bool NetworkRuntimeJoin;
-	int32_t ForcedFairCrew;           // 0: free; 1: force FairCrew; 2: force normal Crew (C4SForceFairCrew)
-	int32_t FairCrewStrength;
 	StdCopyStrBuf Origin; // original oath and filename to scenario (for records and savegames)
 public:
 	void Default();
@@ -106,14 +99,14 @@ class C4SDefinitions
 public:
 	bool LocalOnly;
 	bool AllowUserChange;
-	char Definition[C4S_MaxDefinitions][_MAX_PATH+1];
 	C4IDList SkipDefs;
-public:
 	void SetModules(const char *szList, const char *szRelativeToPath=NULL, const char *szRelativeToPath2=NULL);
 	bool GetModules(StdStrBuf *psOutModules) const;
-	bool AssertModules(const char *szPath=NULL, char *sMissing=NULL);
 	void Default();
 	void CompileFunc(StdCompiler *pComp);
+
+private:
+	char Definition[C4S_MaxDefinitions][_MAX_PATH+1];
 };
 
 
@@ -164,7 +157,6 @@ public:
 	C4IDList BuildKnowledge;
 	C4IDList HomeBaseMaterial;
 	C4IDList HomeBaseProduction;
-	C4IDList Magic;
 public:
 	void Default();
 	bool EquipmentEqual(C4SPlrStart &rhs);
@@ -260,9 +252,6 @@ public:
 	bool Save(C4Group &hGroup, bool fSaveSection=false);
 	void CompileFunc(StdCompiler *pComp, bool fSection);
 	int32_t GetMinPlayer(); // will try to determine the minimum player count for this scenario
-protected:
-	bool Compile(const char *szSource, bool fLoadSection=false);
-	bool Decompile(char **ppOutput, int32_t *ipSize, bool fSaveSection=false);
 };
 
 class C4ScenarioSection;

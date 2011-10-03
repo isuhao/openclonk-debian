@@ -1,8 +1,8 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2004-2008  Sven Eberhardt
- * Copyright (c) 2007-2008  Günther Brammer
+ * Copyright (c) 2003-2008  Sven Eberhardt
+ * Copyright (c) 2007-2008, 2010  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,6 +26,7 @@
 #include <C4Application.h>
 #include <C4MouseControl.h>
 #include <C4GraphicsResource.h>
+#include <StdDDraw2.h>
 
 namespace C4GUI
 {
@@ -35,7 +36,8 @@ namespace C4GUI
 // Button
 
 	Button::Button(const char *szBtnText, const C4Rect &rtBounds)
-			: Control(rtBounds), pCustomGfx(NULL), pCustomGfxDown(NULL), fDown(false), fMouseOver(false), fEnabled(true)
+			: Control(rtBounds), pCustomGfx(NULL), pCustomGfxDown(NULL), fDown(false), fMouseOver(false), fEnabled(true),
+			  dwCustomFontClr(0), pCustomFont(NULL)
 	{
 		// key callbacks
 		C4CustomKey::CodeList keys;
@@ -219,7 +221,7 @@ namespace C4GUI
 		if (fEnabled) if (fHighlight || HasDrawFocus() || (fMouseOver && IsInActiveDlg(false)))
 			{
 				lpDDraw->SetBlitMode(C4GFXBLIT_ADDITIVE);
-				::GraphicsResource.fctButtonHighlight.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
+				::GraphicsResource.fctButtonHighlightRound.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
 				lpDDraw->ResetBlitMode();
 			}
 		// draw the icon
@@ -229,14 +231,14 @@ namespace C4GUI
 		if (fEnabled) if (fDown || fHighlight)
 			{
 				lpDDraw->SetBlitMode(C4GFXBLIT_ADDITIVE);
-				::GraphicsResource.fctButtonHighlight.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
+				::GraphicsResource.fctButtonHighlightRound.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
 				lpDDraw->ResetBlitMode();
 			}
 		// some icon buttons have captions. draw caption below button
 		if (sText.getLength())
 		{
-			CStdFont &rUseFont = ::GraphicsResource.TextFont;
-			lpDDraw->TextOut(sText.getData(), rUseFont, 1.0f, cgo.Surface, x0+rcBounds.Wdt/2, y0+rcBounds.Hgt-rUseFont.GetLineHeight()*4/5, C4GUI_CaptionFontClr, ACenter);
+			CStdFont &rUseFont = pCustomFont ? *pCustomFont : ::GraphicsResource.TextFont;
+			lpDDraw->TextOut(sText.getData(), rUseFont, 1.0f, cgo.Surface, x0+rcBounds.Wdt/2, y0+rcBounds.Hgt-rUseFont.GetLineHeight()*4/5, pCustomFont ? dwCustomFontClr : C4GUI_CaptionFontClr, ACenter);
 		}
 	}
 
@@ -273,7 +275,7 @@ namespace C4GUI
 		if (fEnabled) if (HasDrawFocus() || (fMouseOver && IsInActiveDlg(false)))
 			{
 				lpDDraw->SetBlitMode(C4GFXBLIT_ADDITIVE);
-				::GraphicsResource.fctButtonHighlight.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
+				::GraphicsResource.fctButtonHighlightRound.DrawX(cgo.Surface, x0, y0, rcBounds.Wdt, rcBounds.Hgt);
 				lpDDraw->ResetBlitMode();
 			}
 		// draw the arrow - down if pressed

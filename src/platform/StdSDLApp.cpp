@@ -3,6 +3,9 @@
  *
  * Copyright (c) 2006  Julian Raschke
  * Copyright (c) 2008-2009  Günther Brammer
+ * Copyright (c) 2009  Martin Plicht
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Peter Wortmann
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -20,6 +23,8 @@
 /* A wrapper class to OS dependent event and window interfaces, SDL version */
 
 #include <C4Include.h>
+#include "StdApp.h"
+
 #include <StdWindow.h>
 #include <StdGL.h>
 #include <StdDDraw2.h>
@@ -32,8 +37,6 @@
 #include <sys/time.h>
 #include <time.h>
 #include <errno.h>
-
-#include "MacUtility.h"
 
 /* CStdApp */
 
@@ -58,18 +61,14 @@ bool CStdApp::Init(int argc, char * argv[])
 	SCopy(argv[0], dir);
 	Location = dir;
 
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_NOPARACHUTE) < 0)
 	{
 		Log("Error initializing SDL.");
 		return false;
 	}
 
 	SDL_EnableUNICODE(1);
-#ifdef __APPLE__
-	SDL_EnableKeyRepeat(MacUtility::keyRepeatDelay(SDL_DEFAULT_REPEAT_DELAY), MacUtility::keyRepeatInterval(SDL_DEFAULT_REPEAT_INTERVAL));
-#else
 	SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
-#endif
 
 	// Custom initialization
 	return DoInit (argc, argv);
@@ -127,7 +126,7 @@ bool CStdApp::GetIndexedDisplayMode(int32_t iIndex, int32_t *piXRes, int32_t *pi
 		return false;
 
 	static SDL_Rect** modes = 0;
-	static unsigned modeCount = 0;
+	static int modeCount = 0;
 	if (!modes)
 	{
 		modes = SDL_ListModes(NULL, SDL_OPENGL | SDL_FULLSCREEN);
@@ -154,6 +153,9 @@ bool CStdApp::GetIndexedDisplayMode(int32_t iIndex, int32_t *piXRes, int32_t *pi
 
 bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int iColorDepth, unsigned int RefreshRate,  unsigned int iMonitor, bool fFullScreen)
 {
+	//RECT r;
+	//pWindow->GetSize(&r);
+	// FIXME: optimize redundant calls away. maybe make all platforms implicitely call SetVideoMode in CStdWindow::Init?
 	// SDL doesn't support multiple monitors.
 	if (!SDL_SetVideoMode(iXRes, iYRes, iColorDepth, SDL_OPENGL | (fFullScreen ? SDL_FULLSCREEN : 0)))
 	{
@@ -176,6 +178,7 @@ void CStdApp::RestoreVideoMode()
 // stubs
 bool CStdApp::Copy(const StdStrBuf & text, bool fClipboard)
 {
+	return false;
 }
 
 StdStrBuf CStdApp::Paste(bool fClipboard)

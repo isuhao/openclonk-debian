@@ -4,7 +4,8 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2005, 2008  Sven Eberhardt
  * Copyright (c) 2004  Peter Wortmann
- * Copyright (c) 2005  Günther Brammer
+ * Copyright (c) 2005, 2009  Günther Brammer
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -39,9 +40,7 @@ class C4SoundInstance;
 #include <fmod.h>
 typedef FSOUND_SAMPLE* C4SoundHandle;
 #elif defined(HAVE_LIBSDL_MIXER)
-#define USE_RWOPS
-#include <SDL_mixer.h>
-typedef Mix_Chunk* C4SoundHandle;
+typedef struct Mix_Chunk* C4SoundHandle;
 #elif defined(USE_OPEN_AL)
 #ifdef __APPLE__
 #import <OpenAL/al.h>

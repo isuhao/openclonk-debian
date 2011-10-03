@@ -2,9 +2,10 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2007-2008  Matthes Bender
- * Copyright (c) 2001-2002, 2004-2005, 2008  Sven Eberhardt
+ * Copyright (c) 2001-2002, 2004-2005, 2008-2009  Sven Eberhardt
  * Copyright (c) 2004, 2006  Peter Wortmann
- * Copyright (c) 2005  Günther Brammer
+ * Copyright (c) 2005, 2009, 2011  Günther Brammer
+ * Copyright (c) 2011  Tobias Zwick
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -24,20 +25,12 @@
 #ifndef INC_C4Game
 #define INC_C4Game
 
-#include <StdMeshMaterial.h>
-#include <C4GameParameters.h>
-#include <C4PlayerInfo.h>
-#include <C4RoundResults.h>
 #include <C4Scenario.h>
-#include <C4Control.h>
 #include <C4PathFinder.h>
 #include <C4Extra.h>
-#include <C4Effects.h>
 #include "C4Scoreboard.h"
 #include <C4VideoPlayback.h>
-#include <C4ScriptHost.h>
 #include <C4PlayerControl.h>
-class C4ObjectInfo;
 
 class C4Game
 {
@@ -64,20 +57,19 @@ private:
 public:
 	C4Game();
 	~C4Game();
-public:
+
+	C4GameParameters   &Parameters;
 	C4ClientList       &Clients; // Shortcut
-	C4GameParameters    Parameters;
 	C4TeamList         &Teams; // Shortcut
 	C4PlayerInfoList   &PlayerInfos; // Shortcut
 	C4PlayerInfoList   &RestorePlayerInfos; // Shortcut
-	C4RoundResults      RoundResults;
+	C4RoundResults      &RoundResults;
 	C4Scenario          C4S;
 	C4ComponentHost     Info;
 	C4ComponentHost     Title;
 	C4ComponentHost     Names;
 	C4ComponentHost     GameText;
-	C4GameScriptHost    Script;
-	C4LangStringTable   MainSysLangStringTable, ScenarioLangStringTable, ScenarioSysLangStringTable;
+	C4LangStringTable   MainSysLangStringTable, ScenarioLangStringTable;
 	StdStrBuf           PlayerNames;
 	C4Control          &Input; // shortcut
 
@@ -90,14 +82,13 @@ public:
 	C4ScenarioSection   *pScenarioSections, *pCurrentScenarioSection;
 	C4Effect            *pGlobalEffects;
 	C4PlayerControlDefs PlayerControlDefs;
-	C4PlayerControlAssignmentSets PlayerControlAssignmentSets;
+	C4PlayerControlAssignmentSets PlayerControlUserAssignmentSets, PlayerControlDefaultAssignmentSets;
 	C4Scoreboard        Scoreboard;
 	C4VideoPlayer       VideoPlayer;
-	StdMeshMatManager   MaterialManager;
-	class C4Network2Stats *pNetworkStatistics; // may be NULL if no statistics are recorded
-	class C4KeyboardInput &KeyboardInput;
-	class C4FileMonitor *pFileMonitor;
-	class C4GameSec1Timer *pSec1Timer;
+	C4Network2Stats *pNetworkStatistics; // may be NULL if no statistics are recorded
+	C4KeyboardInput &KeyboardInput;
+	C4FileMonitor *pFileMonitor;
+	C4GameSec1Timer *pSec1Timer;
 
 	char CurrentScenarioSection[C4MaxName+1];
 	char ScenarioFilename[_MAX_PATH+1];
@@ -105,7 +96,7 @@ public:
 	char PlayerFilenames[20*_MAX_PATH+1];
 	char DefinitionFilenames[20*_MAX_PATH+1];
 	char DirectJoinAddress[_MAX_PATH+1];
-	class C4Network2Reference *pJoinReference;
+	C4Network2Reference *pJoinReference;
 	int32_t StartupPlayerCount;
 	int32_t FPS,cFPS;
 	int32_t HaltCount;
@@ -130,7 +121,6 @@ public:
 	int32_t StartTime;
 	int32_t InitProgress; int32_t LastInitProgress; int32_t LastInitProgressShowTime;
 	int32_t RandomSeed;
-	int32_t ObjectEnumerationIndex;
 	int32_t Rules;
 	bool GameGo;
 	bool FullSpeed;
@@ -151,7 +141,6 @@ public:
 	uint16_t DebugPort; StdStrBuf DebugPassword, DebugHost; int DebugWait;
 
 	// Init and execution
-	void Default();
 	void Clear();
 	void Abort(bool fApproved = false); // hard-quit on Esc+Y (/J/O)
 	void Evaluate();
@@ -162,8 +151,9 @@ public:
 	bool Init();
 	bool PreInit();
 	void SetScenarioFilename(const char*);
+	bool HasScenario() { return *DirectJoinAddress || *ScenarioFilename || RecordStream.getSize(); }
 	bool Execute();
-	class C4Player *JoinPlayer(const char *szFilename, int32_t iAtClient, const char *szAtClientName, C4PlayerInfo *pInfo);
+	C4Player *JoinPlayer(const char *szFilename, int32_t iAtClient, const char *szAtClientName, C4PlayerInfo *pInfo);
 	bool DoGameOver();
 	bool CanQuickSave();
 	bool QuickSave(const char *strFilename, const char *strTitle, bool fForceSave=false);
@@ -189,7 +179,7 @@ public:
 	bool ReloadDef(C4ID id);
 	bool ReloadParticle(const char *szName);
 	// Object functions
-	void ClearPointers(C4PropList *cobj);
+	void ClearPointers(C4Object *cobj);
 	C4Object *CreateObject(C4PropList * type, C4Object *pCreator, int32_t owner=NO_OWNER,
 	                       int32_t x=50, int32_t y=50, int32_t r=0,
 	                       C4Real xdir=Fix0, C4Real ydir=Fix0, C4Real rdir=Fix0, int32_t iController=NO_OWNER);
@@ -203,10 +193,7 @@ public:
 	                                   int32_t con=1, bool terrain=false);
 	C4Object *CreateInfoObject(C4ObjectInfo *cinf, int32_t owner,
 	                           int32_t tx=50, int32_t ty=50);
-	void BlastObjects(int32_t tx, int32_t ty, int32_t level, C4Object *inobj, int32_t iCausedBy, C4Object *pByObj);
-	void ShakeObjects(int32_t tx, int32_t ry, int32_t range);
-	C4Object *OverlapObject(int32_t tx, int32_t ty, int32_t wdt, int32_t hgt,
-	                        int32_t category);
+	C4Object *OverlapObject(int32_t tx, int32_t ty, int32_t wdt, int32_t hgt, int32_t Plane);
 	C4Object *FindObject(C4ID id,
 	                     int32_t iX=0, int32_t iY=0, int32_t iWdt=0, int32_t iHgt=0,
 	                     DWORD ocf=OCF_All,
@@ -228,9 +215,7 @@ public:
 	     C4Object *pContainer=NULL,
 	                 int32_t iOwner=ANY_OWNER);*/
 	int32_t ObjectCount(C4ID id);
-	C4Object *FindObjectByCommand(int32_t iCommand, C4Object *pTarget=NULL, C4Value iTx=C4VNull, int32_t iTy=0, C4Object *pTarget2=NULL, C4Object *pFindNext=NULL);
 	void CastObjects(C4ID id, C4Object *pCreator, int32_t num, int32_t level, int32_t tx, int32_t ty, int32_t iOwner=NO_OWNER, int32_t iController=NO_OWNER);
-	void BlastCastObjects(C4ID id, C4Object *pCreator, int32_t num, int32_t tx, int32_t ty, int32_t iController=NO_OWNER);
 	C4Object *PlaceVegetation(C4ID id, int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt, int32_t iGrowth);
 	C4Object *PlaceAnimal(C4ID idAnimal);
 
@@ -243,8 +228,10 @@ public:
 	bool InitKeyboard(); // register main keyboard input functions
 	void UpdateLanguage();
 	bool InitPlayerControlSettings();
+	bool InitPlayerControlUserSettings(); // merge player control default settings and config overloads into user setting
 
 protected:
+	void Default();
 	void InitInEarth();
 	void InitVegetation();
 	void InitAnimals();
@@ -257,16 +244,14 @@ protected:
 	void DeleteObjects(bool fDeleteInactive);
 	void ExecObjects();
 	void Ticks();
-	const char *FoldersWithLocalsDefs(const char *szPath);
 	bool CheckObjectEnumeration();
-	bool LocalFileMatch(const char *szFilename, int32_t iCreation);
-	bool DefinitionFilenamesFromSaveGame();
 	bool LoadScenarioComponents();
 	bool LoadScenarioScripts();
 public:
+	bool LoadAdditionalSystemGroup(class C4Group &parent_group);
 	bool SaveGameTitle(C4Group &hGroup);
 protected:
-	bool InitGame(C4Group &hGroup, bool fLoadSection, bool fLoadSky);
+	bool InitGame(C4Group &hGroup, bool fLoadSection, bool fLoadSky, C4ValueNumbers *);
 	bool InitGameFinal();
 	bool InitNetworkFromAddress(const char *szAddress);
 	bool InitNetworkFromReference(const C4Network2Reference &Reference);
@@ -276,20 +261,18 @@ protected:
 	bool InitControl();
 	bool InitScriptEngine();
 	bool LinkScriptEngine();
-	bool InitPlayers();
+	bool InitPlayers(C4ValueNumbers *);
 	bool InitRecord();
 	bool OpenScenario();
 	bool InitDefs();
 	bool InitMaterialTexture();
 	bool GameOverCheck();
 	bool PlaceInEarth(C4ID id);
-	bool Compile(const char *szSource);
-	bool Decompile(StdStrBuf &rBuf, bool fSaveSection, bool fSaveExact);
 public:
-	void CompileFunc(StdCompiler *pComp, CompileSettings comp);
-	bool SaveData(C4Group &hGroup, bool fSaveSection, bool fInitial, bool fSaveExact);
+	void CompileFunc(StdCompiler *pComp, CompileSettings comp, C4ValueNumbers *);
+	bool SaveData(C4Group &hGroup, bool fSaveSection, bool fSaveExact, C4ValueNumbers *);
 protected:
-	bool CompileRuntimeData(C4ComponentHost &rGameData);
+	bool CompileRuntimeData(C4Group &hGroup, bool fLoadSection, bool exact, C4ValueNumbers *);
 	bool StoreParticipantPlayers();
 	bool RecreatePlayerFiles();
 
@@ -311,10 +294,8 @@ public:
 };
 
 
-const int32_t C4RULE_StructuresNeedEnergy      = 1,
-    C4RULE_ConstructionNeedsMaterial = 2,
-                                       C4RULE_FlagRemoveable            = 4,
-                                                                          C4RULE_StructuresSnowIn          = 8;
+const int32_t
+	C4RULE_ConstructionNeedsMaterial = 1;
 
 extern C4Game         Game;
 

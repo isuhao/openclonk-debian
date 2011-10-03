@@ -3,7 +3,8 @@
  *
  * Copyright (c) 2005, 2007-2008  Sven Eberhardt
  * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2006-2007  Günther Brammer
+ * Copyright (c) 2006-2007, 2009  Günther Brammer
+ * Copyright (c) 2009  mizipzor
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -19,14 +20,42 @@
  */
 // script-controlled InGame dialog to show player infos
 
+#include "C4Include.h"
 #include <utility>
 
-#include "C4Include.h"
 #include "C4Scoreboard.h"
 #include "C4Gui.h"
 
 #include "C4GameOverDlg.h"
 #include <C4GraphicsResource.h>
+
+
+class C4ScoreboardDlg : public C4GUI::Dialog
+{
+private:
+	int32_t *piColWidths;
+	C4Scoreboard *pBrd;
+
+	enum { XIndent = 4, YIndent = 4, XMargin = 3, YMargin = 3 };
+
+public:
+	C4ScoreboardDlg(C4Scoreboard *pForScoreboard);
+	~C4ScoreboardDlg();
+
+protected:
+	void InvalidateRows() { delete [] piColWidths; piColWidths = NULL; }
+	void Update(); // update row widths and own size and caption
+
+	virtual bool DoPlacement(C4GUI::Screen *pOnScreen, const C4Rect &rPreferredDlgRect);
+	virtual void Draw(C4TargetFacet &cgo);
+	virtual void DrawElement(C4TargetFacet &cgo);
+
+	virtual const char *GetID() { return "Scoreboard"; }
+
+	virtual bool IsMouseControlled() { return false; }
+
+	friend class C4Scoreboard;
+};
 
 // ************************************************
 // *** C4Scoreboard
@@ -261,8 +290,7 @@ void C4Scoreboard::InvalidateRows()
 
 void C4Scoreboard::DoDlgShow(int32_t iChange, bool fUserToggle)
 {
-	// safety: Only if GUI loaded, and GUI already in exclusive mode
-	if (!C4GUI::IsGUIValid() || ::pGUI->IsExclusive()) return;
+	if (::pGUI->IsExclusive()) return;
 	// update dlg show
 	iDlgShow += iChange;
 	if (!fUserToggle)
@@ -285,8 +313,7 @@ void C4Scoreboard::DoDlgShow(int32_t iChange, bool fUserToggle)
 
 void C4Scoreboard::HideDlg()
 {
-	// safety: Only if GUI loaded, and GUI already in exclusive mode
-	if (!C4GUI::IsGUIValid() || ::pGUI->IsExclusive()) return;
+	if (::pGUI->IsExclusive()) return;
 	// hide scoreboard if it was active
 	if (pDlg) pDlg->Close(false);
 }

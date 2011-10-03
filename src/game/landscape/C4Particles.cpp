@@ -2,9 +2,10 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2002, 2004-2005  Sven Eberhardt
- * Copyright (c) 2005,2010  Tobias Zwick
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005, 2009-2010  Tobias Zwick
+ * Copyright (c) 2005-2006, 2008, 2010  Günther Brammer
  * Copyright (c) 2008  Peter Wortmann
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -23,6 +24,7 @@
 #include <C4Include.h>
 #include <C4Particles.h>
 
+#include <C4Config.h>
 #include <C4Physics.h>
 #include <C4Object.h>
 #include <C4Random.h>
@@ -146,7 +148,7 @@ bool C4ParticleDef::Load(C4Group &group)
 			return false;
 		}
 		// set facet, if assigned - otherwise, assume full surface
-		if (GfxFace.Wdt) Gfx.Set(Gfx.Surface, GfxFace.x, GfxFace.y, GfxFace.Wdt, GfxFace.Hgt, GfxFace.tx, GfxFace.ty);
+		if (GfxFace.Wdt) Gfx.Set(Gfx.Surface, GfxFace.x, GfxFace.y, GfxFace.Wdt, GfxFace.Hgt);
 		// set phase num
 		int32_t Q; Gfx.GetPhaseNum(PhasesX, Q);
 		Length = PhasesX * Q;
@@ -244,7 +246,7 @@ void C4ParticleChunk::Clear()
 {
 	// note that this method is called in ctor with uninitialized data!
 	// simply clear mem - this won't adjust any counts!
-	ZeroMemory(Data, sizeof(Data));
+	memset(Data, 0, sizeof(Data));
 	// init list
 	C4Particle *particle=Data;
 	for (int32_t i=0; i < C4Px_BufSize; ++i)

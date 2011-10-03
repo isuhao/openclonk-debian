@@ -2,7 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2002, 2004-2005, 2008  Sven Eberhardt
- * Copyright (c) 2004-2005, 2007-2008  Günther Brammer
+ * Copyright (c) 2004-2005, 2007-2011  Günther Brammer
  * Copyright (c) 2005  Peter Wortmann
  * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
@@ -24,9 +24,14 @@
 #define INC_StdSurface2
 
 #include <StdColors.h>
+#include <C4Rect.h>
 
+#ifdef _WIN32
+#include <C4windowswrapper.h>
+#endif
 #ifdef USE_DIRECTX
 #include <d3d9.h>
+#undef DrawText
 #else
 typedef void* IDirect3DSurface9;
 #endif
@@ -135,7 +140,6 @@ public:
 	int IsLocked() const { return Locked; }
 	// Note: This uses partial locks, anything but SetPixDw and Unlock is undefined afterwards until unlock.
 	void ClearBoxDw(int iX, int iY, int iWdt, int iHgt);
-	void ClearBox8Only(int iX, int iY, int iWdt, int iHgt); // clear box in 8bpp-surface only
 	bool Unlock();
 	bool Lock();
 	bool GetTexAt(CTexRef **ppTexRef, int &rX, int &rY);  // get texture and adjust x/y
@@ -153,7 +157,7 @@ public:
 #endif
 	// Only for surfaces which map to a window
 	bool UpdateSize(int wdt, int hgt);
-	bool PageFlip(RECT *pSrcRt=NULL, RECT *pDstRt=NULL);
+	bool PageFlip(C4Rect *pSrcRt=NULL, C4Rect *pDstRt=NULL);
 
 	void Clear();
 	void Default();
@@ -220,24 +224,24 @@ public:
 	int iSizeX;
 	int iSizeY;
 	bool fIntLock;    // if set, texref is locked internally only
-	RECT LockSize;
+	C4Rect LockSize;
 
 	CTexRef(int iSizeX, int iSizeY, bool fAsRenderTarget);   // create texture with given size
 	~CTexRef();           // release texture
 	bool Lock();          // lock texture
 	// Lock a part of the rect, discarding the content
 	// Note: Calling Lock afterwards without an Unlock first is undefined
-	bool LockForUpdate(RECT &rtUpdate);
+	bool LockForUpdate(C4Rect &rtUpdate);
 	void Unlock();        // unlock texture
-	bool ClearRect(RECT &rtClear); // clear rect in texture to transparent
+	bool ClearRect(C4Rect &rtClear); // clear rect in texture to transparent
 	bool FillBlack(); // fill complete texture in black
 	void SetPix2(int iX, int iY, WORD v)
 	{
-		*((WORD *) (((BYTE *) texLock.pBits) + (iY - LockSize.top) * texLock.Pitch + (iX - LockSize.left) * 2)) = v;
+		*((WORD *) (((BYTE *) texLock.pBits) + (iY - LockSize.y) * texLock.Pitch + (iX - LockSize.x) * 2)) = v;
 	}
 	void SetPix4(int iX, int iY, DWORD v)
 	{
-		*((DWORD *) (((BYTE *) texLock.pBits) + (iY - LockSize.top) * texLock.Pitch + (iX - LockSize.left) * 4)) = v;
+		*((DWORD *) (((BYTE *) texLock.pBits) + (iY - LockSize.y) * texLock.Pitch + (iX - LockSize.x) * 4)) = v;
 	}
 };
 

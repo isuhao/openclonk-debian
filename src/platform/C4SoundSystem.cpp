@@ -2,9 +2,12 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2004, 2008  Matthes Bender
- * Copyright (c) 2003-2004  Peter Wortmann
- * Copyright (c) 2005-2006, 2008  Sven Eberhardt
- * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2001, 2005-2006, 2008  Sven Eberhardt
+ * Copyright (c) 2003-2005  Peter Wortmann
+ * Copyright (c) 2005-2006, 2009, 2011  Günther Brammer
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -31,6 +34,11 @@
 #include <C4Application.h>
 #include <C4Viewport.h>
 #include <C4SoundLoaders.h>
+
+#ifdef HAVE_LIBSDL_MIXER
+#define USE_RWOPS
+#include <SDL_mixer.h>
+#endif
 
 using namespace C4SoundLoaders;
 
@@ -71,7 +79,7 @@ bool C4SoundEffect::Load(const char *szFileName, C4Group &hGroup, bool fStatic)
 	if (!Config.Sound.RXSound) return false;
 	// Locate sound in file
 	StdBuf WaveBuffer;
-	if (!hGroup.LoadEntry(szFileName, WaveBuffer)) return false;
+	if (!hGroup.LoadEntry(szFileName, &WaveBuffer)) return false;
 	// load it from mem
 	if (!Load((BYTE*)WaveBuffer.getData(), WaveBuffer.getSize(), fStatic)) return false;
 	// Set name
@@ -90,7 +98,7 @@ bool C4SoundEffect::Load(BYTE *pData, size_t iDataLen, bool fStatic, bool fRaw)
 		options |= SoundLoader::OPTION_Raw;
 	for (SoundLoader* loader = SoundLoader::first_loader; loader; loader = loader->next)
 	{
-		if (loader->ReadInfo(info, pData, iDataLen))
+		if (loader->ReadInfo(&info, pData, iDataLen))
 		{
 			if (info.final_handle)
 			{
@@ -102,7 +110,7 @@ bool C4SoundEffect::Load(BYTE *pData, size_t iDataLen, bool fStatic, bool fRaw)
 #ifdef USE_OPEN_AL
 				Application.MusicSystem.SelectContext();
 				alGenBuffers(1, &pSample);
-				alBufferData(pSample, info.format, info.sound_data, info.sound_data_size, info.sample_rate);
+				alBufferData(pSample, info.format, &info.sound_data[0], info.sound_data.size(), info.sample_rate);
 #else
 				Log("SoundLoader does not provide a ready-made handle");
 #endif
@@ -116,7 +124,7 @@ bool C4SoundEffect::Load(BYTE *pData, size_t iDataLen, bool fStatic, bool fRaw)
 	// Set usage time
 	UsageTime=Game.Time;
 	Static=fStatic;
-	return pSample;
+	return !!pSample;
 }
 
 void C4SoundEffect::Execute()
@@ -228,7 +236,7 @@ bool C4SoundInstance::Create(C4SoundEffect *pnEffect, bool fLoop, int32_t inVolu
 	// Set effect
 	pEffect = pnEffect;
 	// Set
-	iStarted = timeGetTime();
+	iStarted = GetTime();
 	iVolume = inVolume; iPan = 0; iChannel = -1;
 	iNearInstanceMax = inNearInstanceMax;
 	this->iFalloffDistance = iFalloffDistance;
@@ -246,7 +254,7 @@ bool C4SoundInstance::CheckStart()
 	// already started?
 	if (isStarted()) return true;
 	// don't bother if half the time is up and the sound is not looping
-	if (timeGetTime() > iStarted + pEffect->Length / 2 && !fLooping)
+	if (GetTime() > iStarted + pEffect->Length / 2 && !fLooping)
 		return false;
 	// do near-instances check
 	int32_t iNearInstances = pObj ? pEffect->GetStartedInstanceCount(pObj->GetX(), pObj->GetY(), C4NearSoundRadius)
@@ -266,10 +274,10 @@ bool C4SoundInstance::Start()
 	if (!FSOUND_SetLoopMode(iChannel, fLooping ? FSOUND_LOOP_NORMAL : FSOUND_LOOP_OFF))
 		{ Stop(); return false; }
 	// set position
-	if (timeGetTime() > iStarted + 20)
+	if (GetTime() > iStarted + 20)
 	{
 		assert(pEffect->Length > 0);
-		int32_t iTime = (timeGetTime() - iStarted) % pEffect->Length;
+		int32_t iTime = (GetTime() - iStarted) % pEffect->Length;
 		FSOUND_SetCurrentPosition(iChannel, iTime / 10 * pEffect->SampleRate / 100);
 	}
 #elif defined HAVE_LIBSDL_MIXER
@@ -320,7 +328,7 @@ bool C4SoundInstance::Playing()
 #ifdef HAVE_FMOD
 	if (fLooping) return true;
 	return isStarted() ? FSOUND_GetCurrentSample(iChannel) == pEffect->pSample
-	       : timeGetTime() < iStarted + pEffect->Length;
+	       : GetTime() < iStarted + pEffect->Length;
 #endif
 #ifdef HAVE_LIBSDL_MIXER
 	return Application.MusicSystem.MODInitialized && (iChannel != -1) && Mix_Playing(iChannel);
@@ -444,7 +452,7 @@ bool C4SoundSystem::Init()
 	ClearEffects();
 	// Open sound file
 	if (!SoundFile.IsOpen())
-		if (!SoundFile.Open(Config.AtSystemDataPath(C4CFN_Sound))) return false;
+		if (!Reloc.Open(SoundFile, C4CFN_Sound)) return false;
 #ifdef HAVE_LIBSDL_MIXER
 	Mix_AllocateChannels(C4MaxSoundInstances);
 #endif
@@ -567,10 +575,10 @@ C4SoundEffect* C4SoundSystem::GetEffect(const char *szSndName)
 C4SoundInstance *C4SoundSystem::NewEffect(const char *szSndName, bool fLoop, int32_t iVolume, C4Object *pObj, int32_t iCustomFalloffDistance)
 {
 	// Sound not active
-	if (!Config.Sound.RXSound) return false;
+	if (!Config.Sound.RXSound) return NULL;
 	// Get sound
 	C4SoundEffect *csfx;
-	if (!(csfx=GetEffect(szSndName))) return false;
+	if (!(csfx=GetEffect(szSndName))) return NULL;
 	// Play
 	return csfx->New(fLoop, iVolume, pObj, iCustomFalloffDistance);
 }
@@ -657,7 +665,7 @@ void C4SoundSystem::ClearPointers(C4Object *pObj)
 C4SoundInstance *StartSoundEffect(const char *szSndName, bool fLoop, int32_t iVolume, C4Object *pObj, int32_t iCustomFalloffDistance)
 {
 	// Sound check
-	if (!Config.Sound.RXSound) return false;
+	if (!Config.Sound.RXSound) return NULL;
 	// Start new
 	return Application.SoundSystem.NewEffect(szSndName, fLoop, iVolume, pObj, iCustomFalloffDistance);
 }
@@ -665,7 +673,7 @@ C4SoundInstance *StartSoundEffect(const char *szSndName, bool fLoop, int32_t iVo
 C4SoundInstance *StartSoundEffectAt(const char *szSndName, int32_t iX, int32_t iY, bool fLoop, int32_t iVolume)
 {
 	// Sound check
-	if (!Config.Sound.RXSound) return false;
+	if (!Config.Sound.RXSound) return NULL;
 	// Create
 	C4SoundInstance *pInst = StartSoundEffect(szSndName, fLoop, iVolume);
 	// Set volume by position

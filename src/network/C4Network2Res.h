@@ -29,12 +29,12 @@
 const uint32_t C4NetResChunkSize = 10U * 1024U;
 
 const int32_t C4NetResDiscoverTimeout = 10, // (s)
-                                        C4NetResDiscoverInterval = 1, // (s)
-                                                                   C4NetResStatusInterval = 1, // (s)
-                                                                                            C4NetResMaxLoad = 5,
-                                                                                                              C4NetResLoadTimeout = 60, // (s)
-                                                                                                                                    C4NetResDeleteTime = 60, // (s)
-                                                                                                                                                         C4NetResMaxBigicon = 20; // maximum size, in KB, of bigicon
+              C4NetResDiscoverInterval = 1, // (s)
+              C4NetResStatusInterval = 1, // (s)
+              C4NetResMaxLoad = 5,
+              C4NetResLoadTimeout = 60, // (s)
+              C4NetResDeleteTime = 60, // (s)
+              C4NetResMaxBigicon = 20; // maximum size, in KB, of bigicon
 
 const int32_t C4NetResIDAnonymous = -2;
 
@@ -74,7 +74,7 @@ public:
 protected:
 	C4Network2ResType eType;
 	int32_t iID, iDerID;
-	StdCopyStrBuf FileName, Author;
+	StdCopyStrBuf FileName;
 	bool fLoadable;
 	uint32_t iFileSize, iFileCRC, iContentsCRC;
 	uint8_t fHasFileSHA;
@@ -93,11 +93,10 @@ public:
 	bool          hasFileSHA()    const { return !!fHasFileSHA; }
 	const uint8_t*getFileSHA()    const { return FileSHA; }
 	const char *  getFileName()   const { return FileName.getData(); }
-	const char *  getAuthor()     const { return Author.getData(); }
 	uint32_t      getChunkSize()  const { return iChunkSize; }
 	uint32_t      getChunkCnt()   const { return iFileSize && iChunkSize ? (iFileSize - 1) / iChunkSize + 1 : 0; }
 
-	void Set(C4Network2ResType eType, int32_t iResID, const char *strFileName, uint32_t iContentsCRC, const char *szAutor);
+	void Set(C4Network2ResType eType, int32_t iResID, const char *strFileName, uint32_t iContentsCRC);
 	void SetID(int32_t inID)            { iID = inID; }
 	void SetDerived(int32_t inDerID)    { iDerID = inDerID; }
 	void SetLoadable(uint32_t iSize, uint32_t iCRC);

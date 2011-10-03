@@ -4,9 +4,10 @@
  * Copyright (c) 1998-2000, 2003  Matthes Bender
  * Copyright (c) 2001, 2005-2007  Sven Eberhardt
  * Copyright (c) 2004-2005, 2007  Peter Wortmann
- * Copyright (c) 2005-2008  Günther Brammer
- * Copyright (c) 2006  Armin Burgmeier
+ * Copyright (c) 2005-2011  Günther Brammer
+ * Copyright (c) 2006, 2010  Armin Burgmeier
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -89,14 +90,8 @@ void C4EditCursor::Execute()
 		break;
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	}
-	// selection update
-	if (fSelectionChanged)
-	{
-		fSelectionChanged = false;
-		UpdateStatusBar();
-		Console.PropertyDlg.Update(Selection);
-		Console.ObjectListDlg.Update(Selection);
-	}
+	if (!::Game.iTick35)
+		Console.PropertyDlgUpdate(Selection);
 }
 
 bool C4EditCursor::Init()
@@ -112,18 +107,14 @@ bool C4EditCursor::Init()
 	itemDelete = gtk_menu_item_new_with_label(LoadResStr("IDS_MNU_DELETE"));
 	itemDuplicate = gtk_menu_item_new_with_label(LoadResStr("IDS_MNU_DUPLICATE"));
 	itemGrabContents = gtk_menu_item_new_with_label(LoadResStr("IDS_MNU_CONTENTS"));
-	itemProperties = gtk_menu_item_new_with_label(""); // Set dynamically in DoContextMenu
 
 	gtk_menu_shell_append(GTK_MENU_SHELL(menuContext), itemDelete);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menuContext), itemDuplicate);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menuContext), itemGrabContents);
-	gtk_menu_shell_append(GTK_MENU_SHELL(menuContext), GTK_WIDGET(gtk_separator_menu_item_new()));
-	gtk_menu_shell_append(GTK_MENU_SHELL(menuContext), itemProperties);
 
 	g_signal_connect(G_OBJECT(itemDelete), "activate", G_CALLBACK(OnDelete), this);
 	g_signal_connect(G_OBJECT(itemDuplicate), "activate", G_CALLBACK(OnDuplicate), this);
 	g_signal_connect(G_OBJECT(itemGrabContents), "activate", G_CALLBACK(OnGrabContents), this);
-	g_signal_connect(G_OBJECT(itemProperties), "activate", G_CALLBACK(OnProperties), this);
 
 	gtk_widget_show_all(menuContext);
 #endif // WITH_DEVELOPER_MODe
@@ -187,7 +178,7 @@ bool C4EditCursor::Move(float iX, float iY, WORD wKeyFlags)
 	return true;
 }
 
-bool C4EditCursor::UpdateStatusBar()
+void C4EditCursor::UpdateStatusBar()
 {
 	int32_t X=this->X, Y=this->Y;
 	StdStrBuf str;
@@ -207,12 +198,13 @@ bool C4EditCursor::UpdateStatusBar()
 		break;
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	}
-	return Console.UpdateCursorBar(str.getData());
+	Console.DisplayInfoText(C4ConsoleGUI::CONSOLE_Cursor, str);
 }
 
 void C4EditCursor::OnSelectionChanged()
 {
-	fSelectionChanged = true;
+	Console.PropertyDlgUpdate(Selection);
+	Console.ObjectListDlg.Update(Selection);
 }
 
 bool C4EditCursor::LeftButtonDown(bool fControl)
@@ -344,15 +336,16 @@ bool SetMenuItemEnable(HMENU hMenu, WORD id, bool fEnable)
 
 bool SetMenuItemText(HMENU hMenu, WORD id, const char *szText)
 {
-	MENUITEMINFO minfo;
+	MENUITEMINFOW minfo;
 	ZeroMem(&minfo,sizeof(minfo));
 	minfo.cbSize = sizeof(minfo);
 	minfo.fMask = MIIM_ID | MIIM_TYPE | MIIM_DATA;
 	minfo.fType = MFT_STRING;
 	minfo.wID = id;
-	minfo.dwTypeData = (char*) szText;
-	minfo.cch = SLen(szText);
-	return !!SetMenuItemInfo(hMenu,id,false,&minfo);
+	StdBuf td = GetWideCharBuf(szText);
+	minfo.dwTypeData = getMBufPtr<wchar_t>(td);
+	minfo.cch = wcslen(minfo.dwTypeData);
+	return !!SetMenuItemInfoW(hMenu,id,false,&minfo);
 }
 #endif
 
@@ -383,8 +376,8 @@ bool C4EditCursor::OpenPropTools()
 	switch (Mode)
 	{
 	case C4CNS_ModeEdit: case C4CNS_ModePlay:
-		Console.PropertyDlg.Open();
-		Console.PropertyDlg.Update(Selection);
+		Console.PropertyDlgOpen();
+		Console.PropertyDlgUpdate(Selection);
 		break;
 	case C4CNS_ModeDraw:
 		Console.ToolsDlg.Open();
@@ -500,7 +493,7 @@ void C4EditCursor::FrameSelection()
 				if (Inside(cobj->GetX(),Min(X,X2),Max(X,X2)) && Inside(cobj->GetY(),Min(Y,Y2),Max(Y,Y2)))
 					Selection.Add(cobj, C4ObjectList::stNone);
 			}
-	Console.PropertyDlg.Update(Selection);
+	OnSelectionChanged();
 }
 
 bool C4EditCursor::In(const char *szText)
@@ -520,7 +513,6 @@ void C4EditCursor::Default()
 #endif
 	Hold=DragFrame=DragLine=false;
 	Selection.Default();
-	fSelectionChanged = false;
 }
 
 void C4EditCursor::Clear()
@@ -544,26 +536,24 @@ bool C4EditCursor::SetMode(int32_t iMode)
 	// Set mode
 	Mode = iMode;
 	// Update prop tools by mode
-	bool fOpenPropTools = false;
 	switch (Mode)
 	{
-		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	case C4CNS_ModeEdit: case C4CNS_ModePlay:
-		if (Console.ToolsDlg.Active || Console.PropertyDlg.Active) fOpenPropTools=true;
-		Console.ToolsDlg.Clear();
-		if (fOpenPropTools) OpenPropTools();
+		Console.ToolsDlgClose();
 		break;
-		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	case C4CNS_ModeDraw:
-		if (Console.ToolsDlg.Active || Console.PropertyDlg.Active) fOpenPropTools=true;
-		Console.PropertyDlg.Clear();
-		if (fOpenPropTools) OpenPropTools();
+		Console.PropertyDlgClose();
 		break;
-		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	}
-	// Update cursor
-	if (Mode==C4CNS_ModePlay) ::MouseControl.ShowCursor();
-	else ::MouseControl.HideCursor();
+	if (Mode == C4CNS_ModePlay)
+	{
+		::MouseControl.ShowCursor();
+	}
+	else
+	{
+		OpenPropTools();
+		::MouseControl.HideCursor();
+	}
 	// Restore focus
 #ifdef _WIN32
 	SetFocus(hFocus);
@@ -635,11 +625,9 @@ bool C4EditCursor::DoContextMenu()
 	SetMenuItemEnable( hContext, IDM_VIEWPORT_DELETE, fObjectSelected && Console.Editing);
 	SetMenuItemEnable( hContext, IDM_VIEWPORT_DUPLICATE, fObjectSelected && Console.Editing);
 	SetMenuItemEnable( hContext, IDM_VIEWPORT_CONTENTS, fObjectSelected && Selection.GetObject()->Contents.ObjectCount() && Console.Editing);
-	SetMenuItemEnable( hContext, IDM_VIEWPORT_PROPERTIES, Mode!=C4CNS_ModePlay);
 	SetMenuItemText(hContext,IDM_VIEWPORT_DELETE,LoadResStr("IDS_MNU_DELETE"));
 	SetMenuItemText(hContext,IDM_VIEWPORT_DUPLICATE,LoadResStr("IDS_MNU_DUPLICATE"));
 	SetMenuItemText(hContext,IDM_VIEWPORT_CONTENTS,LoadResStr("IDS_MNU_CONTENTS"));
-	SetMenuItemText(hContext,IDM_VIEWPORT_PROPERTIES,LoadResStr((Mode==C4CNS_ModeEdit) ? "IDS_CNS_PROPERTIES" : "IDS_CNS_TOOLS"));
 	int32_t iItem = TrackPopupMenu(
 	                  hContext,
 	                  TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_NONOTIFY,
@@ -651,17 +639,12 @@ bool C4EditCursor::DoContextMenu()
 	case IDM_VIEWPORT_DELETE: Delete(); break;
 	case IDM_VIEWPORT_DUPLICATE: Duplicate(); break;
 	case IDM_VIEWPORT_CONTENTS: GrabContents(); break;
-	case IDM_VIEWPORT_PROPERTIES: OpenPropTools();  break;
 	}
 #else
 #ifdef WITH_DEVELOPER_MODE
 	gtk_widget_set_sensitive(itemDelete, fObjectSelected && Console.Editing);
 	gtk_widget_set_sensitive(itemDuplicate, fObjectSelected && Console.Editing);
 	gtk_widget_set_sensitive(itemGrabContents, fObjectSelected && Selection.GetObject()->Contents.ObjectCount() && Console.Editing);
-	gtk_widget_set_sensitive(itemProperties, Mode!=C4CNS_ModePlay);
-
-	GtkLabel* label = GTK_LABEL(gtk_bin_get_child(GTK_BIN(itemProperties)));
-	gtk_label_set_text(label, LoadResStr((Mode==C4CNS_ModeEdit) ? "IDS_CNS_PROPERTIES" : "IDS_CNS_TOOLS"));
 
 	gtk_menu_popup(GTK_MENU(menuContext), NULL, NULL, NULL, NULL, 3, 0);
 #endif
@@ -675,7 +658,7 @@ void C4EditCursor::GrabContents()
 	C4Object *pFrom;
 	if (!( pFrom = Selection.GetObject() )) return;
 	Selection.Copy(pFrom->Contents);
-	Console.PropertyDlg.Update(Selection);
+	OnSelectionChanged();
 	Hold=true;
 
 	// Exit all objects
@@ -810,10 +793,6 @@ void C4EditCursor::OnGrabContents(GtkWidget* widget, gpointer data)
 	static_cast<C4EditCursor*>(data)->GrabContents();
 }
 
-void C4EditCursor::OnProperties(GtkWidget* widget, gpointer data)
-{
-	static_cast<C4EditCursor*>(data)->OpenPropTools();
-}
 #endif
 
 bool C4EditCursor::AltDown()

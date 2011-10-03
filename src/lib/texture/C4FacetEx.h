@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2004, 2008-2009  Sven Eberhardt
- * Copyright (c) 2008  Günther Brammer
+ * Copyright (c) 2008-2010  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -77,8 +77,7 @@ public:
 	void Clear() { Face.Clear(); }
 
 	void Set(const C4Facet &cpy) { Clear(); C4Facet::Set(cpy); }
-	void Set(const C4TargetFacet &cpy) { Clear(); C4Facet::Set(cpy); }
-	void Set(SURFACE nsfc, int nx, int ny, int nwdt, int nhgt, int ntx=0, int nty=0)
+	void Set(SURFACE nsfc, int nx, int ny, int nwdt, int nhgt)
 	{ C4Facet::Set(nsfc, nx,ny,nwdt,nhgt); }
 
 	void Grayscale(int32_t iOffset = 0);

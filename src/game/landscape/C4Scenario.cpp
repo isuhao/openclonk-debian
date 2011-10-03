@@ -4,7 +4,8 @@
  * Copyright (c) 1998-2000, 2007  Matthes Bender
  * Copyright (c) 2002, 2004-2008  Sven Eberhardt
  * Copyright (c) 2004-2005  Peter Wortmann
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009, 2011  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -23,12 +24,14 @@
 
 #include <C4Include.h>
 #include <C4Scenario.h>
-#include <C4InputValidation.h>
 
+#include <C4Config.h>
+#include <C4InputValidation.h>
 #include <C4Random.h>
 #include <C4Group.h>
 #include <C4Components.h>
 #include <C4Game.h>
+#include <StdColors.h>
 
 //==================================== C4SVal ==============================================
 
@@ -86,23 +89,25 @@ void C4Scenario::Default()
 
 bool C4Scenario::Load(C4Group &hGroup, bool fLoadSection)
 {
-	char *pSource;
-	// Load
-	if (!hGroup.LoadEntry(C4CFN_ScenarioCore,&pSource,NULL,1)) return false;
-	// Compile
-	if (!Compile(pSource, fLoadSection))  { delete [] pSource; return false; }
-	delete [] pSource;
-	// Success
+	StdStrBuf Buf;
+	if (!hGroup.LoadEntryString(C4CFN_ScenarioCore,&Buf)) return false;
+	if (!fLoadSection) Default();
+	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkParAdapt(*this, fLoadSection), Buf, C4CFN_ScenarioCore))
+		{ return false; }
 	return true;
 }
 
 bool C4Scenario::Save(C4Group &hGroup, bool fSaveSection)
 {
-	char *Buffer; int32_t BufferSize;
-	if (!Decompile(&Buffer,&BufferSize, fSaveSection))
-		return false;
-	if (!hGroup.Add(C4CFN_ScenarioCore,Buffer,BufferSize,false,true))
-		{ StdBuf Buf; Buf.Take(Buffer, BufferSize); return false; }
+	StdStrBuf Buf;
+	try
+	{
+		Buf.Take(DecompileToBuf<StdCompilerINIWrite>(mkParAdapt(*this, fSaveSection)));
+	}
+	catch (StdCompiler::Exception *)
+		{ return false; }
+	if (!hGroup.Add(C4CFN_ScenarioCore,Buf,false,true))
+		{ return false; }
 	return true;
 }
 
@@ -145,7 +150,7 @@ void C4SHead::Default()
 	C4XVer[0] = C4XVer[1] = C4XVer[2] = C4XVer[3] = 0;
 	Difficulty = StartupPlayerCount = RandomSeed = 0;
 	SaveGame = Replay = NoInitialize = false;
-	Film = ForcedFairCrew = FairCrewStrength = 0;
+	Film = 0;
 	NetworkGame = NetworkRuntimeJoin = false;
 
 	MaxPlayer=MaxPlayerLeague=C4S_MaxPlayerDefault;
@@ -179,8 +184,6 @@ void C4SHead::CompileFunc(StdCompiler *pComp, bool fSection)
 		pComp->Value(mkNamingAdapt(mkStringAdaptMA(MissionAccess), "MissionAccess", ""));
 		pComp->Value(mkNamingAdapt(NetworkGame,               "NetworkGame",          false));
 		pComp->Value(mkNamingAdapt(NetworkRuntimeJoin,        "NetworkRuntimeJoin",   false));
-		pComp->Value(mkNamingAdapt(ForcedFairCrew,            "ForcedFairCrew",          0));
-		pComp->Value(mkNamingAdapt(FairCrewStrength,          "FairCrewStrength",       0));
 		pComp->Value(mkNamingAdapt(mkStrValAdapt(mkParAdapt(Origin, StdCompiler::RCT_All), C4InVal::VAL_SubPathFilename),  "Origin",  StdCopyStrBuf()));
 		// windows needs backslashes in Origin; other systems use forward slashes
 		if (pComp->isCompiler()) Origin.ReplaceChar(AltDirectorySeparator, DirectorySeparator);
@@ -222,7 +225,6 @@ void C4SPlrStart::Default()
 	BuildKnowledge.Default();
 	HomeBaseMaterial.Default();
 	HomeBaseProduction.Default();
-	Magic.Default();
 }
 
 bool C4SPlrStart::EquipmentEqual(C4SPlrStart &rhs)
@@ -241,8 +243,7 @@ bool C4SPlrStart::operator==(const C4SPlrStart& rhs)
 	       && (ReadyMaterial == rhs.ReadyMaterial)
 	       && (BuildKnowledge == rhs.BuildKnowledge)
 	       && (HomeBaseMaterial == rhs.HomeBaseMaterial)
-	       && (HomeBaseProduction == rhs.HomeBaseProduction)
-	       && (Magic == rhs.Magic);
+	       && (HomeBaseProduction == rhs.HomeBaseProduction);
 }
 
 void C4SPlrStart::CompileFunc(StdCompiler *pComp)
@@ -259,7 +260,6 @@ void C4SPlrStart::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(BuildKnowledge,          "Knowledge",             C4IDList()));
 	pComp->Value(mkNamingAdapt(HomeBaseMaterial,        "HomeBaseMaterial",      C4IDList()));
 	pComp->Value(mkNamingAdapt(HomeBaseProduction,      "HomeBaseProduction",    C4IDList()));
-	pComp->Value(mkNamingAdapt(Magic,                   "Magic",                 C4IDList()));
 }
 
 void C4SLandscape::Default()
@@ -276,7 +276,7 @@ void C4SLandscape::Default()
 	InEarth.Default();
 	MapWdt.Set(100,0,64,250);
 	MapHgt.Set(50,0,40,250);
-	MapZoom.Set(10,0,5,15);
+	MapZoom.Set(8,0,5,15);
 	Amplitude.Set(0,0);
 	Phase.Set(50);
 	Period.Set(15);
@@ -321,7 +321,7 @@ void C4SLandscape::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(AutoScanSideOpen,        "AutoScanSideOpen",      true));
 	pComp->Value(mkNamingAdapt(MapWdt,                  "MapWidth",              C4SVal(100,0,64,250), true));
 	pComp->Value(mkNamingAdapt(MapHgt,                  "MapHeight",             C4SVal(50,0,40,250), true));
-	pComp->Value(mkNamingAdapt(MapZoom,                 "MapZoom",               C4SVal(10,0,5,15), true));
+	pComp->Value(mkNamingAdapt(MapZoom,                 "MapZoom",               C4SVal(8,0,5,15), true));
 	pComp->Value(mkNamingAdapt(Amplitude,               "Amplitude",             C4SVal(0)));
 	pComp->Value(mkNamingAdapt(Phase,                   "Phase",                 C4SVal(50)));
 	pComp->Value(mkNamingAdapt(Period,                  "Period",                C4SVal(15)));
@@ -387,27 +387,6 @@ void C4SRealism::Default()
 	LandscapePushPull=0;
 	LandscapeInsertThrust=0;
 	ValueOverloads.Default();
-}
-
-bool C4Scenario::Compile(const char *szSource, bool fLoadSection)
-{
-	if (!fLoadSection) Default();
-	return CompileFromBuf_LogWarn<StdCompilerINIRead>(mkParAdapt(*this, fLoadSection), StdStrBuf(szSource), C4CFN_ScenarioCore);
-}
-
-bool C4Scenario::Decompile(char **ppOutput, int32_t *ipSize, bool fSaveSection)
-{
-	try
-	{
-		// Decompile
-		StdStrBuf Buf = DecompileToBuf<StdCompilerINIWrite>(mkParAdapt(*this, fSaveSection));
-		// Return
-		*ppOutput = Buf.GrabPointer();
-		*ipSize = Buf.getSize();
-	}
-	catch (StdCompiler::Exception *)
-		{ return false; }
-	return true;
 }
 
 void C4Scenario::Clear()
@@ -481,56 +460,38 @@ void C4SDefinitions::SetModules(const char *szList, const char *szRelativeToPath
 		SGetModule(szList,cnt,Definition[cnt],_MAX_PATH);
 		// Make relative path
 		if (szRelativeToPath && *szRelativeToPath)
-			if (SEqualNoCase(Definition[cnt],szRelativeToPath,SLen(szRelativeToPath)))
-				SCopy(Definition[cnt]+SLen(szRelativeToPath),Definition[cnt]);
-		if (szRelativeToPath2 && *szRelativeToPath2)
-			if (SEqualNoCase(Definition[cnt],szRelativeToPath2,SLen(szRelativeToPath2)))
-				SCopy(Definition[cnt]+SLen(szRelativeToPath2),Definition[cnt]);
-	}
-
-}
-
-bool C4SDefinitions::AssertModules(const char *szPath, char *sMissing)
-{
-	// Local only
-	if (LocalOnly) return true;
-
-	// Check all listed modules for availability
-	bool fAllAvailable=true;
-	char szModule[_MAX_PATH+1];
-	if (sMissing) sMissing[0]=0;
-	// Check all definition files
-	for (int32_t cnt=0; cnt<C4S_MaxDefinitions; cnt++)
-		if (Definition[cnt][0])
 		{
-			// Compose filename using path specified by caller
-			szModule[0]=0;
-			if (szPath) SCopy(szPath,szModule); if (szModule[0]) AppendBackslash(szModule);
-			SAppend(Definition[cnt],szModule);
-			// Missing
-			if (!C4Group_IsGroup(szModule))
+			if (GetRelativePathS(Definition[cnt],szRelativeToPath) != Definition[cnt])
 			{
-				// Add to list
-				if (sMissing) { SNewSegment(sMissing,", "); SAppend(Definition[cnt],sMissing); }
-				fAllAvailable=false;
+				SCopy(GetRelativePathS(Definition[cnt],szRelativeToPath),Definition[cnt]);
+				continue;
 			}
 		}
+		if (szRelativeToPath2 && *szRelativeToPath2)
+		{
+			if (GetRelativePathS(Definition[cnt],szRelativeToPath2) != Definition[cnt])
+			{
+				SCopy(GetRelativePathS(Definition[cnt],szRelativeToPath2),Definition[cnt]);
+				continue;
+			}
+		}
+	}
 
-	return fAllAvailable;
 }
 
 void C4SDefinitions::CompileFunc(StdCompiler *pComp)
 {
 	pComp->Value(mkNamingAdapt(LocalOnly,               "LocalOnly",             false));
 	pComp->Value(mkNamingAdapt(AllowUserChange,         "AllowUserChange",       false));
-	for (int32_t i = 0; i < C4S_MaxDefinitions; i++)
+	pComp->Value(mkNamingAdapt(mkStringAdaptMA(Definition[0]), "Definition1", "Objects.ocd"));
+	for (int32_t i = 1; i < C4S_MaxDefinitions; i++)
 		pComp->Value(mkNamingAdapt(mkStringAdaptMA(Definition[i]), FormatString("Definition%i", i+1).getData(), ""));
 	pComp->Value(mkNamingAdapt(SkipDefs,                "SkipDefs",              C4IDList()));
 }
 
 bool C4SGame::IsMelee()
 {
-	return (Goals.GetIDCount(C4ID::Melee) || Goals.GetIDCount(C4ID::TeamworkMelee));
+	return (Goals.GetIDCount(C4ID::Melee));
 }
 
 // scenario sections

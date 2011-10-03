@@ -2,7 +2,9 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000  Matthes Bender
- * Copyright (c) 2001, 2004-2007  Sven Eberhardt
+ * Copyright (c) 2001, 2004-2007, 2010  Sven Eberhardt
+ * Copyright (c) 2009  Günther Brammer
+ * Copyright (c) 2010  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -87,8 +89,7 @@ public:
 	int32_t Number;
 	int32_t ID; // unique player ID
 	int32_t Team; // team ID - may be 0 for no teams
-	int32_t Color; // OldGfx color index
-	uint32_t ColorDw; // color as DWord for newgfx
+	uint32_t ColorDw;
 	class C4PlayerControlAssignmentSet *ControlSet;
 	StdCopyStrBuf ControlSetName;
 	int32_t MouseControl;
@@ -129,7 +130,6 @@ public:
 	int32_t CrewCnt; // No Save //
 	// Knowledge
 	C4IDList Knowledge;
-	C4IDList Magic;
 	// Control
 	C4PlayerControl Control;
 	C4ObjectPtr Cursor, ViewCursor;
@@ -178,14 +178,14 @@ public:
 	bool ObjectCommand(int32_t iCommand, C4Object *pTarget, int32_t iTx, int32_t iTy, C4Object *pTarget2=NULL, C4Value iData=C4VNull, int32_t iAddMode=C4P_Command_Set);
 	void ObjectCommand2Obj(C4Object *cObj, int32_t iCommand, C4Object *pTarget, int32_t iX, int32_t iY, C4Object *pTarget2, C4Value iData, int32_t iMode);
 	bool DoScore(int32_t iChange);
-	bool Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientName, const char *szFilename, bool fScenarioInit, class C4PlayerInfo *pInfo);
+	bool Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientName, const char *szFilename, bool fScenarioInit, class C4PlayerInfo *pInfo, C4ValueNumbers *);
 	bool ScenarioAndTeamInit(int32_t idTeam);
 	bool ScenarioInit();
 	bool FinalInit(bool fInitialScore);
 	bool Save();
 	bool Save(C4Group &hGroup, bool fSavegame, bool fStoreTiny);
 	bool MakeCrewMember(C4Object *pObj, bool fForceInfo=true, bool fDoCalls=true);
-	bool Load(const char *szFilename, bool fSavegame, bool fLoadPortraits);
+	bool Load(const char *szFilename, bool fSavegame);
 	static bool Strip(const char *szFilename, bool fAggressive);
 	bool Message(const char *szMsg);
 	bool ObjectInCrew(C4Object *tobj);
@@ -193,10 +193,9 @@ public:
 	bool SetWealth(int32_t val);
 	bool SetHostility(int32_t iOpponent, int32_t iHostility, bool fSilent=false);
 	bool IsHostileTowards(const C4Player *opponent) const;
-	void CompileFunc(StdCompiler *pComp, bool fExact);
+	void CompileFunc(StdCompiler *pComp, C4ValueNumbers *);
 	void DenumeratePointers();
-	void EnumeratePointers();
-	bool LoadRuntimeData(C4Group &hGroup);
+	bool LoadRuntimeData(C4Group &hGroup, C4ValueNumbers *);
 	bool ActivateMenuMain();
 	bool ActivateMenuTeamSelection(bool fFromMain);
 	void DoTeamSelection(int32_t idTeam);
@@ -264,8 +263,10 @@ public:
 	void SetZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool direct, bool no_increase, bool no_decrease);
 	void SetMinZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool no_increase, bool no_decrease);
 	void SetMaxZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool no_increase, bool no_decrease);
-	void ZoomToViewport(bool direct, bool no_increase=false, bool no_decrease=false);
-	void ZoomLimitsToViewport();
+	void ZoomToViewports(bool direct, bool no_increase=false, bool no_decrease=false);
+	void ZoomToViewport(C4Viewport* vp, bool direct, bool no_increase=false, bool no_decrease=false);
+	void ZoomLimitsToViewports();
+	void ZoomLimitsToViewport(C4Viewport* vp);
 
 private:
 	bool AdjustZoomParameter(int32_t *range_par, int32_t new_val, bool no_increase, bool no_decrease);

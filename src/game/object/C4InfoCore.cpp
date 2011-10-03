@@ -2,8 +2,8 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2003, 2006-2007  Matthes Bender
- * Copyright (c) 2004, 2006  Günther Brammer
- * Copyright (c) 2005-2008  Sven Eberhardt
+ * Copyright (c) 2004, 2006, 2009, 2011  Günther Brammer
+ * Copyright (c) 2005-2009  Sven Eberhardt
  * Copyright (c) 2006  Peter Wortmann
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -24,6 +24,8 @@
 #include <C4Include.h>
 #include <C4InfoCore.h>
 
+#include <C4Def.h>
+#include <C4DefList.h>
 #include <C4Random.h>
 #include <C4RankSystem.h>
 #include <C4Group.h>
@@ -56,7 +58,6 @@ void C4PlayerInfoCore::Default(C4RankSystem *pRanks)
 	PrefPosition=0;
 	PrefMouse=1;
 	OldPrefControlStyle = 0;
-	PrefAutoContextMenu = 0;
 	OldPrefAutoContextMenu = 0;
 	PrefControl.Clear();
 	ExtraData.Reset();
@@ -78,7 +79,7 @@ bool C4PlayerInfoCore::Load(C4Group &hGroup)
 {
 	// New version
 	StdStrBuf Source;
-	if (hGroup.LoadEntryString(C4CFN_PlayerInfoCore,Source))
+	if (hGroup.LoadEntryString(C4CFN_PlayerInfoCore,&Source))
 	{
 		// Compile
 		StdStrBuf GrpName = hGroup.GetFullName(); GrpName.Append(DirSep C4CFN_PlayerInfoCore);
@@ -110,7 +111,7 @@ bool C4PlayerInfoCore::Save(C4Group &hGroup)
 		return false;
 	if (!hGroup.Add(C4CFN_PlayerInfoCore,Source,false,true))
 		return false;
-	hGroup.Delete("C4Player.c4b");
+	hGroup.Delete("C4Player.ocb");
 	return true;
 }
 
@@ -132,7 +133,7 @@ bool C4PlayerInfoCore::CheckPromotion(C4RankSystem &rRanks)
 
 void C4PlayerInfoCore::CompileFunc(StdCompiler *pComp)
 {
-
+	C4ValueNumbers numbers;
 	pComp->Name("Player");
 	pComp->Value(mkNamingAdapt(toC4CStr(PrefName),"Name",                 "Neuling"));
 	pComp->Value(mkNamingAdapt(toC4CStr(Comment), "Comment",              ""));
@@ -143,7 +144,13 @@ void C4PlayerInfoCore::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(RoundsWon,         "RoundsWon",            0));
 	pComp->Value(mkNamingAdapt(RoundsLost,        "RoundsLost",           0));
 	pComp->Value(mkNamingAdapt(TotalPlayingTime,  "TotalPlayingTime",     0));
-	pComp->Value(mkNamingAdapt(ExtraData,         "ExtraData",            C4ValueMapData()));
+	pComp->Value(mkNamingAdapt(mkParAdapt(ExtraData, &numbers), "ExtraData", C4ValueMapData()));
+	pComp->Value(mkNamingAdapt(numbers,           "ExtraDataValues"));
+	if (pComp->isCompiler())
+	{
+		numbers.Denumerate();
+		ExtraData.Denumerate(&numbers);
+	}
 	pComp->Value(mkNamingAdapt(toC4CStr(LeagueName),"LeagueName",         ""));
 	pComp->NameEnd();
 
@@ -152,7 +159,6 @@ void C4PlayerInfoCore::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(PrefColorDw,              "ColorDw",          0xffu));
 	pComp->Value(mkNamingAdapt(PrefColor2Dw,             "AlternateColorDw", 0u));
 	pComp->Value(mkNamingAdapt(PrefPosition,             "Position",         0));
-	pComp->Value(mkNamingAdapt(PrefAutoContextMenu,      "AutoContextMenu2", 0)); // temp solution - to be removed
 	pComp->Value(mkNamingAdapt(PrefMouse,                "Mouse",            1));
 	pComp->Value(mkNamingAdapt(OldPrefControl,           "Control",          C4P_Control_Keyboard2));
 	pComp->Value(mkNamingAdapt(OldPrefControlStyle,      "AutoStopControl",  0));
@@ -162,189 +168,6 @@ void C4PlayerInfoCore::CompileFunc(StdCompiler *pComp)
 
 	pComp->Value(mkNamingAdapt(LastRound,                "LastRound"));
 
-}
-
-//------------------------------- Physical Info ----------------------------------------
-
-struct C4PhysInfoNameMap_t { const char *szName; C4PhysicalInfo::Offset off; int32_t def; } C4PhysInfoNameMap[] =
-{
-	{ "Energy",          &C4PhysicalInfo::Energy,          50000  },
-	{ "Breath",          &C4PhysicalInfo::Breath,          100000 },
-	{ "Walk",            &C4PhysicalInfo::Walk,            70000  },
-	{ "Jump",            &C4PhysicalInfo::Jump,            40000  },
-	{ "Scale",           &C4PhysicalInfo::Scale,           30000  },
-	{ "Hangle",          &C4PhysicalInfo::Hangle,          30000  },
-	{ "Dig",             &C4PhysicalInfo::Dig,             40000  },
-	{ "Swim",            &C4PhysicalInfo::Swim,            60000  },
-	{ "Throw",           &C4PhysicalInfo::Throw,           50000  },
-	{ "Push",            &C4PhysicalInfo::Push,            40000  },
-	{ "Magic",           &C4PhysicalInfo::Magic,           0      },
-	{ "Float",           &C4PhysicalInfo::Float,           0      },
-	{ "CanScale",        &C4PhysicalInfo::CanScale,        0      },
-	{ "CanHangle",       &C4PhysicalInfo::CanHangle,       0      },
-	{ "CanDig",          &C4PhysicalInfo::CanDig,          1      },
-	{ "CanConstruct",    &C4PhysicalInfo::CanConstruct,    1      },
-	{ "CanChop",         &C4PhysicalInfo::CanChop,         1      },
-	{ "CanSwimDig",      &C4PhysicalInfo::CanSwimDig,      0      },
-	{ "CanFly",          &C4PhysicalInfo::CanFly,          0      },
-	{ "CorrosionResist", &C4PhysicalInfo::CorrosionResist, 0      },
-	{ "BreatheWater",    &C4PhysicalInfo::BreatheWater,    0      },
-	{ NULL, NULL, 0 }
-};
-
-void C4PhysicalInfo::PromotionUpdate(int32_t iRank, bool fUpdateTrainablePhysicals, C4Def *pTrainDef)
-{
-	if (iRank>=0) { CanDig=1; CanChop=1; CanConstruct=1; }
-	if (iRank>=0) { CanScale=1; }
-	if (iRank>=0) { CanHangle=1; }
-	Energy= Max<int32_t>( Energy, (50+5*BoundBy<int32_t>(iRank,0,10)) *C4MaxPhysical/100 );
-	if (fUpdateTrainablePhysicals && pTrainDef)
-	{
-		// do standard training: Expect everything to be trained fully at rank 20
-		int32_t iTrainRank = BoundBy<int32_t>(iRank, 0,20);
-		Scale = pTrainDef->Physical.Scale + (C4MaxPhysical - pTrainDef->Physical.Scale) * iTrainRank / 20;
-		Hangle = pTrainDef->Physical.Hangle + (C4MaxPhysical - pTrainDef->Physical.Hangle) * iTrainRank / 20;
-		Swim = pTrainDef->Physical.Swim + (C4MaxPhysical - pTrainDef->Physical.Swim) * iTrainRank / 20;
-		// do script updates for any physicals as required (this will train stuff like magic)
-		const char *szPhysName; C4PhysicalInfo::Offset PhysOff;
-		for (int32_t iPhysIdx=0; (szPhysName = GetNameByIndex(iPhysIdx, &PhysOff)); ++iPhysIdx)
-		{
-			C4Value PhysVal(this->*PhysOff);
-			C4AulParSet Pars(C4VString(szPhysName), C4VInt(iRank), PhysVal);
-			if (C4Value NewVal = pTrainDef->Script.Call(PSF_GetFairCrewPhysical, 0, &Pars))
-			{
-				this->*PhysOff = NewVal.getInt();
-			}
-		}
-	}
-}
-
-C4PhysicalInfo::C4PhysicalInfo()
-{
-	Default();
-}
-
-void C4PhysicalInfo::Default()
-{
-	ZeroMem(this,sizeof(C4PhysicalInfo));
-}
-
-bool C4PhysicalInfo::GetOffsetByName(const char *szPhysicalName, Offset *pmpiOut)
-{
-	// query map
-	for (C4PhysInfoNameMap_t *entry = C4PhysInfoNameMap; entry->szName; ++entry)
-		if (SEqual(entry->szName, szPhysicalName))
-		{
-			*pmpiOut = entry->off;
-			return true;
-		}
-	return false;
-}
-
-const char *C4PhysicalInfo::GetNameByOffset(Offset mpiOff)
-{
-	// query map
-	for (C4PhysInfoNameMap_t *entry = C4PhysInfoNameMap; entry->szName; ++entry)
-		if (entry->off == mpiOff)
-			return entry->szName;
-	return NULL;
-}
-
-const char *C4PhysicalInfo::GetNameByIndex(int32_t iIdx, Offset *pmpiOut)
-{
-	// query map
-	if (!Inside<int32_t>(iIdx, 0, int32_t(sizeof(C4PhysInfoNameMap)/sizeof(C4PhysInfoNameMap_t)))) return NULL;
-	if (pmpiOut) *pmpiOut = C4PhysInfoNameMap[iIdx].off;
-	return C4PhysInfoNameMap[iIdx].szName;
-}
-
-void C4PhysicalInfo::CompileFunc(StdCompiler *pComp)
-{
-	for (C4PhysInfoNameMap_t *entry = C4PhysInfoNameMap; entry->szName; ++entry)
-		pComp->Value(mkNamingAdapt((this->*(entry->off)), entry->szName, entry->def));
-}
-
-void C4PhysicalInfo::TrainValue(int32_t *piVal, int32_t iTrainBy, int32_t iMaxTrain)
-{
-	// only do training if value was nonzero before (e.g., Magic for revaluated Clonks)
-	if (*piVal)
-		// do train value: Do not increase above maximum, but never decrease either
-		*piVal = Max(Min(*piVal + iTrainBy, iMaxTrain), *piVal);
-}
-
-void C4PhysicalInfo::Train(Offset mpiOffset, int32_t iTrainBy, int32_t iMaxTrain)
-{
-	// train own value
-	TrainValue(&(this->*mpiOffset), iTrainBy, iMaxTrain);
-}
-
-bool C4PhysicalInfo::operator ==(const C4PhysicalInfo &cmp) const
-{
-	// all fields must be equal
-	for (C4PhysInfoNameMap_t *entry = C4PhysInfoNameMap; entry->szName; ++entry)
-		if (this->*(entry->off) != cmp.*(entry->off))
-			return false;
-	return true;
-}
-
-void C4TempPhysicalInfo::CompileFunc(StdCompiler *pComp)
-{
-	C4PhysicalInfo::CompileFunc(pComp);
-	pComp->Value(mkNamingAdapt( mkSTLContainerAdapt(Changes), "Changes", std::vector<C4PhysicalChange>()));
-}
-
-void C4TempPhysicalInfo::Train(Offset mpiOffset, int32_t iTrainBy, int32_t iMaxTrain)
-{
-	// train own value
-	C4PhysicalInfo::Train(mpiOffset, iTrainBy, iMaxTrain);
-	// train all temp values
-	for (std::vector<C4PhysicalChange>::iterator i = Changes.begin(); i != Changes.end(); ++i)
-		if (i->mpiOffset == mpiOffset)
-			TrainValue(&(i->PrevVal), iTrainBy, iMaxTrain);
-}
-
-bool C4TempPhysicalInfo::HasChanges(C4PhysicalInfo *pRefPhysical)
-{
-	// always return true if there are temp changes
-	if (!Changes.empty()) return true;
-	// also return true if any value deviates from the reference
-	if (pRefPhysical)
-	{
-		if (!(*pRefPhysical == *this)) return true;
-	}
-	// no change known
-	return false;
-}
-
-void C4TempPhysicalInfo::RegisterChange(C4PhysicalInfo::Offset mpiOffset)
-{
-	// append physical change to list
-	Changes.push_back(C4PhysicalChange(this->*mpiOffset, mpiOffset));
-}
-
-bool C4TempPhysicalInfo::ResetPhysical(C4PhysicalInfo::Offset mpiOffset)
-{
-	// search last matching physical check (should always be last if well scripted)
-	for (std::vector<C4PhysicalChange>::reverse_iterator i = Changes.rbegin(); i != Changes.rend(); ++i)
-		if ((*i).mpiOffset == mpiOffset)
-		{
-			this->*mpiOffset = (*i).PrevVal;
-			Changes.erase((i+1).base());
-			return true;
-		}
-	return false;
-}
-
-void C4PhysicalChange::CompileFunc(StdCompiler *pComp)
-{
-	// name=oldval
-	char phyn[C4MaxName+1];
-	const char *szPhyn = C4PhysicalInfo::GetNameByOffset(mpiOffset);
-	if (szPhyn) SCopy(szPhyn, phyn, C4MaxName); else *phyn='\0';
-	pComp->Value(mkStringAdapt(phyn, C4MaxName, StdCompiler::RCT_Idtf));
-	if (!C4PhysicalInfo::GetOffsetByName(phyn, &mpiOffset)) pComp->excNotFound("Physical change name \"%s\" not found.");
-	pComp->Separator(StdCompiler::SEP_SET);
-	pComp->Value(PrevVal);
 }
 
 //------------------------------- Object Info ----------------------------------------
@@ -378,7 +201,6 @@ void C4ObjectInfoCore::Default(C4ID n_id,
 	sNextRankName.Clear();
 	NextRankExp=0;
 	DeathMessage[0]='\0';
-	*PortraitFile=0;
 	Age=0;
 	ExtraData.Reset();
 
@@ -395,20 +217,11 @@ void C4ObjectInfoCore::Default(C4ID n_id,
 	}
 
 	if (pDefs) UpdateCustomRanks(pDefs);
-
-	// Physical
-	Physical.Default();
-	if (pDef) Physical = pDef->Physical;
-	Physical.PromotionUpdate(Rank);
-
-	// Old format
-
 }
 
 void C4ObjectInfoCore::Promote(int32_t iRank, C4RankSystem &rRanks, bool fForceRankName)
 {
 	Rank=iRank;
-	Physical.PromotionUpdate(Rank);
 	// copy new rank name if defined only, or forced to use highest defined rank for too high info ranks
 	StdStrBuf sNewRank(rRanks.GetRankName(Rank,fForceRankName));
 	if (sNewRank) sRankName.Copy(sNewRank);
@@ -476,7 +289,7 @@ bool C4ObjectInfoCore::GetNextRankInfo(C4RankSystem &rDefaultRanks, int32_t *piN
 bool C4ObjectInfoCore::Load(C4Group &hGroup)
 {
 	StdStrBuf Source;
-	return hGroup.LoadEntryString(C4CFN_ObjectInfoCore, Source) &&
+	return hGroup.LoadEntryString(C4CFN_ObjectInfoCore, &Source) &&
 	       Compile(Source.getData());
 }
 
@@ -494,10 +307,10 @@ bool C4ObjectInfoCore::Save(C4Group &hGroup, C4DefList *pDefs)
 
 void C4ObjectInfoCore::CompileFunc(StdCompiler *pComp)
 {
+	C4ValueNumbers numbers;
 	pComp->Value(mkNamingAdapt(id,          "id",               C4ID::None));
 	pComp->Value(mkNamingAdapt(toC4CStr(Name),          "Name",             "Clonk"));
 	pComp->Value(mkNamingAdapt(toC4CStr(DeathMessage),  "DeathMessage",     ""));
-	pComp->Value(mkNamingAdapt(toC4CStr(PortraitFile),  "PortraitFile",     ""));
 	pComp->Value(mkNamingAdapt(Rank,                    "Rank",             0));
 	pComp->Value(mkNamingAdapt(sRankName,               "RankName",         "Clonk"));
 	pComp->Value(mkNamingAdapt(sNextRankName,           "NextRankName",     ""));
@@ -510,10 +323,13 @@ void C4ObjectInfoCore::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(Birthday,                "Birthday",         0));
 	pComp->Value(mkNamingAdapt(TotalPlayingTime,        "TotalPlayingTime", 0));
 	pComp->Value(mkNamingAdapt(Age,                     "Age",              0));
-	pComp->Value(mkNamingAdapt(ExtraData,               "ExtraData",        C4ValueMapData()));
-
-	pComp->FollowName("Physical");
-	pComp->Value(Physical);
+	pComp->Value(mkNamingAdapt(mkParAdapt(ExtraData, &numbers), "ExtraData", C4ValueMapData()));
+	pComp->Value(mkNamingAdapt(numbers,                 "ExtraDataValues"));
+	if (pComp->isCompiler())
+	{
+		numbers.Denumerate();
+		ExtraData.Denumerate(&numbers);
+	}
 }
 
 bool C4ObjectInfoCore::Compile(const char *szSource)
@@ -522,8 +338,6 @@ bool C4ObjectInfoCore::Compile(const char *szSource)
 	             mkNamingAdapt(*this, "ObjectInfo"),
 	             StdStrBuf(szSource),
 	             "ObjectInfo");
-	// Do a promotion update to set physicals right
-	Physical.PromotionUpdate(Rank);
 	// DeathMessages are not allowed to stay forever
 	if ('@' == DeathMessage[0]) DeathMessage[0] = ' ';
 	return ret;

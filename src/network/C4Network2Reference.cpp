@@ -4,6 +4,9 @@
  * Copyright (c) 2006-2008  Peter Wortmann
  * Copyright (c) 2007-2009  Sven Eberhardt
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2009  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Tobias Zwick
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -18,9 +21,11 @@
  * See clonk_trademark_license.txt for full license.
  */
 #include "C4Include.h"
-#include <C4Game.h>
-#include "C4Version.h"
 #include "C4Network2Reference.h"
+
+#include <C4Game.h>
+#include <C4RoundResults.h>
+#include "C4Version.h"
 
 #include <utility>
 #include <fcntl.h>
@@ -443,7 +448,6 @@ bool C4Network2HTTPClient::Query(const StdBuf &Data, bool fBinary)
 	// store mode
 	this->fBinary = fBinary;
 	// Create request
-	const char *szCharset = GetCharsetCodeName(LoadResStr("IDS_LANG_CHARSET"));
 	StdStrBuf Header;
 	if (Data.getSize())
 		Header.Format(
@@ -451,8 +455,8 @@ bool C4Network2HTTPClient::Query(const StdBuf &Data, bool fBinary)
 		  "Host: %s\r\n"
 		  "Connection: Close\r\n"
 		  "Content-Length: %lu\r\n"
-		  "Content-Type: text/plain; encoding=%s\r\n"
-		  "Accept-Charset: %s\r\n"
+		  "Content-Type: text/plain; charset=utf-8\r\n"
+		  "Accept-Charset: utf-8\r\n"
 		  "Accept-Encoding: gzip\r\n"
 		  "Accept-Language: %s\r\n"
 		  "User-Agent: " C4ENGINENAME "/" C4VERSION "\r\n"
@@ -460,22 +464,19 @@ bool C4Network2HTTPClient::Query(const StdBuf &Data, bool fBinary)
 		  RequestPath.getData(),
 		  Server.getData(),
 		  static_cast<unsigned long>(Data.getSize()),
-		  szCharset,
-		  szCharset,
 		  Config.General.LanguageEx);
 	else
 		Header.Format(
 		  "GET %s HTTP/1.0\r\n"
 		  "Host: %s\r\n"
 		  "Connection: Close\r\n"
-		  "Accept-Charset: %s\r\n"
+		  "Accept-Charset: utf-8\r\n"
 		  "Accept-Encoding: gzip\r\n"
 		  "Accept-Language: %s\r\n"
 		  "User-Agent: " C4ENGINENAME "/" C4VERSION "\r\n"
 		  "\r\n",
 		  RequestPath.getData(),
 		  Server.getData(),
-		  szCharset,
 		  Config.General.LanguageEx);
 	// Compose query
 	Request.Take(Header.GrabPointer(), Header.getLength());
@@ -636,3 +637,4 @@ bool C4Network2RefClient::GetReferences(C4Network2Reference **&rpReferences, int
 	ResetError();
 	return true;
 }
+

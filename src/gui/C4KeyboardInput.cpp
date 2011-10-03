@@ -1,11 +1,15 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2006, 2008  Sven Eberhardt
- * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2005-2006, 2008-2010  Sven Eberhardt
  * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2005-2006, 2008-2010  Asmageddon
  * Copyright (c) 2008  Julian Raschke
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2009-2010  Armin Burgmeier
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -24,9 +28,11 @@
 #include <C4Include.h>
 #include <C4KeyboardInput.h>
 
+#include <C4Components.h>
 #include <C4Game.h>
+#include <StdWindow.h>
 
-#ifndef _WIN32
+#ifdef USE_X11
 #include <X11/Xlib.h>
 #include <X11/Xutil.h> // XConvertCase
 #endif
@@ -237,7 +243,7 @@ const C4KeyCodeMapEntry KeyCodeMap [] =
 	{ VK_F23            , "F23"          , NULL },
 	{ VK_F24            , "F24"          , NULL },
 	{ VK_NUMLOCK        , "NumLock"      , "NLock" },
-	{ K_SCROLL         , "Scroll"        , NULL },
+	{ VK_SCROLL         , "Scroll"        , NULL },
 
 	{ VK_PROCESSKEY     , "PROCESSKEY"   , NULL },
 
@@ -322,6 +328,9 @@ const C4KeyCodeMapEntry KeyCodeMap [] =
 	{ KEY_Default, "None", NULL},
 	{ KEY_Undefined, NULL, NULL }
 };
+#elif defined(USE_COCOA)
+#include "StdWindow.h"
+#include "CocoaKeycodeMap.h"
 #endif
 
 C4KeyCode C4KeyCodeEx::String2KeyCode(const StdStrBuf &sName)
@@ -426,7 +435,7 @@ C4KeyCode C4KeyCodeEx::String2KeyCode(const StdStrBuf &sName)
 		}
 
 	}
-#ifdef _WIN32
+#if defined(_WIN32) || defined(USE_COCOA)
 	// query map
 	const C4KeyCodeMapEntry *pCheck = KeyCodeMap;
 	while (pCheck->szName)
@@ -524,7 +533,7 @@ StdStrBuf C4KeyCodeEx::KeyCode2String(C4KeyCode wCode, bool fHumanReadable, bool
 		}
 	}
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(USE_COCOA)
 
 //  TODO: Works?
 //  StdStrBuf Name; Name.SetLength(1000);
@@ -585,6 +594,7 @@ void C4KeyCodeEx::CompileFunc(StdCompiler *pComp, StdStrBuf *pOutBufIfUndefined)
 		// reading from file
 		StdStrBuf sCode;
 		DWORD dwSetShift = 0;
+		int shift_idx = 0;
 		for (;;)
 		{
 			pComp->Value(mkParAdapt(sCode, StdCompiler::RCT_Idtf));
@@ -1017,7 +1027,7 @@ bool C4KeyboardInput::LoadCustomConfig()
 	C4Group GrpExtra;
 	if (!GrpExtra.Open(C4CFN_Extra)) return false;
 	StdBuf sFileContents;
-	if (!GrpExtra.LoadEntry(C4CFN_KeyConfig, sFileContents)) return false;
+	if (!GrpExtra.LoadEntry(C4CFN_KeyConfig, &sFileContents)) return false;
 	StdStrBuf sFileContentsString((const char *) sFileContents.getData());
 	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(*this, sFileContentsString, "Custom keys from" C4CFN_Extra DirSep C4CFN_KeyConfig))
 		return false;

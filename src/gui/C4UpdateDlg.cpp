@@ -1,9 +1,11 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2007  Sven Eberhardt
  * Copyright (c) 2007  Matthes Bender
  * Copyright (c) 2007  Günther Brammer
+ * Copyright (c) 2007  Sven Eberhardt
+ * Copyright (c) 2010  Tobias Zwick
+ * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2007-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -157,9 +159,8 @@ static bool IsWindowsWithUAC()
 	// Determine windows version
 	OSVERSIONINFO ver;
 	ver.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	bool fWindowsXP = false;
 	if (GetVersionEx((LPOSVERSIONINFO) &ver))
-		return (ver.dwMajorVersion == 6);
+		return (ver.dwMajorVersion >= 6);
 #endif
 	return false;
 }
@@ -210,16 +211,16 @@ bool C4UpdateDlg::ApplyUpdate(const char *strUpdateFile, bool fDeleteUpdate, C4G
 	if (IsWindowsWithUAC()) strUpdateProgEx.Copy(Config.AtTempPath("setup.exe"));
 	// Extract update program (the update should be applied using the new version)
 	C4Group UpdateGroup, SubGroup;
-	char strSubGroup[1024+1];
 	if (!UpdateGroup.Open(strUpdateFile)) return false;
 	// Look for update program at top level
 	if (!UpdateGroup.ExtractEntry(strUpdateProg.getData(), strUpdateProgEx.getData()))
 		return false;
 #if 0
+	char strSubGroup[1024+1];
 		// ASK: What is this? Why should an update program not be found at the top
 		// level? This seems obsolete. - Newton
 		// Not found: look for an engine update pack one level down
-		if (UpdateGroup.FindEntry(FormatString("cr_*_%s.c4u", C4_OS).getData(), strSubGroup))
+		if (UpdateGroup.FindEntry(FormatString("cr_*_%s.ocu", C4_OS).getData(), strSubGroup))
 			// Extract update program from sub group
 			if (SubGroup.OpenAsChild(&UpdateGroup, strSubGroup))
 			{
@@ -237,17 +238,17 @@ bool C4UpdateDlg::ApplyUpdate(const char *strUpdateFile, bool fDeleteUpdate, C4G
 	StdStrBuf strUpdateArgs, strTitle;
 	strUpdateArgs.Format("\"%s\" \"%s\" %s %lu", strUpdateProgEx.getData(), strUpdateFile, fDeleteUpdate ? "-yd" : "-y", (unsigned long)ProcessID);
 
-	STARTUPINFO startupInfo;
+	STARTUPINFOW startupInfo;
 	startupInfo.cb = sizeof(startupInfo);
 	startupInfo.lpReserved = NULL;
 	startupInfo.lpDesktop = NULL;
-	startupInfo.lpTitle = "Updating OpenClonk...";
+	startupInfo.lpTitle = L"Updating OpenClonk...";
 	startupInfo.dwFlags = STARTF_USESHOWWINDOW;
 	startupInfo.wShowWindow = SW_SHOW;
 	startupInfo.cbReserved2 = 0;
 	startupInfo.lpReserved2 = NULL;
 	PROCESS_INFORMATION procInfo;
-	BOOL success = CreateProcess(strUpdateProgEx.getData(), strUpdateArgs.getMData(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, Config.General.ExePath, &startupInfo, &procInfo);
+	BOOL success = CreateProcessW(strUpdateProgEx.GetWideChar(), strUpdateArgs.GetWideChar(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, Config.General.ExePath.GetWideChar(), &startupInfo, &procInfo);
 	if(!success) return false;
 
 	//int iError = (intptr_t)ShellExecute(NULL, "open", strUpdateProgEx.getData(), strUpdateArgs.getData(), Config.General.ExePath, SW_SHOW);
@@ -312,12 +313,10 @@ bool C4UpdateDlg::CheckForUpdates(C4GUI::Screen *pScreen, bool fAutomatic)
 	StdStrBuf UpdateURL;
 	StdStrBuf VersionInfo;
 	C4GUI::Dialog *pWaitDlg = NULL;
-	if (C4GUI::IsGUIValid())
-	{
-		pWaitDlg = new C4GUI::MessageDialog(LoadResStr("IDS_MSG_LOOKINGFORUPDATES"), LoadResStr("IDS_TYPE_UPDATE"), C4GUI::MessageDialog::btnAbort, C4GUI::Ico_Ex_Update, C4GUI::MessageDialog::dsRegular);
-		pWaitDlg->SetDelOnClose(false);
-		pScreen->ShowDialog(pWaitDlg, false);
-	}
+	pWaitDlg = new C4GUI::MessageDialog(LoadResStr("IDS_MSG_LOOKINGFORUPDATES"), LoadResStr("IDS_TYPE_UPDATE"), C4GUI::MessageDialog::btnAbort, C4GUI::Ico_Ex_Update, C4GUI::MessageDialog::dsRegular);
+	pWaitDlg->SetDelOnClose(false);
+	pScreen->ShowDialog(pWaitDlg, false);
+
 	C4Network2UpdateClient UpdateClient;
 	bool fSuccess = false, fAborted = false;
 	StdStrBuf strVersion; strVersion.Format("%d.%d.%d.%d", C4XVER1, C4XVER2, C4XVER3, C4XVER4);
@@ -332,7 +331,7 @@ bool C4UpdateDlg::CheckForUpdates(C4GUI::Screen *pScreen, bool fAutomatic)
 			// wait, check for program abort
 			if (!Application.ScheduleProcs()) { fAborted = true; break; }
 			// check for dialog close
-			if (pWaitDlg) if (!C4GUI::IsGUIValid() || !pWaitDlg->IsShown())  { fAborted = true; break; }
+			if (pWaitDlg) if (!pWaitDlg->IsShown())  { fAborted = true; break; }
 		}
 		if (!fAborted) 
 		{
@@ -342,7 +341,7 @@ bool C4UpdateDlg::CheckForUpdates(C4GUI::Screen *pScreen, bool fAutomatic)
 		Application.InteractiveThread.RemoveProc(&UpdateClient);
 		UpdateClient.SetNotify(NULL);
 	}
-	if (C4GUI::IsGUIValid() && pWaitDlg) delete pWaitDlg;
+	delete pWaitDlg;
 	// User abort
 	if (fAborted)
 	{

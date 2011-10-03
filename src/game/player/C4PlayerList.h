@@ -4,6 +4,7 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2006-2007  Sven Eberhardt
  * Copyright (c) 2006  Peter Wortmann
+ * Copyright (c) 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -41,7 +42,6 @@ public:
 	void Clear();
 	void Execute();
 	void DenumeratePointers();
-	void EnumeratePointers();
 	void ClearPointers(C4Object *pObj);
 	int GetCount() const;
 	int GetCount(C4PlayerType eType) const;
@@ -57,8 +57,8 @@ public:
 	C4Player *GetAtClient(const char *szName, int iIndex=0) const;
 	C4Player *GetAtRemoteClient(int iIndex=0) const;
 	C4Player *GetByInfoID(int iInfoID) const;
-	C4Player *Join(const char *szFilename, bool fScenarioInit, int iAtClient, const char *szAtClientName, class C4PlayerInfo *pInfo);
-	bool CtrlJoinLocalNoNetwork(const char *szFilename, int iAtClient, const char *szAtClientName);
+	C4Player *Join(const char *szFilename, bool fScenarioInit, int iAtClient, const char *szAtClientName, class C4PlayerInfo *pInfo, C4ValueNumbers *);
+	void JoinNew(const char *szFilename);
 	bool CtrlJoin(const class C4Network2ResCore &ResCore, int iClientID, int idPlayerInfo);
 	bool FileInUse(const char *szFilename) const;
 	bool Retire(C4Player *pPlr);
@@ -80,7 +80,6 @@ public:
 	bool Hostile(int iPlayer1, int iPlayer2) const;
 	bool HostilityDeclared(int iPlayer1, int iPlayer2) const; // check whether iPlayer1 treats iPlayer2 as hostile, but not vice versa!
 	bool PositionTaken(int iPosition) const;
-	bool ColorTaken(int iColor) const;
 	int CheckColorDw(DWORD dwColor, C4Player *pExclude); // return minimum difference to the other player's colors
 	bool SynchronizeLocalFiles(); // syncrhonize all local player files; resetting InGame times
 protected:

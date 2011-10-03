@@ -15,7 +15,7 @@
  * "Clonk" is a registered trademark of Matthes Bender.
  * See clonk_trademark_license.txt for full license.
  */
-// user-customizable multimedia package Extra.c4g
+// user-customizable multimedia package Extra.ocg
 
 #ifndef INC_C4Extra
 #define INC_C4Extra
@@ -33,8 +33,7 @@ public:
 	bool Init();      // init extra group, using scneario presets
 	bool InitGroup(); // open extra group
 
-	C4Group ExtraSysGrp; // extra.c4g root folder
-	C4Group ExtraUserGrp; // extra.c4g root folder
+	std::vector<C4Group*> ExtraGroups; // extra.ocg root folders
 
 protected:
 	bool LoadDef(C4Group &hGroup, const char *szName); // load preset for definition

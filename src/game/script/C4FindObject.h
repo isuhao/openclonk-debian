@@ -4,6 +4,7 @@
  * Copyright (c) 2006-2007  Peter Wortmann
  * Copyright (c) 2006, 2008  Günther Brammer
  * Copyright (c) 2007  Sven Eberhardt
+ * Copyright (c) 2009-2010  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -144,11 +145,12 @@ public:
 	virtual ~C4FindObjectOr();
 private:
 	int32_t iCnt;
-	C4FindObject **ppConds;
+	C4FindObject **ppConds; bool fUseShapes;
 	C4Rect Bounds; bool fHasBounds;
 protected:
 	virtual bool Check(C4Object *pObj);
 	virtual C4Rect *GetBounds() { return fHasBounds ? &Bounds : NULL; }
+	virtual bool UseShapes() { return fUseShapes; }
 	virtual bool IsEnsured();
 	virtual bool IsImpossible() { return !iCnt; }
 };
@@ -293,10 +295,10 @@ protected:
 class C4FindObjectProcedure : public C4FindObject
 {
 public:
-	C4FindObjectProcedure(int32_t procedure)
-			: procedure(procedure) { }
+	C4FindObjectProcedure(C4String * procedure)
+			: procedure(procedure) { /* no need to incref, the pointer is never dereferenced */ }
 private:
-	int32_t procedure;
+	C4String * procedure;
 protected:
 	virtual bool Check(C4Object *pObj);
 	virtual bool IsImpossible();

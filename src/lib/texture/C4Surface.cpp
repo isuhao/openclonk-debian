@@ -2,8 +2,10 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2003, 2008  Matthes Bender
- * Copyright (c) 2002, 2007-2008  Sven Eberhardt
+ * Copyright (c) 2002, 2007-2008, 2010-2011  Sven Eberhardt
  * Copyright (c) 2004-2009  Günther Brammer
+ * Copyright (c) 2010  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -106,9 +108,9 @@ bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrI
 		// Look for scaled images
 		const size_t base_length = std::strlen(strBasename);
 		char strExtension[128 + 1]; SCopy(GetExtension(szFilename), strExtension, 128);
-		char scaled_name[_MAX_PATH+1];
 		if (strExtension[0])
 		{
+			char scaled_name[_MAX_PATH+1];
 			std::string wildcard(strBasename);
 			wildcard += ".*.";
 			wildcard += strExtension;
@@ -119,14 +121,15 @@ bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrI
 				{
 					int scale = -1;
 					if (sscanf(scaled_name + base_length + 1, "%d", &scale) == 1)
-						max_scale = std::max(scale, max_scale);
+						if (scale > max_scale)
+						{
+							max_scale = scale;
+							ScaleToSet = max_scale;
+							strFilename.Copy(scaled_name);
+							szFilename = strFilename.getData();
+						}
 				}
 				while (hGroup.FindNextEntry(wildcard.c_str(), scaled_name));
-			}
-			if (max_scale > -1)
-			{
-				ScaleToSet = max_scale;
-				szFilename = scaled_name;
 			}
 		}
 	}
@@ -289,12 +292,9 @@ bool C4Surface::Copy(C4Surface &fromSfc)
 // Some distributions ship jpeglib.h with extern "C", others don't - gah.
 extern "C"
 {
-/* avoid conflict with conflicting boolean and FAR typedefs */
-#undef __RPCNDR_H__
+/* avoid conflict with conflicting FAR typedefs */
 #undef FAR
-#define boolean jpeg_boolean
 #include <jpeglib.h>
-#undef boolean
 }
 #include <setjmp.h>
 
@@ -325,7 +325,7 @@ static void my_output_message (j_common_ptr cinfo)
 }
 static void jpeg_noop (j_decompress_ptr cinfo) {}
 static const unsigned char end_of_input = JPEG_EOI;
-static jpeg_boolean fill_input_buffer (j_decompress_ptr cinfo)
+static boolean fill_input_buffer (j_decompress_ptr cinfo)
 {
 	// The doc says to give fake end-of-inputs if there is no more data
 	cinfo->src->next_input_byte = &end_of_input;

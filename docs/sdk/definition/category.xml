@@ -4,7 +4,7 @@
 <?xml-stylesheet type="text/xsl" href="../../clonk.xsl"?>
 <doc>
   <title>Object Categories</title>
-  <h id="Objektkategorien">Object Categories</h>
+  <h>Object Categories</h>
   <part>
     <text>An object's category specifies parts of its behavior. For a definition it is set by the Category entry in the DefCore.txt file. Multiple categories can be combined using the binary OR operator.</text>
     <text>
@@ -51,7 +51,7 @@
         </row>
         <row>
           <col>C4D_Parallax</col>
-          <col>Object moves parallax according to Local 0 and 1. For more information see <funclink>C4D_Parallax</funclink>.</col>
+          <col>Object moves parallax according to the Parallaxity property. For more information see <funclink>C4D_Parallax</funclink>.</col>
         </row>
         <row>
           <col>C4D_MouseSelect</col>
@@ -67,7 +67,7 @@
         </row>
         <row>
           <col>C4D_IgnoreFoW</col>
-          <col>Object is drawn above fog of war. Useful for creating status displays or gui elements using objects. From CR.</col>
+          <col>Object is drawn above fog of war. Useful for creating status displays or gui elements using objects.</col>
         </row>
       </table>
     </text>

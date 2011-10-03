@@ -4,7 +4,9 @@
  * Copyright (c) 1998-2001  Matthes Bender
  * Copyright (c) 2001-2007  Sven Eberhardt
  * Copyright (c) 2003  Peter Wortmann
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009  Günther Brammer
+ * Copyright (c) 2010  Maikel de Vries
+ * Copyright (c) 2010  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -41,9 +43,7 @@
 #include <functional>
 #include <set>
 
-const int32_t C4D_None           =    0,
-C4D_All            =    ~C4D_None,
-
+const int32_t
 C4D_StaticBack     =    1<<0,
 C4D_Structure      =    1<<1,
 C4D_Vehicle        =    1<<2,
@@ -65,6 +65,8 @@ C4D_IgnoreFoW        =  1<<17,
 
 C4D_BackgroundOrForeground = (C4D_Background | C4D_Foreground);
 
+const int32_t C4Plane_Structure = 200;
+
 const int32_t C4D_Grab_Put = 1,
 C4D_Grab_Get = 2,
 
@@ -72,25 +74,6 @@ C4D_Border_Sides  = 1,
 C4D_Border_Top    = 2,
 C4D_Border_Bottom = 4,
 C4D_Border_Layer  = 8,
-
-C4D_Line_Power     = 1,
-C4D_Line_Source    = 2,
-C4D_Line_Drain     = 3,
-C4D_Line_Lightning = 4,
-C4D_Line_Volcano   = 5,
-C4D_Line_Rope      = 6,
-C4D_Line_Colored   = 7,
-C4D_Line_Vertex    = 8,
-
-C4D_Power_Input     =   1,
-C4D_Power_Output    =   2,
-C4D_Liquid_Input    =   4,
-C4D_Liquid_Output   =   8,
-C4D_Power_Generator =  16,
-C4D_Power_Consumer  =  32,
-C4D_Liquid_Pump     =  64,
-C4D_Connect_Rope    = 128,
-C4D_EnergyHolder    = 256,
 
 C4D_Place_Surface    = 0,
 C4D_Place_Liquid     = 1,
@@ -124,7 +107,6 @@ public:
 	C4ID id;
 	int32_t rC4XVer[4];
 	C4IDList RequireDef;
-	C4PhysicalInfo Physical;
 	C4Shape Shape;
 	C4Rect Entrance;
 	C4Rect Collection;
@@ -141,15 +123,10 @@ public:
 	int32_t Value;
 	int32_t Exclusive;
 	int32_t Category;
-	int32_t Growth;
-	int32_t Rebuyable;
 	int32_t ContactIncinerate; // 0 off 1 high - 5 low
 	int32_t BlastIncinerate; // 0 off 1 - x if > damage
 	int32_t Constructable;
-	int32_t Grab; // 0 not 1 push 2 grab only
-	int32_t Carryable;
 	int32_t Rotateable;
-	int32_t Chopable;
 	int32_t Float;
 	int32_t ColorByOwner;
 	int32_t NoHorizontalMove;
@@ -160,13 +137,10 @@ public:
 	int32_t UprightAttach;
 	int32_t ContactFunctionCalls;
 	int32_t Line;
-	int32_t LineConnect;
 	int32_t LineIntersect;
 	int32_t NoBurnDecay;
 	int32_t IncompleteActivity;
 	int32_t Placement;
-	int32_t Prey;
-	int32_t Edible;
 	int32_t AttractLightning;
 	int32_t Oversize;
 	int32_t Fragile;
@@ -189,12 +163,10 @@ public:
 	int32_t BlitMode;         // special blit mode for objects of this def. C4D_Blit_X
 	int32_t NoBreath;         // object does not need to breath, although it's living
 	int32_t ConSizeOff;       // number of pixels to be subtracted from the needed height for this building
-	int32_t NoSell;           // if set, object can't be sold (doesn't even appear in sell-menu)
 	int32_t NoGet;            // if set, object can't be taken out of a containers manually (doesn't appear in get/activate-menus)
 	int32_t NeededGfxMode;    // if set, the def will only be loaded in given gfx mode
 	int32_t RotatedEntrance;  // 0 entrance not rotateable, 1 entrance always, 2-360 entrance within this rotation
 	int32_t NoTransferZones;
-	int32_t AutoContextMenu;  // automatically open context menu for this object
 	int32_t AllowPictureStack; // allow stacking of multiple items in menus even if some attributes do not match. APS_*-values
 public:
 	void DefaultDefCore();
@@ -212,7 +184,6 @@ public:
 	C4Def();
 	~C4Def();
 public:
-	char Maker[C4MaxName+1];
 	char Filename[_MAX_FNAME+1];
 	int32_t Creation;
 	int32_t Count; // number of instanciations
@@ -231,13 +202,8 @@ public:
 	C4FacetSurface *pRankSymbols; bool fRankSymbolsOwned;
 	int32_t iNumRankSymbols;    // number of rank symbols available, if loaded
 	C4DefGraphics Graphics; // base graphics. points to additional graphics
-	int32_t PortraitCount;
-	C4PortraitGraphics *Portraits; // Portraits (linked list of C4AdditionalDefGraphics)
 
 protected:
-	// copy of the physical info used in FairCrew-mode
-	C4PhysicalInfo *pFairCrewPhysical;
-
 	C4Facet MainFace;
 
 protected:
@@ -252,24 +218,20 @@ public:
 	void Draw(C4Facet &cgo, bool fSelected=false, DWORD iColor=0, C4Object *pObj=NULL, int32_t iPhaseX=0, int32_t iPhaseY=0,C4DrawTransform* trans=NULL);
 
 	inline C4Facet &GetMainFace(C4DefGraphics *pGraphics, DWORD dwClr=0) { MainFace.Surface=pGraphics->GetBitmap(dwClr); return MainFace; }
+	int32_t GetPlane() { return GetPropertyInt(P_Plane); }
 	int32_t GetValue(C4Object *pInBase, int32_t iBuyPlayer);         // get value of def; calling script functions if defined
-	C4PhysicalInfo *GetFairCrewPhysicals(); // get fair crew physicals at current fair crew strength
-	void ClearFairCrewPhysicals();  // remove cached fair crew physicals, will be created fresh on demand
 	void Synchronize();
 	virtual C4Def const * GetDef() const { return this; }	
 	virtual C4Def * GetDef() { return this; }
 	virtual bool IsDef() const { return true; }
 protected:
-	bool LoadPortraits(C4Group &hGroup);
 	bool LoadActMap(C4Group &hGroup);
 	void CrossMapActMap();
-private:
-	C4ValueArray *GetCustomComponents(C4Value *pvArrayHolder, C4Object *pBuilder, C4Object *pObjInstance=NULL);
 public:
 	// return def components - may be overloaded by script callback
-	int32_t GetComponentCount(C4ID idComponent, C4Object *pBuilder=NULL);
-	C4ID GetIndexedComponent(int32_t idx, C4Object *pBuilder=NULL);
-	void GetComponents(C4IDList *pOutList, C4Object *pObjInstance=NULL, C4Object *pBuilder=NULL);
+	int32_t GetComponentCount(C4ID idComponent);
+	C4ID GetIndexedComponent(int32_t idx);
+	void GetComponents(C4IDList *pOutList, C4Object *pObjInstance=NULL);
 
 	void IncludeDefinition(C4Def *pIncludeDef); // inherit components from other definition
 	void ResetIncludeDependencies(); // resets all pointers into foreign definitions caused by include chains
@@ -277,93 +239,5 @@ public:
 	C4PropList *GetActionByName(const char *actname);
 	C4PropList *GetActionByName(C4String *actname);
 };
-
-class C4DefList
-		: public CStdFont::CustomImages
-{
-public:
-	C4DefList();
-	virtual ~C4DefList();
-public:
-	bool LoadFailure;
-	typedef std::map<C4ID, C4Def*> Table;
-	Table table;
-protected:
-	C4Def *FirstDef;
-public:
-	void Default();
-	void Clear();
-	int32_t Load(C4Group &hGroup,
-	             DWORD dwLoadWhat, const char *szLanguage,
-	             C4SoundSystem *pSoundSystem = NULL,
-	             bool fOverload = false,
-	             bool fSearchMessage = false, int32_t iMinProgress=0, int32_t iMaxProgress=0, bool fLoadSysGroups = true);
-	int32_t Load(const char *szSearch,
-	             DWORD dwLoadWhat, const char *szLanguage,
-	             C4SoundSystem *pSoundSystem = NULL,
-	             bool fOverload = false, int32_t iMinProgress=0, int32_t iMaxProgress=0);
-	int32_t LoadFolderLocal(const char *szPath,
-	                        DWORD dwLoadWhat, const char *szLanguage,
-	                        C4SoundSystem *pSoundSystem = NULL,
-	                        bool fOverload = false, char *szStoreName=NULL, int32_t iMinProgress=0, int32_t iMaxProgress=0);
-	int32_t LoadForScenario(const char *szScenario,
-	                        const char *szSpecified,
-	                        DWORD dwLoadWhat, const char *szLanguage,
-	                        C4SoundSystem *pSoundSystem = NULL,
-	                        bool fOverload = false, int32_t iMinProgress=0, int32_t iMaxProgress=0);
-	C4Def *ID2Def(C4ID id);
-	C4Def *GetDef(int32_t Index, DWORD dwCategory = C4D_All);
-	C4Def *GetByPath(const char *szPath);
-	int32_t GetDefCount(DWORD dwCategory = C4D_All);
-	int32_t GetIndex(C4ID id);
-	int32_t RemoveTemporary();
-	int32_t CheckEngineVersion(int32_t ver1, int32_t ver2, int32_t ver3, int32_t ver4);
-	int32_t CheckRequireDef();
-	void Draw(C4ID id, C4Facet &cgo, bool fSelected, int32_t iColor);
-	void Remove(C4Def *def);
-	bool Remove(C4ID id);
-	bool Reload(C4Def *pDef, DWORD dwLoadWhat, const char *szLanguage, C4SoundSystem *pSoundSystem = NULL);
-	bool Add(C4Def *ndef, bool fOverload);
-	void BuildTable();
-	void ResetIncludeDependencies(); // resets all pointers into foreign definitions caused by include chains
-	void CallEveryDefinition();
-	void Synchronize();
-
-	// callback from font renderer: get ID image
-	virtual bool GetFontImage(const char *szImageTag, CFacet &rOutImgFacet);
-};
-
-extern C4DefList Definitions;
-
-inline C4Def *C4Id2Def(C4ID id)
-{
-	return ::Definitions.ID2Def(id);
-}
-
-// Default Action Procedures
-
-#define DFA_NONE    -1
-#define DFA_WALK     0
-#define DFA_FLIGHT   1
-#define DFA_KNEEL    2
-#define DFA_SCALE    3
-#define DFA_HANGLE   4
-#define DFA_DIG      5
-#define DFA_SWIM     6
-#define DFA_THROW    7
-#define DFA_BRIDGE   8
-#define DFA_BUILD    9
-#define DFA_PUSH    10
-#define DFA_CHOP    11
-#define DFA_LIFT    12
-#define DFA_FLOAT   13
-#define DFA_ATTACH  14
-#define DFA_CONNECT 15
-#define DFA_PULL    16
-
-#define C4D_MaxDFA  17
-
-// procedure name table
-extern const char *ProcedureName[C4D_MaxDFA];
 
 #endif

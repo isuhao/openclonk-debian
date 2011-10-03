@@ -1,10 +1,12 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2001-2002, 2005  Sven Eberhardt
  * Copyright (c) 2001-2002, 2008  Peter Wortmann
- * Copyright (c) 2004, 2006-2008  Günther Brammer
+ * Copyright (c) 2001-2002, 2005  Sven Eberhardt
+ * Copyright (c) 2004, 2006-2009  Günther Brammer
  * Copyright (c) 2005-2006  Matthes Bender
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,6 +28,7 @@
 #include <C4Game.h>
 #include <C4Aul.h>
 #include <C4Material.h>
+#include <C4ScriptHost.h>
 #include <C4Texture.h>
 #include <C4Record.h>
 
@@ -113,7 +116,7 @@ void C4MCCallbackArray::EnablePixel(int32_t iX, int32_t iY)
 		// create bitmap
 		int32_t iSize=(iWdt*iHgt+7)/8;
 		pMap = new BYTE[iSize];
-		ZeroMemory(pMap, iSize);
+		memset(pMap, 0, iSize);
 		// done
 	}
 	// safety: do not set outside map!
@@ -425,7 +428,7 @@ bool C4MCOverlay::SetField(C4MCParser *pParser, const char *szField, const char 
 			case C4MCV_ScriptFunc:
 			{
 				// get script func of main script
-				C4AulFunc *pSFunc = Game.Script.GetSFunc(StrPar, AA_PROTECTED);
+				C4AulFunc *pSFunc = ::GameScript.GetSFunc(StrPar, AA_PROTECTED);
 				if (!pSFunc) throw C4MCParserErr(pParser, C4MCErr_SFuncNotFound, StrPar);
 				// add to main
 				Target.As<C4MCCallbackArray*>() = new C4MCCallbackArray(pSFunc, MapCreator);
@@ -1606,7 +1609,7 @@ bool AlgoGradient(C4MCOverlay *pOvrl, int32_t iX, int32_t iY)
 bool AlgoScript(C4MCOverlay *pOvrl, int32_t iX, int32_t iY)
 {
 	// get script function
-	C4AulFunc *pFunc = Game.Script.GetSFunc(FormatString("ScriptAlgo%s", pOvrl->Name).getData());
+	C4AulFunc *pFunc = ::GameScript.GetSFunc(FormatString("ScriptAlgo%s", pOvrl->Name).getData());
 	// failsafe
 	if (!pFunc) return false;
 	// ok, call func

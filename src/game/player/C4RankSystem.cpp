@@ -3,7 +3,8 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2002, 2006-2007  Sven Eberhardt
- * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2005-2006, 2009  Günther Brammer
+ * Copyright (c) 2011  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -49,12 +50,14 @@ int C4RankSystem::Init(const char *szRegister,
 	// Check registry for present rank names and set defaults
 #ifdef _WIN32
 	int crank=0;
-	char rankname[C4MaxName+1],keyname[30];
+	char keyname[30];
+	StdCopyStrBuf rankname;
 	bool Checking=true;
 	while (Checking)
 	{
 		sprintf(keyname,"Rank%03d",crank+1);
-		if (GetRegistryString(Register,keyname,rankname,C4MaxName+1))
+		rankname = GetRegistryString(Register,keyname);
+		if (!rankname.isNull())
 		{
 			// Rank present
 			crank++;
@@ -62,8 +65,9 @@ int C4RankSystem::Init(const char *szRegister,
 		else
 		{
 			// Rank not defined, check for default
-			if (SCopySegment(szDefRanks,crank,rankname,'|',C4MaxName)
-			    && SetRegistryString(Register,keyname,rankname))
+			rankname.AppendChars('\0', C4MaxName);
+			if (SCopySegment(szDefRanks,crank,rankname.getMData(),'|',C4MaxName)
+			    && SetRegistryString(Register,keyname,rankname.getData()))
 				crank++;
 			else
 				Checking=false;
@@ -103,13 +107,12 @@ bool C4RankSystem::Load(C4Group &hGroup, const char *szFilenames, int DefRankBas
 	assert(szFilenames); assert(szLanguage);
 	// load new
 	C4ComponentHost Ranks;
-	if (!Ranks.LoadEx("Ranks", hGroup, szFilenames, szLanguage)) return false;
+	if (!Ranks.LoadEx(hGroup, szFilenames, szLanguage)) return false;
 	size_t iSize = Ranks.GetDataSize();
 	if (!iSize) return false;
 	szRankNames=new char[iSize+1];
 	memcpy(szRankNames, Ranks.GetData(), iSize * sizeof(char));
 	szRankNames[iSize]=0;
-	Ranks.Close();
 	// replace line breaks by zero-chars
 	unsigned int i=0;
 	for (; i<iSize; ++i)
@@ -220,9 +223,11 @@ StdStrBuf C4RankSystem::GetRankName(int iRank, bool fReturnLastIfOver)
 	while (iRank>=0)
 	{
 		char keyname[30];
+		StdCopyStrBuf rankname;
 		sprintf(keyname,"Rank%03d",iRank+1);
-		if (GetRegistryString(Register,keyname,RankName,C4MaxName+1))
-			return StdStrBuf(RankName);
+		rankname = GetRegistryString(Register,keyname);
+		if (!rankname.isNull())
+			return rankname;
 		if (!fReturnLastIfOver) return StdStrBuf();
 		--iRank;
 	}
@@ -246,9 +251,9 @@ int C4RankSystem::RankByExperience(int iExp)
 bool C4RankSystem::Check(int iRank, const char  *szDefRankName)
 {
 #ifdef _WIN32
-	char rankname[C4MaxName+1],keyname[30];
+	char keyname[30];
 	sprintf(keyname,"Rank%03d",iRank);
-	if (GetRegistryString(Register,keyname,rankname,C4MaxName+1))
+	if (!GetRegistryString(Register,keyname).isNull())
 		return false;
 	if (!szDefRankName || (SLen(szDefRankName)>C4MaxName))
 		return false;

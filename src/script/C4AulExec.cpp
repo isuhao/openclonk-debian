@@ -1,9 +1,12 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2001-2002, 2006-2007  Sven Eberhardt
- * Copyright (c) 2001-2002, 2005-2007  Peter Wortmann
- * Copyright (c) 2006-2009  Günther Brammer
+ * Copyright (c) 2001-2002, 2005-2007  Sven Eberhardt
+ * Copyright (c) 2001-2002, 2005-2007, 2009-2010  Peter Wortmann
+ * Copyright (c) 2006-2011  Günther Brammer
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,7 +29,6 @@
 
 #include <C4Object.h>
 #include <C4Config.h>
-#include <C4GameMessage.h>
 #include <C4Game.h>
 #include <C4Log.h>
 #include <C4Record.h>
@@ -38,20 +40,6 @@ C4AulExecError::C4AulExecError(C4Object *pObj, const char *szError) : cObj(pObj)
 {
 	// direct error message string
 	sMessage.Format("ERROR: %s.", szError ? szError : "(no error message)");
-}
-
-void C4AulExecError::show()
-{
-	// log
-	C4AulError::show();
-	// debug mode object message
-	if (Game.DebugMode)
-	{
-		if (cObj)
-			::Messages.New(C4GM_Target,sMessage,cObj,NO_OWNER);
-		else
-			::Messages.New(C4GM_Global,sMessage,NULL,ANY_OWNER);
-	}
 }
 
 StdStrBuf C4AulScriptContext::ReturnDump(StdStrBuf Dump)
@@ -91,14 +79,19 @@ StdStrBuf C4AulScriptContext::ReturnDump(StdStrBuf Dump)
 		Dump.Append(Func->Owner->ScriptName);
 	// Context
 	if (Obj)
-		Dump.AppendFormat(" (obj %s)", C4VObj(Obj).GetDataString().getData());
+	{
+		if (Obj->Status == C4OS_NORMAL)
+			Dump.AppendFormat(" (obj #%d)", Obj->Number);
+		else
+			Dump.AppendFormat(" (obj (#%d))", Obj->Number);
+	}
 	else if (Func->Owner->Def != NULL)
 		Dump.AppendFormat(" (def %s)", Func->Owner->Def->GetName());
 	// Script
-	if (!fDirectExec && Func->Owner)
+	if (!fDirectExec && Func->pOrgScript)
 		Dump.AppendFormat(" (%s:%d)",
 		                  Func->pOrgScript->ScriptName.getData(),
-		                  SGetLine(Func->pOrgScript->GetScript(), CPos ? CPos->SPos : Func->Script));
+		                  CPos ? Func->GetLineOfCode(CPos) : SGetLine(Func->pOrgScript->GetScript(), Func->Script));
 	// Return it
 	return Dump;
 }
@@ -109,18 +102,23 @@ void C4AulScriptContext::dump(StdStrBuf Dump)
 	DebugLog(ReturnDump(Dump).getData());
 }
 
+void C4AulExec::LogCallStack()
+{
+	for (C4AulScriptContext *pCtx = pCurCtx; pCtx >= Contexts; pCtx--)
+		pCtx->dump(StdStrBuf(" by: "));
+}
+
 C4Value C4AulExec::Exec(C4AulScriptFunc *pSFunc, C4Object *pObj, C4Value *pnPars, bool fPassErrors, bool fTemporaryScript)
 {
-
 	// Push parameters
 	C4Value *pPars = pCurVal + 1;
 	if (pnPars)
 		for (int i = 0; i < C4AUL_MAX_Par; i++)
 			PushValue(pnPars[i]);
-
-	// Push variables
-	C4Value *pVars = pCurVal + 1;
-	PushNullVals(pSFunc->VarNamed.iSize);
+	if (pCurVal + 1 - pPars > pSFunc->GetParCount())
+		PopValues(pCurVal + 1 - pPars - pSFunc->GetParCount());
+	else
+		PushNullVals(pSFunc->GetParCount() - (pCurVal + 1 - pPars));
 
 	// Derive definition context from function owner (legacy)
 	C4Def *pDef = pObj ? pObj->Def : pSFunc->Owner->Def;
@@ -136,7 +134,7 @@ C4Value C4AulExec::Exec(C4AulScriptFunc *pSFunc, C4Object *pObj, C4Value *pnPars
 	ctx.Def = pDef;
 	ctx.Return = NULL;
 	ctx.Pars = pPars;
-	ctx.Vars = pVars;
+	ctx.Vars = pCurVal + 1;
 	ctx.Func = pSFunc;
 	ctx.TemporaryScript = fTemporaryScript;
 	ctx.CPos = NULL;
@@ -144,7 +142,7 @@ C4Value C4AulExec::Exec(C4AulScriptFunc *pSFunc, C4Object *pObj, C4Value *pnPars
 	PushContext(ctx);
 
 	// Execute
-	return Exec(pSFunc->Code, fPassErrors);
+	return Exec(pSFunc->GetCode(), fPassErrors);
 }
 
 C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
@@ -152,7 +150,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 
 #ifndef NOAULDEBUG
 	// Debugger pointer
-	C4AulDebug * const pDebug = ::ScriptEngine.GetDebugger();
+	C4AulDebug * const pDebug = C4AulDebug::GetDebugger();
 	if (pDebug)
 		pDebug->DebugStepIn(pCPos);
 #endif
@@ -170,11 +168,11 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			switch (pCPos->bccType)
 			{
 			case AB_INT:
-				PushValue(C4VInt(pCPos->Par.i));
+				PushInt(pCPos->Par.i);
 				break;
 
 			case AB_BOOL:
-				PushValue(C4VBool(!! pCPos->Par.i));
+				PushBool(!!pCPos->Par.i);
 				break;
 
 			case AB_STRING:
@@ -194,21 +192,21 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				break;
 
 			case AB_DUP:
-				PushValue(pCurVal[-pCPos->Par.i+1]);
+				PushValue(pCurVal[pCPos->Par.i]);
+				break;
+			case AB_STACK_SET:
+				pCurVal[pCPos->Par.i] = pCurVal[0];
+				break;
+			case AB_POP_TO:
+				pCurVal[pCPos->Par.i] = pCurVal[0];
+				PopValue();
 				break;
 
-			case AB_EOFN:
+			case AB_EOF: case AB_EOFN:
 				throw new C4AulExecError(pCurCtx->Obj, "internal error: function didn't return");
 
 			case AB_ERR:
-				throw new C4AulExecError(pCurCtx->Obj, "syntax error: see previous parser error for details");
-
-			case AB_PARN:
-				PushValue(pCurCtx->Pars[pCPos->Par.i]);
-				break;
-			case AB_PARN_SET:
-				pCurCtx->Pars[pCPos->Par.i] = pCurVal[0];
-				break;
+				throw new C4AulExecError(pCurCtx->Obj, "syntax error: see above for details");
 
 			case AB_PARN_CONTEXT:
 				PushValue(AulExec.GetContext(AulExec.GetContextDepth()-2)->Pars[pCPos->Par.i]);
@@ -218,39 +216,32 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				PushValue(AulExec.GetContext(AulExec.GetContextDepth()-2)->Vars[pCPos->Par.i]);
 				break;
 
-			case AB_VARN:
-				PushValue(pCurCtx->Vars[pCPos->Par.i]);
-				break;
-			case AB_VARN_SET:
-				pCurCtx->Vars[pCPos->Par.i] = pCurVal[0];
-				break;
-
 			case AB_LOCALN:
 				if (!pCurCtx->Obj)
 					throw new C4AulExecError(pCurCtx->Obj, "can't access local variables in a definition call");
 				PushNullVals(1);
-				pCurCtx->Obj->GetPropertyVal(pCPos->Par.s, pCurVal);
+				pCurCtx->Obj->GetPropertyByS(pCPos->Par.s, pCurVal);
 				break;
 			case AB_LOCALN_SET:
 				if (!pCurCtx->Obj)
 					throw new C4AulExecError(pCurCtx->Obj, "can't access local variables in a definition call");
-				pCurCtx->Obj->SetProperty(pCPos->Par.s, pCurVal[0]);
+				pCurCtx->Obj->SetPropertyByS(pCPos->Par.s, pCurVal[0]);
 				break;
 
 			case AB_PROP:
-				if (!(pCurVal->ConvertTo(C4V_PropList) && pCurVal->_getPropList()))
+				if (!pCurVal->ConvertToNoNil(C4V_PropList))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("proplist access: proplist expected, got %s", pCurVal->GetTypeName()).getData());
-				if (!pCurVal->_getPropList()->GetPropertyVal(pCPos->Par.s, pCurVal))
+				if (!pCurVal->_getPropList()->GetPropertyByS(pCPos->Par.s, pCurVal))
 					pCurVal->Set0();
 				break;
 			case AB_PROP_SET:
 			{
 				C4Value *pPropList = pCurVal - 1;
-				if (!(pPropList->ConvertTo(C4V_PropList) && pPropList->_getPropList()))
+				if (!pPropList->ConvertToNoNil(C4V_PropList))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("proplist write: proplist expected, got %s", pPropList->GetTypeName()).getData());
 				if (pPropList->_getPropList()->IsFrozen())
 					throw new C4AulExecError(pCurCtx->Obj, "proplist write: proplist is readonly");
-				pPropList->_getPropList()->SetProperty(pCPos->Par.s, pCurVal[0]);
+				pPropList->_getPropList()->SetPropertyByS(pCPos->Par.s, pCurVal[0]);
 				pPropList->Set(pCurVal[0]);
 				PopValue();
 				break;
@@ -265,29 +256,28 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				
 			// prefix
 			case AB_BitNot: // ~
-				CheckOpPar(pCPos->Par.i);
+				CheckOpPar(C4V_Int, "~");
 				pCurVal->SetInt(~pCurVal->_getInt());
 				break;
 			case AB_Not:  // !
-				CheckOpPar(pCPos->Par.i);
-				pCurVal->SetBool(!pCurVal->_getBool());
+				pCurVal->SetBool(!pCurVal->getBool());
 				break;
 			case AB_Neg:  // -
-				CheckOpPar(pCPos->Par.i);
+				CheckOpPar(C4V_Int, "-");
 				pCurVal->SetInt(-pCurVal->_getInt());
 				break;
 			case AB_Inc: // ++
-				CheckOpPar(pCPos->Par.i);
-				(*pCurVal)++;
+				CheckOpPar(C4V_Int, "++");
+				++(*pCurVal);
 				break;
 			case AB_Dec: // --
-				CheckOpPar(pCPos->Par.i);
-				(*pCurVal)--;
+				CheckOpPar(C4V_Int, "--");
+				--(*pCurVal);
 				break;
-				// postfix
+			// postfix
 			case AB_Pow:  // **
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "**");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(Pow(pPar1->_getInt(), pPar2->_getInt()));
 				PopValue();
@@ -295,7 +285,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Div:  // /
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "/");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				if (!pPar2->_getInt())
 					throw new C4AulExecError(pCurCtx->Obj, "division by zero");
@@ -305,7 +295,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Mul:  // *
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "*");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() * pPar2->_getInt());
 				PopValue();
@@ -313,7 +303,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Mod:  // %
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "%");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				if (pPar2->_getInt())
 					pPar1->SetInt(pPar1->_getInt() % pPar2->_getInt());
@@ -324,7 +314,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Sub:  // -
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "-");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() - pPar2->_getInt());
 				PopValue();
@@ -332,7 +322,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Sum:  // +
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "+");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() + pPar2->_getInt());
 				PopValue();
@@ -340,7 +330,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_LeftShift:  // <<
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "<<");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() << pPar2->_getInt());
 				PopValue();
@@ -348,7 +338,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_RightShift: // >>
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, ">>");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() >> pPar2->_getInt());
 				PopValue();
@@ -356,7 +346,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_LessThan: // <
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "<");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(pPar1->_getInt() < pPar2->_getInt());
 				PopValue();
@@ -364,7 +354,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_LessThanEqual:  // <=
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "<=");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(pPar1->_getInt() <= pPar2->_getInt());
 				PopValue();
@@ -372,7 +362,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_GreaterThan:  // >
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, ">");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(pPar1->_getInt() > pPar2->_getInt());
 				PopValue();
@@ -380,7 +370,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_GreaterThanEqual: // >=
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, ">=");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(pPar1->_getInt() >= pPar2->_getInt());
 				PopValue();
@@ -388,7 +378,6 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_Equal:  // ==
 			{
-				CheckOpPars(pCPos->Par.i);
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(*pPar1 == *pPar2);
 				PopValue();
@@ -396,7 +385,6 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_NotEqual: // !=
 			{
-				CheckOpPars(pCPos->Par.i);
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetBool(*pPar1 != *pPar2);
 				PopValue();
@@ -404,7 +392,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_BitAnd: // &
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "&");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() & pPar2->_getInt());
 				PopValue();
@@ -412,7 +400,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_BitXOr: // ^
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "^");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() ^ pPar2->_getInt());
 				PopValue();
@@ -420,13 +408,14 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 			}
 			case AB_BitOr:  // |
 			{
-				CheckOpPars(pCPos->Par.i);
+				CheckOpPars(C4V_Int, C4V_Int, "|");
 				C4Value *pPar1 = pCurVal - 1, *pPar2 = pCurVal;
 				pPar1->SetInt(pPar1->_getInt() | pPar2->_getInt());
 				PopValue();
 				break;
 			}
-			case AB_ARRAY:
+
+			case AB_NEW_ARRAY:
 			{
 				// Create array
 				C4ValueArray *pArray = new C4ValueArray(pCPos->Par.i);
@@ -436,31 +425,21 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 					(*pArray)[i] = pCurVal[i - pCPos->Par.i + 1];
 
 				// Push array
-				if (pCPos->Par.i > 0)
-				{
-					PopValues(pCPos->Par.i - 1);
-					pCurVal->SetArray(pArray);
-				}
-				else
-					PushArray(pArray);
+				PopValues(pCPos->Par.i);
+				PushArray(pArray);
 
 				break;
 			}
 
-			case AB_PROPLIST:
+			case AB_NEW_PROPLIST:
 			{
-				PushPropList(C4PropList::New());
-				break;
-			}
-			case AB_IPROPLIST:
-			{
-				C4Value *pPropSet = pCurVal - 2, *pKey = pCurVal -1, *pValue = pCurVal;
-				if (!pPropSet->ConvertTo(C4V_PropList))
-					throw new C4AulExecError(pCurCtx->Obj, FormatString("internal error: proplist expected, got %s", pPropSet->GetTypeName()).getData());
-				if (!pKey->ConvertTo(C4V_String))
-					throw new C4AulExecError(pCurCtx->Obj, FormatString("internal error: string expected, got %s", pPropSet->GetTypeName()).getData());
-				pPropSet->_getPropList()->SetProperty(pKey->_getStr(), *pValue);
-				PopValues(2);
+				C4PropList * pPropList = C4PropList::New();
+
+				for (int i = 0; i < pCPos->Par.i; i++)
+					pPropList->SetPropertyByS(pCurVal[-2 * i - 1]._getStr(), pCurVal[-2 * i]);
+
+				PopValues(pCPos->Par.i * 2);
+				PushPropList(pPropList);
 				break;
 			}
 
@@ -476,7 +455,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				{
 					assert(pStruct->GetType() == C4V_PropList || pStruct->GetType() == C4V_C4Object);
 					C4PropList *pPropList = pStruct->_getPropList();
-					if (!pPropList->GetPropertyVal(pIndex->_getStr(), pResult))
+					if (!pPropList->GetPropertyByS(pIndex->_getStr(), pResult))
 						pResult->Set0();
 				}
 				// Remove index
@@ -497,7 +476,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 					C4PropList *pPropList = pStruct->_getPropList();
 					if (pPropList->IsFrozen())
 						throw new C4AulExecError(pCurCtx->Obj, "proplist write: proplist is readonly");					
-					pPropList->SetProperty(pIndex->_getStr(), *pValue);
+					pPropList->SetPropertyByS(pIndex->_getStr(), *pValue);
 				}
 				// Set result, remove array and index from stack
 				*pResult = *pValue;
@@ -511,7 +490,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				C4Value &EndIndex = pCurVal[0];
 
 				// Typcheck
-				if (!Array.ConvertTo(C4V_Array) || Array.GetType() == C4V_Any)
+				if (!Array.ConvertToNoNil(C4V_Array))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("array slice: can't access %s as an array", Array.GetTypeName()).getData());
 				if (!StartIndex.ConvertTo(C4V_Int))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("array slice: start index of type %s, int expected", StartIndex.GetTypeName()).getData());
@@ -533,7 +512,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				C4Value &Value = pCurVal[0];
 
 				// Typcheck
-				if (!Array.ConvertTo(C4V_Array) || Array.GetType() == C4V_Any)
+				if (!Array.ConvertToNoNil(C4V_Array))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("array slice: can't access %s as an array", Array.GetTypeName()).getData());
 				if (!StartIndex.ConvertTo(C4V_Int))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("array slice: start index of type %s, int expected", StartIndex.GetTypeName()).getData());
@@ -654,6 +633,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				C4Value *pPars = pCurVal - pFunc->GetParCount() + 1;
 				// Save current position
 				pCurCtx->CPos = pCPos;
+				assert(pCurCtx->Func->GetCode() <= pCPos);
 				// Do the call
 				C4AulBCC *pJump = Call(pFunc, pPars, pPars, NULL);
 				if (pJump)
@@ -668,7 +648,7 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				if (!pCurVal->ConvertTo(C4V_Int))
 					throw new C4AulExecError(pCurCtx->Obj, FormatString("Par: index of type %s, int expected", pCurVal->GetTypeName()).getData());
 				// Push reference to parameter on the stack
-				if (pCurVal->_getInt() >= 0 && pCurVal->_getInt() < pCurCtx->ParCnt())
+				if (pCurVal->_getInt() >= 0 && pCurVal->_getInt() < pCurCtx->Func->GetParCount())
 					pCurVal->Set(pCurCtx->Pars[pCurVal->_getInt()]);
 				else
 					pCurVal->Set0();
@@ -682,10 +662,8 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				// Check array the first time only
 				if (!iItem)
 				{
-					if (!pCurVal[-1].ConvertTo(C4V_Array))
+					if (!pCurVal[-1].ConvertToNoNil(C4V_Array))
 						throw new C4AulExecError(pCurCtx->Obj, FormatString("for: array expected, but got %s", pCurVal[-1].GetTypeName()).getData());
-					if (!pCurVal[-1]._getArray())
-						throw new C4AulExecError(pCurCtx->Obj, FormatString("for: array expected, but got nil").getData());
 				}
 				C4ValueArray *pArray = pCurVal[-1]._getArray();
 				// No more entries?
@@ -701,11 +679,6 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				break;
 			}
 
-			case AB_IVARN:
-				pCurCtx->Vars[pCPos->Par.i] = pCurVal[0];
-				PopValue();
-				break;
-
 			case AB_CALL:
 			case AB_CALLFS:
 			{
@@ -719,13 +692,13 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 
 				// Get call target - "object" or "id" are allowed
 				C4Object *pDestObj; C4Def *pDestDef;
-				if (pTargetVal->ConvertTo(C4V_C4Object))
+				if (pTargetVal->ConvertToNoNil(C4V_C4Object))
 				{
 					// object call
 					pDestObj = pTargetVal->_getObj();
 					pDestDef = pDestObj->Def;
 				}
-				else if (pTargetVal->ConvertTo(C4V_PropList) && pTargetVal->_getPropList())
+				else if (pTargetVal->ConvertToNoNil(C4V_PropList))
 				{
 					// definition call
 					pDestObj = NULL;
@@ -766,6 +739,13 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 
 				// Save current position
 				pCurCtx->CPos = pCPos;
+				assert(pCurCtx->Func->GetCode() <= pCPos);
+
+				// adjust parameter count
+				if (pCurVal + 1 - pPars > pFunc->GetParCount())
+					PopValues(pCurVal + 1 - pPars - pFunc->GetParCount());
+				else
+					PushNullVals(pFunc->GetParCount() - (pCurVal + 1 - pPars));
 
 				// Call function
 				C4AulBCC *pNewCPos = Call(pFunc, pTargetVal, pPars, pDestObj, pDestDef);
@@ -784,9 +764,6 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 				if (pDebug) pDebug->DebugStep(pCPos);
 #endif
 				break;
-
-			default:
-				assert(false);
 			}
 
 			// Continue
@@ -797,26 +774,27 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 	}
 	catch (C4AulError *e)
 	{
-		// Save current position
-		pOldCtx->CPos = pCPos;
-		// Pass?
-		if (fPassErrors)
-			throw;
 		// Show
-		e->show();
-		delete e;
-		// Trace
-		for (C4AulScriptContext *pCtx = pCurCtx; pCtx >= Contexts; pCtx--)
-			pCtx->dump(StdStrBuf(" by: "));
+		if(!e->shown) e->show();
+		// Save current position
+		assert(pCurCtx->Func->GetCode() <= pCPos);
+		pCurCtx->CPos = pCPos;
 		// Unwind stack
 		C4Value *pUntil = NULL;
 		while (pCurCtx >= pOldCtx)
 		{
+			pCurCtx->dump(StdStrBuf(" by: "));
 			pUntil = pCurCtx->Pars - 1;
 			PopContext();
 		}
 		if (pUntil)
 			PopValuesUntil(pUntil);
+		// Pass?
+		if (fPassErrors)
+			throw;
+		// Trace
+		LogCallStack();
+		delete e;
 	}
 
 	// Return nothing
@@ -825,7 +803,6 @@ C4Value C4AulExec::Exec(C4AulBCC *pCPos, bool fPassErrors)
 
 C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4Object *pObj, C4Def *pDef)
 {
-
 	// No object given? Use current context
 	if (!pObj && !pDef)
 	{
@@ -847,11 +824,6 @@ C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4
 	C4AulScriptFunc *pSFunc = pFunc->SFunc();
 	if (pSFunc)
 	{
-
-		// Push variables
-		C4Value *pVars = pCurVal + 1;
-		PushNullVals(pSFunc->VarNamed.iSize);
-
 		// Check context
 		assert(!pSFunc->Owner->Def || pDef == pSFunc->Owner->Def);
 
@@ -862,7 +834,7 @@ C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4
 		ctx.Caller = pCurCtx;
 		ctx.Return = pReturn;
 		ctx.Pars = pPars;
-		ctx.Vars = pVars;
+		ctx.Vars = pCurVal + 1;
 		ctx.Func = pSFunc;
 		ctx.TemporaryScript = false;
 		ctx.CPos = NULL;
@@ -870,12 +842,12 @@ C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4
 
 #ifndef NOAULDEBUG
 		// Notify debugger
-		if (C4AulDebug *pDebug = ::ScriptEngine.GetDebugger())
-			pDebug->DebugStepIn(pSFunc->Code);
+		if (C4AulDebug *pDebug = C4AulDebug::GetDebugger())
+			pDebug->DebugStepIn(pSFunc->GetCode());
 #endif
 
 		// Jump to code
-		return pSFunc->Code;
+		return pSFunc->GetCode();
 	}
 	else
 	{
@@ -887,36 +859,33 @@ C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4
 		CallCtx.Caller = pCurCtx;
 
 #ifdef DEBUGREC_SCRIPT
-		if (Game.FrameCounter >= DEBUGREC_START_FRAME)
+		StdStrBuf sCallText;
+		if (pObj)
+			sCallText.AppendFormat("Object(%d): ", pObj->Number);
+		sCallText.Append(pFunc->Name);
+		sCallText.AppendChar('(');
+		for (int i=0; i<C4AUL_MAX_Par; ++i)
 		{
-			StdStrBuf sCallText;
-			if (pObj)
-				sCallText.AppendFormat("Object(%d): ", pObj->Number);
-			sCallText.Append(pFunc->Name);
-			sCallText.AppendChar('(');
-			for (int i=0; i<C4AUL_MAX_Par; ++i)
+			if (i) sCallText.AppendChar(',');
+			C4Value &rV = pPars[i];
+			if (rV.GetType() == C4V_String)
 			{
-				if (i) sCallText.AppendChar(',');
-				C4Value &rV = pPars[i];
-				if (rV.GetType() == C4V_String)
-				{
-					C4String *s = rV.getStr();
-					if (!s)
-						sCallText.Append("(Snull)");
-					else
-					{
-						sCallText.Append("\"");
-						sCallText.Append(s->GetData());
-						sCallText.Append("\"");
-					}
-				}
+				C4String *s = rV.getStr();
+				if (!s)
+					sCallText.Append("(Snull)");
 				else
-					sCallText.Append(rV.GetDataString());
+				{
+					sCallText.Append("\"");
+					sCallText.Append(s->GetData());
+					sCallText.Append("\"");
+				}
 			}
-			sCallText.AppendChar(')');
-			sCallText.AppendChar(';');
-			AddDbgRec(RCT_AulFunc, sCallText.getData(), sCallText.getLength()+1);
+			else
+				sCallText.Append(rV.GetDataString());
 		}
+		sCallText.AppendChar(')');
+		sCallText.AppendChar(';');
+		AddDbgRec(RCT_AulFunc, sCallText.getData(), sCallText.getLength()+1);
 #endif
 
 		// Execute
@@ -933,7 +902,7 @@ C4AulBCC *C4AulExec::Call(C4AulFunc *pFunc, C4Value *pReturn, C4Value *pPars, C4
 
 #ifndef NOAULDEBUG
 		// Notify debugger
-		if (C4AulDebug *pDebug = ::ScriptEngine.GetDebugger())
+		if (C4AulDebug *pDebug = C4AulDebug::GetDebugger())
 		{
 			// Make dummy context
 			C4AulScriptContext ctx;
@@ -977,7 +946,7 @@ void C4AulExec::StartProfiling(C4AulScript *pProfiledScript)
 	fProfiling = true;
 	// resets profling times and starts recording the times
 	this->pProfiledScript = pProfiledScript;
-	time_t tNow = timeGetTime();
+	time_t tNow = GetTime();
 	tDirectExecStart = tNow; // in case profiling is started from DirectExec
 	tDirectExecTotal = 0;
 	pProfiledScript->ResetProfilerTimes();
@@ -1010,7 +979,7 @@ void C4AulExec::PushContext(const C4AulScriptContext &rContext)
 		pCurCtx->dump(Buf);
 	}
 	// Profiler: Safe time to measure difference afterwards
-	if (fProfiling) pCurCtx->tTime = timeGetTime();
+	if (fProfiling) pCurCtx->tTime = GetTime();
 }
 
 void C4AulExec::PopContext()
@@ -1020,7 +989,7 @@ void C4AulExec::PopContext()
 	// Profiler adding up times
 	if (fProfiling)
 	{
-		time_t dt = timeGetTime() - pCurCtx->tTime;
+		time_t dt = GetTime() - pCurCtx->tTime;
 		if (dt && pCurCtx->Func)
 			pCurCtx->Func->tProfileTime += dt;
 	}
@@ -1160,6 +1129,7 @@ C4Value C4AulScript::DirectExec(C4Object *pObj, const char *szScript, const char
 	{
 		pScript->Def = NULL;
 	}
+	pScript->ClearCode();
 	pScript->Reg2List(Engine, this);
 	// Add a new function
 	C4AulScriptFunc *pFunc = new C4AulScriptFunc(pScript, "");
@@ -1178,7 +1148,7 @@ C4Value C4AulScript::DirectExec(C4Object *pObj, const char *szScript, const char
 		delete pScript;
 		return C4VNull;
 	}
-	pFunc->Code = pScript->Code;
+	pFunc->CodePos = 1;
 	pScript->State = ASS_PARSED;
 	// Execute. The TemporaryScript-parameter makes sure the script will be deleted later on.
 	C4Value vRetVal(AulExec.Exec(pFunc, pObj, NULL, fPassErrors, true));

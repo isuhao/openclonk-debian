@@ -4,7 +4,7 @@
  * Copyright (c) 1998-2000, 2007  Matthes Bender
  * Copyright (c) 2001, 2004, 2006-2007  Sven Eberhardt
  * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -25,14 +25,12 @@
 #ifndef INC_C4Config
 #define INC_C4Config
 
-#include "StdConfig.h"
 #include "C4Constants.h"
 #include "C4InputValidation.h"
 #include <list>
 
-const char *CfgAtTempPath(const char *szFilename);
-
 #define C4DEFAULT_FONT_NAME "Endeavour"
+enum { CFG_MaxString  = 1024 };
 
 class C4ConfigGeneral
 {
@@ -47,32 +45,22 @@ public:
 	char RXFontName[CFG_MaxString+1];
 	int32_t  RXFontSize;
 	char ConfigUserPath[CFG_MaxString + 1];
-	StdStrBuf SaveGameFolder;
-	StdStrBuf SaveDemoFolder;
 	StdStrBuf ScreenshotFolder;
 	char MissionAccess[CFG_MaxString+1];
 	int32_t FPS;
-	int32_t Record;
 	int32_t DefRec;
 	int32_t MMTimer;  // use multimedia-timers
-	int32_t FairCrew;   // don't use permanent crew physicals
-	int32_t FairCrewStrength, MaxFairCrewStrength; // strength of clonks in fair crew mode
 	int32_t ScrollSmooth; // view movement smoothing
-	int32_t ConfigResetSafety; // safety value: If this value is screwed, the config got currupted and must be reset
+	int32_t ConfigResetSafety; // safety value: If this value is screwed, the config got corrupted and must be reset
 	// Determined at run-time
-	char ExePath[CFG_MaxString+1];
-	char TempPath[CFG_MaxString+1];
+	StdCopyStrBuf ExePath;
+	StdCopyStrBuf TempPath;
 	char UserDataPath[CFG_MaxString+1];
 	char SystemDataPath[CFG_MaxString+1];
 	char ScreenshotPath[CFG_MaxString+1];
-	char BetaCode[CFG_MaxString+1];
 	bool GamepadEnabled;
 	bool FirstStart;
-	bool UserPortraitsWritten; // set when default portraits have been copied to the UserPath (this is only done once)
 
-	// Additional paths to read data from (prioritized lower than UserDataPath/SystemDataPath)
-	typedef std::list<const char *> PathList;
-	PathList AdditionalDataPaths;
 public:
 	static int GetLanguageSequence(const char *strSource, char *strTarget);
 	void DefaultLanguage();
@@ -80,9 +68,6 @@ public:
 	void AdoptOldSettings();
 	void DeterminePaths(bool forceWorkingDirectory);
 	void CompileFunc(StdCompiler *pComp);
-	void AddAdditionalDataPath(const char *szPath);
-	void ClearAdditionalDataPaths();
-	~C4ConfigGeneral() { ClearAdditionalDataPaths(); }
 
 private:
 	struct
@@ -95,10 +80,7 @@ class C4ConfigDeveloper
 {
 public:
 	int32_t AutoFileReload;
-#ifdef _WIN32
-	int32_t AutoEditScan;
-#endif
-	int32_t AllErrorsFatal;
+	int32_t ExtraWarnings;
 	void CompileFunc(StdCompiler *pComp);
 };
 
@@ -106,8 +88,6 @@ class C4ConfigGraphics
 {
 public:
 	int32_t SplitscreenDividers;
-	int32_t AddNewCrewPortraits;
-	int32_t SaveDefaultPortraits;
 	int32_t ShowStartupMessages;
 	int32_t VerboseObjectLoading;
 	int32_t ColorAnimation;
@@ -137,6 +117,7 @@ public:
 	int32_t EnableShaders; // enable pixel shaders on engines that support them
 	int32_t ClipManuallyE; // do manual clipping in the easy cases
 	int32_t NoOffscreenBlits; // if set, all blits to non-primary-surfaces are emulated
+	int32_t MultiSampling; // multisampling samples
 
 	void CompileFunc(StdCompiler *pComp);
 };
@@ -172,7 +153,6 @@ public:
 	int32_t MasterReferencePeriod;
 	int32_t LeagueServerSignUp;
 	int32_t UseAlternateServer;
-	int32_t SendPortraits;
 	int32_t PortTCP,PortUDP,PortDiscovery,PortRefServer;
 	int32_t ControlMode;
 	ValidatedStdCopyStrBuf<C4InVal::VAL_NameAllowEmpty> Nick;
@@ -247,8 +227,9 @@ class C4ConfigControls
 public:
 	int32_t GamepadGuiControl;
 	int32_t MouseAScroll; // auto scroll strength
-	int32_t Keyboard[C4MaxKeyboardSet][C4MaxKey];
-	void CompileFunc(StdCompiler *pComp, bool fKeysOnly=false);
+	C4PlayerControlAssignmentSets UserSets;
+
+	void CompileFunc(StdCompiler *pComp);
 	void ResetKeys(); // reset all keys to default
 };
 
@@ -260,7 +241,7 @@ public:
 	void CompileFunc(StdCompiler *pComp);
 };
 
-class C4Config: protected CStdConfig
+class C4Config
 {
 public:
 	C4Config();
@@ -295,7 +276,6 @@ public:
 	const char *AtSystemDataPath(const char *szFilename);
 	const char *AtSystemDataRelativePath(const char *szFilename);
 	const char *AtRelativePath(const char *szFilename); // Returns ASDRP or AUDRP depending on location
-	const char *AtDataReadPath(const char *szFilename, bool fPreferWorkdir = false);
 	const char *GetRegistrationData(const char* strField) { return ""; }
 	void ForceRelativePath(StdStrBuf *sFilename); // try AtRelativePath; force GetC4Filename if not possible
 	void CompileFunc(StdCompiler *pComp);
@@ -306,12 +286,8 @@ public:
 	void GetConfigFileName(StdStrBuf &filename, bool forceWorkingDirectory, const char *szConfigFile);
 
 	static void ExpandEnvironmentVariables(char *strPath, size_t iMaxLen);
-private:
-	const char *AtDataReadPathCore(const char *szFilename, bool fPreferWorkdir = false);
 };
 
 #include <C4ConfigShareware.h>
 
-extern C4Config *pConfig; // Some cheap temporary hack to get to config in Engine + Frontend...
-// This is so good - we can use it everywear!!!!
 #endif // INC_C4Config

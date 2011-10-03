@@ -4,7 +4,9 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001-2005, 2007  Sven Eberhardt
  * Copyright (c) 2004-2005  Peter Wortmann
- * Copyright (c) 2006-2009  Günther Brammer
+ * Copyright (c) 2006-2010  Günther Brammer
+ * Copyright (c) 2010  Armin Burgmeier
+ * Copyright (c) 2010  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,10 +28,9 @@
 
 #include "C4Facet.h"
 #include "C4Id.h"
+#include "C4Def.h"
 #include "C4Sector.h"
 #include "C4Value.h"
-#include "C4ValueList.h"
-#include "C4Effects.h"
 #include "C4Particles.h"
 #include "C4PropList.h"
 #include "C4ObjectPtr.h"
@@ -52,7 +53,7 @@
    but will try to slow down according to it's current Action. ComDir values
    circle clockwise from COMD_Up 1 through COMD_UpLeft 8. */
 
-#define COMD_None       0
+#define COMD_None       -1
 #define COMD_Stop       0
 #define COMD_Up         1
 #define COMD_UpRight    2
@@ -75,8 +76,6 @@
 #define VIS_LayerToggle 64
 #define VIS_OverlayOnly 128
 
-const int32_t MagicPhysicalFactor=1000;
-
 class C4SolidMask;
 class C4Command;
 class C4MaterialList;
@@ -95,7 +94,6 @@ public:
 	C4MeshDenumerator(C4Object* object): Def(NULL), Object(object) {}
 
 	virtual void CompileFunc(StdCompiler* pComp, StdMeshInstance::AttachedMesh* attach);
-	virtual void EnumeratePointers(StdMeshInstance::AttachedMesh* attach);
 	virtual void DenumeratePointers(StdMeshInstance::AttachedMesh* attach);
 };
 
@@ -145,9 +143,7 @@ public:
 	int32_t Mass, OwnMass;
 	int32_t Damage;
 	int32_t Energy;
-	int32_t MagicEnergy;
 	int32_t Breath;
-	int32_t FirePhase;
 	int32_t InMat; // SyncClearance-NoSave //
 	uint32_t Color;
 	int32_t Timer;
@@ -161,7 +157,6 @@ public:
 	bool Initializing; // NoSave //
 	bool InLiquid;
 	bool EntranceStatus;
-	bool NeedEnergy;
 	uint32_t t_contact; // SyncClearance-NoSave //
 	uint32_t OCF;
 	unsigned int Marker; // state var used by Objects::CrossCheck and C4FindObject - NoSave
@@ -189,9 +184,6 @@ public:
 	C4Effect *pEffects; // linked list of effects
 	C4ParticleList FrontParticles, BackParticles; // lists of object local particles
 
-	bool PhysicalTemporary; // physical temporary counter
-	C4TempPhysicalInfo TemporaryPhysical;
-
 	uint32_t ColorMod; // color by which the object-drawing is modulated
 	uint32_t BlitMode; // extra blitting flags (like additive, ClrMod2, etc.)
 	bool CrewDisabled;  // CrewMember-functionality currently disabled
@@ -205,13 +197,14 @@ public:
 protected:
 	bool OnFire;
 	int32_t Con;
+	int32_t Plane;
 	bool Alive;
 	C4SolidMask *pSolidMaskData; // NoSave //
 public:
 	void Resort();
+	void SetPlane(int32_t z) { if (z) Plane = z; Resort(); }
+	int32_t GetPlane() { return Plane; }
 	int32_t GetAudible();
-	void DigOutMaterialCast(bool fRequest);
-	void AddMaterialContents(int32_t iMaterial, int32_t iAmount);
 	void SetCommand(int32_t iCommand, C4Object *pTarget, C4Value iTx, int32_t iTy=0, C4Object *pTarget2=NULL, bool fControl=false, C4Value iData=C4VNull, int32_t iRetries=0, C4String *szText=NULL);
 	void SetCommand(int32_t iCommand, C4Object *pTarget=NULL, int32_t iTx=0, int32_t iTy=0, C4Object *pTarget2=NULL, bool fControl=false, C4Value iData=C4VNull, int32_t iRetries=0, C4String *szText=NULL)
 	{ SetCommand(iCommand, pTarget, C4VInt(iTx), iTy, pTarget2, fControl, iData, iRetries, szText); }
@@ -241,14 +234,13 @@ public:
 	bool AssignPlrViewRange();
 	void DrawPicture(C4Facet &cgo, bool fSelected=false, C4RegionList *pRegions=NULL,C4DrawTransform* transform=NULL);
 	void Picture2Facet(C4FacetSurface &cgo); // set picture to facet, or create facet in current size and draw if specific states are being needed
-	void DenumeratePointers();
-	void EnumeratePointers();
 	void Default();
 	bool Init(C4PropList *ndef, C4Object *pCreator,
 	          int32_t owner, C4ObjectInfo *info,
 	          int32_t nx, int32_t ny, int32_t nr,
 	          C4Real nxdir, C4Real nydir, C4Real nrdir, int32_t iController);
-	void CompileFunc(StdCompiler *pComp);
+	void CompileFunc(StdCompiler *pComp, C4ValueNumbers *);
+	virtual void Denumerate(C4ValueNumbers *);
 	void DrawLine(C4TargetFacet &cgo);
 	bool SetPhase(int32_t iPhase);
 	void AssignRemoval(bool fExitContents=false);
@@ -261,11 +253,9 @@ public:
 	void Execute();
 	void ClearPointers(C4Object *ptr);
 	bool ExecMovement();
-	bool ExecFire(int32_t iIndex, int32_t iCausedByPlr);
 	void ExecAction();
 	bool ExecLife();
 	bool ExecuteCommand();
-	void ExecBase();
 	void AssignDeath(bool fForced); // assigns death - if forced, it's killed even if an effect stopped this
 	void ContactAction();
 	void NoAttachAction();
@@ -288,12 +278,11 @@ public:
 	void GetOCFForPos(int32_t ctx, int32_t cty, DWORD &ocf);
 	bool CloseMenu(bool fForce);
 	bool ActivateMenu(int32_t iMenu, int32_t iMenuSelect=0, int32_t iMenuData=0, int32_t iMenuPosition=0, C4Object *pTarget=NULL);
-	void AutoContextMenu(int32_t iMenuSelect);
 	int32_t ContactCheck(int32_t atx, int32_t aty);
 	bool Contact(int32_t cnat);
 	void TargetBounds(C4Real &ctco, int32_t limit_low, int32_t limit_hi, int32_t cnat_low, int32_t cnat_hi);
 	enum { SAC_StartCall = 1, SAC_EndCall = 2, SAC_AbortCall = 4 };
-	C4PropList* GetAction();
+	C4PropList* GetAction() const;
 	bool SetAction(C4PropList * Act, C4Object *pTarget=NULL, C4Object *pTarget2=NULL, int32_t iCalls = SAC_StartCall | SAC_AbortCall, bool fForce = false);
 	bool SetActionByName(C4String * ActName, C4Object *pTarget=NULL, C4Object *pTarget2=NULL, int32_t iCalls = SAC_StartCall | SAC_AbortCall, bool fForce = false);
 	bool SetActionByName(const char * szActName, C4Object *pTarget=NULL, C4Object *pTarget2=NULL, int32_t iCalls = SAC_StartCall | SAC_AbortCall, bool fForce = false);
@@ -308,18 +297,15 @@ public:
 	void DoMotion(int32_t mx, int32_t my);
 	bool ActivateEntrance(int32_t by_plr, C4Object *by_obj);
 	bool Incinerate(int32_t iCausedBy, bool fBlasted=false, C4Object *pIncineratingObject=NULL);
-	bool Extinguish(int32_t iFireNumber);
 	void DoDamage(int32_t iLevel, int32_t iCausedByPlr, int32_t iCause);
 	void DoEnergy(int32_t iChange, bool fExact, int32_t iCause, int32_t iCausedByPlr);
 	void UpdatLastEnergyLossCause(int32_t iNewCausePlr);
 	void DoBreath(int32_t iChange);
-	void DoCon(int32_t iChange, bool fInitial=false, bool fNoComponentChange=false);
+	void DoCon(int32_t iChange);
 	int32_t GetCon() { return Con; }
 	void DoExperience(int32_t change);
 	bool Promote(int32_t torank, bool exception, bool fForceRankName);
 	void Blast(int32_t iLevel, int32_t iCausedBy);
-	bool Build(int32_t iLevel, C4Object *pBuilder);
-	bool Chop(C4Object *pByObject);
 	bool Push(C4Real txdir, C4Real dforce, bool fStraighten);
 	bool Lift(C4Real tydir, C4Real dforce);
 	void Fling(C4Real txdir, C4Real tydir, bool fAddSpeed); // set/add given speed to current, setting jump/tumble-actions
@@ -338,8 +324,7 @@ public:
 	BYTE GetEntranceArea(int32_t &aX, int32_t &aY, int32_t &aWdt, int32_t &aHgt);
 	BYTE GetMomentum(C4Real &rxdir, C4Real &rydir);
 	C4Real GetSpeed();
-	C4PhysicalInfo *GetPhysical(bool fPermanent=false);
-	bool TrainPhysical(C4PhysicalInfo::Offset mpiOffset, int32_t iTrainBy, int32_t iMaxTrain);
+	StdStrBuf GetDataString();
 	void SetName (const char *NewName = 0);
 	int32_t GetValue(C4Object *pInBase, int32_t iForPlayer);
 	bool SetOwner(int32_t iOwner);
@@ -375,7 +360,6 @@ public:
 	void BoundsCheck(C4Real &ctcox, C4Real &ctcoy) // do bound checks, correcting target positions as necessary and doing contact-calls
 	{ SideBounds(ctcox); VerticalBounds(ctcoy); }
 
-public:
 	bool DoSelect(); // cursor callback if not disabled
 	void UnSelect(); // unselect callback
 	void GetViewPos(float &riX, float &riY, float tx, float ty, const C4Facet &fctViewport)       // get position this object is seen at (for given scroll)
@@ -403,20 +387,17 @@ public:
 
 	bool CanConcatPictureWith(C4Object *pOtherObject); // return whether this object should be grouped with the other in activation lists, contents list, etc.
 
-	int32_t GetFireCausePlr();
-
-	bool IsMoveableBySolidMask()
+	bool IsMoveableBySolidMask(int ComparisonPlane)
 	{
-		C4PropList* pActionDef = GetAction();
+		//C4PropList* pActionDef = GetAction();
 		return (Status == C4OS_NORMAL)
-		       && !(Category & (C4D_StaticBack | C4D_Structure))
+		       && !(Category & C4D_StaticBack)
+		       && (ComparisonPlane < GetPlane())
 		       && !Contained
-		       && ((~Category & C4D_Vehicle) || (OCF & OCF_Grab))
-		       && (!pActionDef || pActionDef->GetPropertyInt(P_Procedure) != DFA_FLOAT)
 		       ;
 	}
 
-	StdStrBuf GetNeededMatStr(C4Object *pBuilder);
+	StdStrBuf GetNeededMatStr();
 
 	// This function is used for:
 	// -Objects to be removed when a player is removed
@@ -429,6 +410,9 @@ public:
 
 	// overloaded from C4PropList
 	virtual C4Object * GetObject() { return this; }
+	virtual void SetPropertyByS(C4String * k, const C4Value & to);
+	virtual void ResetProperty(C4String * k);
+	virtual bool GetPropertyByS(C4String *k, C4Value *pResult) const;
 };
 
 #endif

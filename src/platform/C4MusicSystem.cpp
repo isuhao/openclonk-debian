@@ -6,8 +6,9 @@
  * Copyright (c) 2001  Carlo Teubner
  * Copyright (c) 2001  Michael Käser
  * Copyright (c) 2002-2003  Peter Wortmann
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -22,11 +23,12 @@
  * See clonk_trademark_license.txt for full license.
  */
 
-/* Handles Music.c4g and randomly plays songs */
+/* Handles Music.ocg and randomly plays songs */
 
 #include <C4Include.h>
 #include <C4MusicSystem.h>
 
+#include <StdWindow.h>
 #include <C4MusicFile.h>
 #include <C4Application.h>
 #include <C4Random.h>
@@ -330,12 +332,11 @@ void C4MusicSystem::LoadDir(const char *szPath)
 
 void C4MusicSystem::LoadMoreMusic()
 {
-	BYTE *szMoreMusic;
-	CStdFile MoreMusicFile;
+	StdStrBuf MoreMusicFile;
 	// load MoreMusic.txt
-	if (!MoreMusicFile.Load(Config.AtUserDataPath(C4CFN_MoreMusic), &szMoreMusic, NULL, 1)) return;
+	if (!MoreMusicFile.LoadFromFile(Config.AtUserDataPath(C4CFN_MoreMusic))) return;
 	// read contents
-	char *pPos = reinterpret_cast<char *>(szMoreMusic);
+	char *pPos = MoreMusicFile.getMData();
 	while (pPos && *pPos)
 	{
 		// get line
@@ -359,7 +360,6 @@ void C4MusicSystem::LoadMoreMusic()
 		// try to load file(s)
 		LoadDir(pLine);
 	}
-	delete [] szMoreMusic;
 }
 
 void C4MusicSystem::ClearSongs()

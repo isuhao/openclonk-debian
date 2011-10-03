@@ -1,7 +1,7 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2007  Armin Burgmeier
+ * Copyright (c) 2007, 2010  Armin Burgmeier
  * Copyright (c) 2007-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -62,6 +62,7 @@ void C4DevmodeDlg::AddPage(GtkWidget* widget, GtkWindow* parent, const char* tit
 
 		gtk_window_set_resizable(GTK_WINDOW(window), true);
 		gtk_window_set_type_hint(GTK_WINDOW(window), GDK_WINDOW_TYPE_HINT_UTILITY);
+		gtk_window_set_default_size(GTK_WINDOW(window), 320, 320);
 		gtk_window_set_role(GTK_WINDOW(window), "toolbox");
 
 		gtk_window_set_transient_for(GTK_WINDOW(window), parent);

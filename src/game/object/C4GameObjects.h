@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2001, 2004  Sven Eberhardt
  * Copyright (c) 2006  Peter Wortmann
+ * Copyright (c) 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,8 +26,6 @@
 #include <C4FindObject.h>
 #include <C4Sector.h>
 
-class C4ObjResort;
-
 // main object list class
 class C4GameObjects : public C4NotifyingObjectList
 {
@@ -37,14 +36,11 @@ public:
 	void Init(int32_t iWidth, int32_t iHeight);
 	void Clear(bool fClearInactive); // clear objects
 	void Clear() { Clear(true); } // don't use default parameters so we get a correct vtbl entry
-	void CompileFunc(StdCompiler *pComp, bool fSkipPlayerObjects = false);
 
 public:
 	C4LSectors Sectors; // section object lists
 	C4ObjectList InactiveObjects; // inactive objects (Status=2)
-	C4ObjectList BackObjects; // objects in background (C4D_Background)
 	C4ObjectList ForeObjects; // objects in foreground (C4D_Foreground)
-	C4ObjResort *ResortProc; // current sheduled user resorts
 
 	unsigned int LastUsedMarker; // last used value for C4Object::Marker
 
@@ -60,58 +56,31 @@ public:
 	void UpdateSolidMasks();
 
 	virtual C4Object *ObjectPointer(int32_t iNumber); // object pointer by number
-	virtual C4PropList *PropListPointer(int32_t iNumber); // object pointer by number
-	int32_t ObjectNumber(C4PropList *pObj); // object number by pointer
 	C4Object* SafeObjectPointer(int32_t iNumber);
 
-	int Load(C4Group &hGroup, bool fKeepInactive);
-	bool Save(const char *szFilename, bool fSaveGame, bool fSaveInactive);
-	bool Save(C4Group &hGroup, bool fSaveGame, bool fSaveInactive);
+	int PostLoad(bool fKeepInactive, C4ValueNumbers *);
+	void Denumerate(C4ValueNumbers *);
 
 	void UpdateScriptPointers(); // update pointers to C4AulScript *
+	C4Value GRBroadcast(const char *szFunction, C4AulParSet *pPars, bool fPassError, bool fRejectTest);  // call function in all goals/rules/environment objects
 
 	void UpdatePos(C4Object *pObj);
 	void UpdatePosResort(C4Object *pObj);
 
-	bool OrderObjectBefore(C4Object *pObj1, C4Object *pObj2); // order pObj1 before pObj2
-	bool OrderObjectAfter(C4Object *pObj1, C4Object *pObj2); // order pObj1 after pObj2
 	void FixObjectOrder(); // Called after loading: Resort any objects that are out of order
 	void ResortUnsorted(); // resort any objects with unsorted-flag set into lists
-	void ExecuteResorts(); // execute custom resort procs
 
 	void DeleteObjects(bool fDeleteInactive); // delete all objects and links
 
 	bool ValidateOwners();
 	bool AssignInfo();
 	void AssignPlrViewRange();
-	void SortByCategory();
 	void SyncClearance();
 	void ResetAudibility();
 	void UpdateTransferZones();
 	void SetOCF();
-protected:
-	C4Set<C4PropListNumbered *> PropLists;
-	friend class C4PropListNumbered;
 };
 
 extern C4GameObjects Objects;
-
-// sheduled resort holder
-class C4ObjResort
-{
-public:
-	C4ObjResort(); // constructor
-	~C4ObjResort(); // destructor
-
-	void Execute(); // do the resort!
-	void Sort(C4ObjectLink *pFirst, C4ObjectLink *pLast); // sort list between pFirst and pLast
-	void SortObject();        // sort single object within its category
-
-	int Category;             // object category mask to be sorted
-	C4AulFunc *OrderFunc;     // function determining new sort order
-	C4ObjResort *Next;        // next resort holder
-	C4Object *pSortObj, *pObjBefore;  // objects that are swapped if no OrderFunc is given
-	bool fSortAfter;          // if set, the sort object is sorted
-};
 
 #endif

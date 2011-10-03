@@ -4,8 +4,11 @@
  * Copyright (c) 1998-2000, 2004, 2007-2008  Matthes Bender
  * Copyright (c) 2001-2002, 2005-2008  Sven Eberhardt
  * Copyright (c) 2003-2005, 2007-2008  Peter Wortmann
- * Copyright (c) 2005-2009  Günther Brammer
- * Copyright (c) 2006  Armin Burgmeier
+ * Copyright (c) 2005-2011  Günther Brammer
+ * Copyright (c) 2006, 2010  Armin Burgmeier
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -53,12 +56,15 @@ namespace
 #include <shellapi.h>
 #include "resource.h"
 
+#define C4ViewportClassName L"C4Viewport"
+#define C4ViewportWindowStyle (WS_VISIBLE | WS_POPUP | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX)
+
 LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	// Determine viewport
 	C4Viewport *cvp;
 	if (!(cvp=::Viewports.GetViewport(hwnd)))
-		return DefWindowProc(hwnd, uMsg, wParam, lParam);
+		return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 
 	// Process message
 	switch (uMsg)
@@ -148,10 +154,7 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		// posts a new WM_ACTIVATE to us, and so on, ultimately leading to a hang.
 		if (LOWORD(wParam) == WA_INACTIVE)
 		{
-			if (Console.PropertyDlg.hDialog)
-				SetWindowLongPtr(Console.PropertyDlg.hDialog, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(Console.hWindow));
-			if (Console.ToolsDlg.hDialog)
-				SetWindowLongPtr(Console.PropertyDlg.hDialog, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(Console.hWindow));
+			Console.Win32KeepDialogsFloating();
 		}
 		else
 		{
@@ -159,10 +162,7 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		case WM_MOUSEACTIVATE:
 			// WM_MOUSEACTIVATE is emitted when the user hovers over a window and pushes a mouse button.
 			// Setting the window owner here avoids z-order flickering.
-			if (Console.PropertyDlg.hDialog)
-				SetWindowLongPtr(Console.PropertyDlg.hDialog, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(hwnd));
-			if (Console.ToolsDlg.hDialog)
-				SetWindowLongPtr(Console.ToolsDlg.hDialog, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(hwnd));
+			Console.Win32KeepDialogsFloating(hwnd);
 		}
 		break;
 		//----------------------------------------------------------------------------------------------------------------------------------
@@ -222,7 +222,7 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		}
 	}
 
-	return DefWindowProc(hwnd, uMsg, wParam, lParam);
+	return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -232,7 +232,7 @@ bool C4ViewportWindow::RegisterViewportClass(HINSTANCE hInst)
 	static bool fViewportClassRegistered = false;
 	if (fViewportClassRegistered) return true;
 	// register landscape viewport class
-	WNDCLASSEX WndClass;
+	WNDCLASSEXW WndClass;
 	WndClass.cbSize=sizeof(WNDCLASSEX);
 	WndClass.style         = CS_DBLCLKS | CS_BYTEALIGNCLIENT;
 	WndClass.lpfnWndProc   = ViewportWinProc;
@@ -243,23 +243,11 @@ bool C4ViewportWindow::RegisterViewportClass(HINSTANCE hInst)
 	WndClass.hbrBackground = (HBRUSH) COLOR_BACKGROUND;
 	WndClass.lpszMenuName  = NULL;
 	WndClass.lpszClassName = C4ViewportClassName;
-	WndClass.hIcon         = LoadIcon (hInst, MAKEINTRESOURCE (IDI_01_C4S) );
-	WndClass.hIconSm       = LoadIcon (hInst, MAKEINTRESOURCE (IDI_01_C4S) );
-	if (!RegisterClassEx(&WndClass)) return false;
+	WndClass.hIcon         = LoadIcon (hInst, MAKEINTRESOURCE (IDI_01_OCS) );
+	WndClass.hIconSm       = LoadIcon (hInst, MAKEINTRESOURCE (IDI_01_OCS) );
+	if (!RegisterClassExW(&WndClass)) return false;
 	// register GUI dialog class
 	return fViewportClassRegistered = C4GUI::Dialog::RegisterWindowClass(hInst);
-}
-
-CStdWindow * C4ViewportWindow::Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, bool)
-{
-	Active = true;
-	// Create window
-	hWindow = CreateWindowEx (
-	            WS_EX_ACCEPTFILES,
-	            C4ViewportClassName, Title, C4ViewportWindowStyle,
-	            CW_USEDEFAULT,CW_USEDEFAULT,400,250,
-	            pParent->hWindow,NULL,pApp->GetInstance(),NULL);
-	return hWindow ? this : 0;
 }
 
 void UpdateWindowLayout(HWND hwnd)
@@ -351,9 +339,6 @@ GtkWidget* C4ViewportWindow::InitGUI()
 	table = gtk_table_new(2, 2, false);
 
 	GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(h_scrollbar));
-	adjustment->lower = 0;
-	adjustment->upper = GBackWdt;
-	adjustment->step_increment = ViewportScrollSpeed;
 
 	g_signal_connect(
 	  G_OBJECT(adjustment),
@@ -363,9 +348,6 @@ GtkWidget* C4ViewportWindow::InitGUI()
 	);
 
 	adjustment = gtk_range_get_adjustment(GTK_RANGE(v_scrollbar));
-	adjustment->lower = 0;
-	adjustment->upper = GBackHgt;
-	adjustment->step_increment = ViewportScrollSpeed;
 
 	g_signal_connect(
 	  G_OBJECT(adjustment),
@@ -384,8 +366,11 @@ GtkWidget* C4ViewportWindow::InitGUI()
 
 	gtk_drag_dest_set(drawing_area, GTK_DEST_DEFAULT_ALL, drag_drop_entries, 1, GDK_ACTION_COPY);
 	g_signal_connect(G_OBJECT(drawing_area), "drag-data-received", G_CALLBACK(OnDragDataReceivedStatic), this);
+#if GTK_CHECK_VERSION(3,0,0)
+	g_signal_connect(G_OBJECT(drawing_area), "draw", G_CALLBACK(OnExposeStatic), this);
+#else
 	g_signal_connect(G_OBJECT(drawing_area), "expose-event", G_CALLBACK(OnExposeStatic), this);
-
+#endif
 	g_signal_connect(G_OBJECT(window), "key-press-event", G_CALLBACK(OnKeyPressStatic), this);
 	g_signal_connect(G_OBJECT(window), "key-release-event", G_CALLBACK(OnKeyReleaseStatic), this);
 	g_signal_connect(G_OBJECT(window), "scroll-event", G_CALLBACK(OnScrollStatic), this);
@@ -434,17 +419,45 @@ bool C4Viewport::ScrollBarsByViewPosition()
 #endif
 
 	GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->h_scrollbar));
+
+#if GTK_CHECK_VERSION(2,14,0)
+	gtk_adjustment_configure(adjustment,
+	                         ViewX, // value
+	                         0, // lower
+	                         GBackWdt, // upper
+	                         ViewportScrollSpeed, // step_increment
+	                         allocation.width / Zoom, // page_increment
+	                         allocation.width / Zoom // page_size
+	                         );
+#else
+	adjustment->value = ViewX;
+	adjustment->lower = 0;
+	adjustment->upper = GBackWdt;
+	adjustment->step_increment = ViewportScrollSpeed;
 	adjustment->page_increment = allocation.width;
 	adjustment->page_size = allocation.width;
-	adjustment->value = ViewX;
 	gtk_adjustment_changed(adjustment);
+#endif
 
 	adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->v_scrollbar));
+#if GTK_CHECK_VERSION(2,14,0)
+	gtk_adjustment_configure(adjustment,
+	                         ViewY, // value
+	                         0, // lower
+	                         GBackHgt, // upper
+	                         ViewportScrollSpeed, // step_increment
+	                         allocation.height / Zoom, // page_increment
+	                         allocation.height / Zoom // page_size
+	                         );
+#else	
+	adjustment->lower = 0;
+	adjustment->upper = GBackHgt;
+	adjustment->step_increment = ViewportScrollSpeed;
 	adjustment->page_increment = allocation.height;
 	adjustment->page_size = allocation.height;
 	adjustment->value = ViewY;
 	gtk_adjustment_changed(adjustment);
-
+#endif
 	return true;
 }
 
@@ -453,10 +466,10 @@ bool C4Viewport::ViewPositionByScrollBars()
 	if (PlayerLock) return false;
 
 	GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->h_scrollbar));
-	ViewX = static_cast<int32_t>(adjustment->value);
+	ViewX = static_cast<int32_t>(gtk_adjustment_get_value(adjustment));
 
 	adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->v_scrollbar));
-	ViewY = static_cast<int32_t>(adjustment->value);
+	ViewY = static_cast<int32_t>(gtk_adjustment_get_value(adjustment));
 
 	return true;
 }
@@ -480,11 +493,9 @@ void C4ViewportWindow::OnDragDataReceivedStatic(GtkWidget* widget, GdkDragContex
 	g_strfreev(uris);
 }
 
-gboolean C4ViewportWindow::OnExposeStatic(GtkWidget* widget, GdkEventExpose* event, gpointer user_data)
+gboolean C4ViewportWindow::OnExposeStatic(GtkWidget* widget, void *, gpointer user_data)
 {
 	C4Viewport* cvp = static_cast<C4ViewportWindow*>(user_data)->cvp;
-
-	// TODO: Redraw only event->area
 	cvp->Execute();
 	return true;
 }
@@ -665,10 +676,12 @@ void C4ViewportWindow::OnHScrollStatic(GtkAdjustment* adjustment, gpointer user_
 	static_cast<C4ViewportWindow*>(user_data)->cvp->ViewPositionByScrollBars();
 }
 
-#else // WITH_DEVELOPER_MODE
+#endif // WITH_DEVELOPER_MODE
+
+#if defined(USE_X11) && !defined(WITH_DEVELOPER_MODE)
 bool C4Viewport::TogglePlayerLock() { return false; }
 bool C4Viewport::ScrollBarsByViewPosition() { return false; }
-#if defined(USE_X11)
+
 void C4ViewportWindow::HandleMessage (XEvent & e)
 {
 	switch (e.type)
@@ -696,7 +709,7 @@ void C4ViewportWindow::HandleMessage (XEvent & e)
 			switch (e.xbutton.button)
 			{
 			case Button1:
-				if (timeGetTime() - last_left_click < 400)
+				if (GetTime() - last_left_click < 400)
 				{
 					C4GUI::MouseMove(C4MC_Button_LeftDouble,
 					                           e.xbutton.x, e.xbutton.y, e.xbutton.state, cvp);
@@ -706,7 +719,7 @@ void C4ViewportWindow::HandleMessage (XEvent & e)
 				{
 					C4GUI::MouseMove(C4MC_Button_LeftDown,
 					                           e.xbutton.x, e.xbutton.y, e.xbutton.state, cvp);
-					last_left_click = timeGetTime();
+					last_left_click = GetTime();
 				}
 				break;
 			case Button2:
@@ -714,7 +727,7 @@ void C4ViewportWindow::HandleMessage (XEvent & e)
 				                           e.xbutton.x, e.xbutton.y, e.xbutton.state, cvp);
 				break;
 			case Button3:
-				if (timeGetTime() - last_right_click < 400)
+				if (GetTime() - last_right_click < 400)
 				{
 					C4GUI::MouseMove(C4MC_Button_RightDouble,
 					                           e.xbutton.x, e.xbutton.y, e.xbutton.state, cvp);
@@ -724,7 +737,7 @@ void C4ViewportWindow::HandleMessage (XEvent & e)
 				{
 					C4GUI::MouseMove(C4MC_Button_RightDown,
 					                           e.xbutton.x, e.xbutton.y, e.xbutton.state, cvp);
-					last_right_click = timeGetTime();
+					last_right_click = GetTime();
 				}
 				break;
 			case Button4:
@@ -800,7 +813,46 @@ void C4ViewportWindow::HandleMessage (XEvent & e)
 	}
 }
 #endif // USE_X11
-#endif // WITH_DEVELOPER_MODE/_WIN32
+
+void C4ViewportWindow::PerformUpdate()
+{
+	if (cvp)
+	{
+		cvp->UpdateOutputSize();
+		cvp->Execute();
+	}
+}
+
+
+CStdWindow * C4ViewportWindow::Init(CStdWindow * pParent, CStdApp * pApp, int32_t Player)
+{
+	CStdWindow* result;
+	const char * Title = Player == NO_OWNER ? LoadResStr("IDS_CNS_VIEWPORT") : ::Players.Get(Player)->GetName();
+#ifdef _WIN32
+	Active = true;
+	// Create window
+	hWindow = CreateWindowExW (
+	            WS_EX_ACCEPTFILES,
+	            C4ViewportClassName, GetWideChar(Title), C4ViewportWindowStyle,
+	            CW_USEDEFAULT,CW_USEDEFAULT,400,250,
+	            pParent->hWindow,NULL,pApp->GetInstance(),NULL);
+	if(!hWindow) return NULL;
+
+	// We don't re-init viewport windows currently, so we don't need a child window
+	// for now: Render into main window.
+	hRenderWindow = hWindow;
+
+	result = this;
+#else
+	result = C4ViewportBase::Init(CStdWindow::W_Viewport, pApp, Title, pParent, false);
+#endif
+	if (!result) return result;
+
+	pSurface = new CSurface(pApp, this);
+	// Position and size
+	RestorePosition(FormatString("Viewport%i", Player+1).getData(), Config.GetSubkeyPath("Console"));
+	return result;
+}
 
 void C4ViewportWindow::Close()
 {

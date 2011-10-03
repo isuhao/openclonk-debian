@@ -1,12 +1,15 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2002, 2005-2006  Sven Eberhardt
- * Copyright (c) 2005-2009  Günther Brammer <gbrammer@gmx.de>
+ * Copyright (c) 2002, 2005-2006, 2010  Sven Eberhardt
+ * Copyright (c) 2005-2010  Günther Brammer
  * Copyright (c) 2007  Julian Raschke
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2009  Carl-Philip Hänsch
+ * Copyright (c) 2009-2011  Armin Burgmeier
+ * Copyright (c) 2009-2010  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
- * Copyright (c) 2009 Carl-Philip Hänsch <c-p.haensch@vr-web.de>
  *
  * Portions might be copyrighted by other authors who have contributed
  * to OpenClonk.
@@ -78,7 +81,7 @@ CStdGL::~CStdGL()
 void CStdGL::Clear()
 {
 	NoPrimaryClipper();
-	if (pTexMgr) pTexMgr->IntUnlock();
+	//if (pTexMgr) pTexMgr->IntUnlock(); // cannot do this here or we can't preserve textures across GL reinitialization as required when changing multisampling
 	InvalidateDeviceObjects();
 	NoPrimaryClipper();
 	RenderTarget = NULL;
@@ -91,7 +94,7 @@ void CStdGL::Clear()
 void CStdGL::FillBG(DWORD dwClr)
 {
 	if (!pCurrCtx) return;
-	glClearColor((float)GetBValue(dwClr)/255.0f, (float)GetGValue(dwClr)/255.0f, (float)GetRValue(dwClr)/255.0f, 0.0f);
+	glClearColor((float)GetRedValue(dwClr)/255.0f, (float)GetGreenValue(dwClr)/255.0f, (float)GetBlueValue(dwClr)/255.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
@@ -104,6 +107,7 @@ bool CStdGL::UpdateClipper()
 	int iHgt=Min(iClipY2, RenderTarget->Hgt-1)-iClipY1+1;
 	int iX=iClipX1; if (iX<0) { iWdt+=iX; iX=0; }
 	int iY=iClipY1; if (iY<0) { iHgt+=iY; iY=0; }
+
 	if (iWdt<=0 || iHgt<=0)
 	{
 		ClipAll=true;
@@ -428,7 +432,7 @@ void CStdGL::PerformBlt(CBltData &rBltData, CTexRef *pTex, DWORD dwModClr, bool 
 	}
 	if (rBltData.pTransform)
 	{
-		float * mat = rBltData.pTransform->mat;
+		const float * mat = rBltData.pTransform->mat;
 		float matrix[16];
 		matrix[0]=mat[0];  matrix[1]=mat[3];  matrix[2]=0;  matrix[3]=mat[6];
 		matrix[4]=mat[1];  matrix[5]=mat[4];  matrix[6]=0;  matrix[7]=mat[7];
@@ -1063,7 +1067,7 @@ namespace
 
 	void RenderMeshImpl(StdMeshInstance& instance, DWORD dwModClr, DWORD dwBlitMode, DWORD dwPlayerColor, bool parity)
 	{
-		const StdMesh& mesh = instance.Mesh;
+		const StdMesh& mesh = instance.GetMesh();
 
 		// Render AM_DrawBefore attached meshes
 		StdMeshInstance::AttachedMeshIter attach_iter = instance.AttachedMeshesBegin();
@@ -1150,7 +1154,7 @@ void CStdGL::PerformMesh(StdMeshInstance &instance, float tx, float ty, float tw
 
 	static const bool OgreToClonkParity = CStdDDraw::OgreToClonk.Determinant() > 0.0f;
 
-	const StdMesh& mesh = instance.Mesh;
+	const StdMesh& mesh = instance.GetMesh();
 
 	bool parity = OgreToClonkParity;
 
@@ -2021,13 +2025,15 @@ void CStdGL::TaskOut()
 {
 	// deactivate
 	// backup textures
+#ifdef _WIN32
 	if (pTexMgr && !Editor) pTexMgr->IntLock();
 	if (pCurrCtx) pCurrCtx->Deselect();
-#ifdef _WIN32
+
 	if (!Editor && !Config.Graphics.Windowed)
 	{
 		::ChangeDisplaySettings(NULL, 0);
-		::ShowWindow(Application.GetWindowHandle(), SW_MINIMIZE);
+		if(pMainCtx && pMainCtx->pWindow)
+			::ShowWindow(pMainCtx->pWindow->hWindow, SW_MINIMIZE);
 	}
 #endif
 }
@@ -2036,10 +2042,10 @@ void CStdGL::TaskIn()
 {
 	// restore gl
 	//if (!DeviceReady()) MainCtx.Init(pWindow, pApp);
+#ifdef _WIN32
 	// restore textures
 	if (pTexMgr && !Editor) pTexMgr->IntUnlock();
 
-#ifdef _WIN32
 	if (!Editor && !Config.Graphics.Windowed)
 	{
 		Application.SetVideoMode(Config.Graphics.ResX, Config.Graphics.ResY, Config.Graphics.BitDepth, Config.Graphics.RefreshRate, Config.Graphics.Monitor, !Config.Graphics.Windowed);

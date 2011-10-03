@@ -1,9 +1,11 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2004-2007  Sven Eberhardt
- * Copyright (c) 2005, 2007  Günther Brammer
+ * Copyright (c) 2003-2007  Sven Eberhardt
+ * Copyright (c) 2005, 2007, 2009-2011  Günther Brammer
  * Copyright (c) 2007  Peter Wortmann
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2011  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -32,6 +34,18 @@ namespace C4GUI
 {
 
 	const char *Edit::CursorRepresentation = "\xC2\xA6"; // U+00A6 BROKEN BAR
+
+	namespace
+	{
+		inline bool IsUtf8ContinuationByte(char c)
+		{
+			return (c & 0xC0) == 0x80;
+		}
+		inline bool IsUtf8StartByte(char c)
+		{
+			return (c & 0xC0) == 0xC0;
+		}
+	}
 
 // ----------------------------------------------------
 // Edit
@@ -135,7 +149,7 @@ namespace C4GUI
 		// reset selection
 		iSelectionStart = iSelectionEnd = 0;
 		// cursor might have moved: ensure it is shown
-		dwLastInputTime=timeGetTime();
+		dwLastInputTime=GetTime();
 	}
 
 	void Edit::DeleteSelection()
@@ -147,7 +161,7 @@ namespace C4GUI
 		// adjust cursor pos
 		if (iCursorPos > iSelBegin) iCursorPos = Max(iSelBegin, iCursorPos - iSelEnd + iSelBegin);
 		// cursor might have moved: ensure it is shown
-		dwLastInputTime=timeGetTime();
+		dwLastInputTime=GetTime();
 		// nothing selected
 		iSelectionStart = iSelectionEnd = iSelBegin;
 	}
@@ -174,7 +188,7 @@ namespace C4GUI
 			// advance cursor
 			iCursorPos += iTextLen;
 			// cursor moved: ensure it is shown
-			dwLastInputTime=timeGetTime();
+			dwLastInputTime=GetTime();
 			ScrollCursorInView();
 		}
 		// done; return whether everything was inserted
@@ -197,8 +211,11 @@ namespace C4GUI
 		int32_t i = 0;
 		for (int32_t iLastW = 0, w,h; Text[i]; ++i)
 		{
+			int oldi = i;
+			if (IsUtf8StartByte(Text[oldi]))
+				while (IsUtf8ContinuationByte(Text[++i + 1])) /* EMPTY */;
 			char c=Text[i+1]; Text[i+1]=0; pFont->GetTextExtent(Text, w, h, false); Text[i+1]=c;
-			if (w - (w-iLastW)/2 >= iControlXPos) break;
+			if (w - (w-iLastW)/2 >= iControlXPos) return oldi;
 			iLastW = w;
 		}
 		return i;
@@ -252,8 +269,6 @@ namespace C4GUI
 	{
 		// do OnFinishInput callback and process result - returns whether pasting operation should be continued
 		InputResult eResult = OnFinishInput(fPasting, fPastingMore);
-		// safety...
-		if (!IsGUIValid()) return false;
 		switch (eResult)
 		{
 		case IR_None: // do nothing and continue pasting
@@ -405,7 +420,12 @@ namespace C4GUI
 							iMoveLength += iMoveDir;
 						}
 				}
-				else iMoveLength = iMoveDir;
+				else
+				{
+					// Handle UTF-8
+					iMoveLength = iMoveDir;
+					while (IsUtf8ContinuationByte(Text[iCursorPos + iMoveLength])) iMoveLength += Sign(iMoveLength);
+				}
 			}
 			// delete stuff
 			if (op == COP_BACK || op == COP_DELETE)
@@ -416,6 +436,7 @@ namespace C4GUI
 				char *c; for (c = Text+iCursorPos; *c; ++c) *(c+iMoveLength) = *c;
 				// terminate string
 				*(c+iMoveLength) = 0;
+				assert(IsValidUtf8(Text));
 			}
 			else if (fShift)
 			{
@@ -430,7 +451,7 @@ namespace C4GUI
 			iCursorPos += iMoveLength;
 		}
 		// show cursor
-		dwLastInputTime=timeGetTime();
+		dwLastInputTime=GetTime();
 		ScrollCursorInView();
 		// operation recognized
 		return true;
@@ -534,7 +555,7 @@ namespace C4GUI
 		// select all
 		iSelectionStart=0; iSelectionEnd=iCursorPos=SLen(Text);
 		// begin with a flashing cursor
-		dwLastInputTime=timeGetTime();
+		dwLastInputTime=GetTime();
 	}
 
 	void Edit::OnLooseFocus()
@@ -607,7 +628,7 @@ namespace C4GUI
 		// draw edit text
 		lpDDraw->TextOut(pDrawText, *pFont, 1.0f, cgo.Surface, rcClientRect.x + cgo.TargetX - iXScroll, iY0 + cgo.TargetY - 1, dwFontClr, ALeft, false);
 		// draw cursor
-		if (HasDrawFocus() && !(((dwLastInputTime-timeGetTime())/500)%2))
+		if (HasDrawFocus() && !(((dwLastInputTime-GetTime())/500)%2))
 		{
 			char cAtCursor = pDrawText[iCursorPos]; pDrawText[iCursorPos]=0; int32_t w,h,wc;
 			pFont->GetTextExtent(pDrawText, w, h, false);

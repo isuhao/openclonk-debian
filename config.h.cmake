@@ -34,6 +34,9 @@
 /* Define to 1 if FMOD is available */
 #cmakedefine HAVE_FMOD 1
 
+/* Use OpenAL for playing sounds */
+#cmakedefine USE_OPEN_AL 1
+
 /* Define to 1 if you have the <locale.h> header file. */
 #cmakedefine HAVE_LOCALE_H 1
 
@@ -82,11 +85,14 @@
 /* Define to 1 if you have the <string.h> header file. */
 #cmakedefine HAVE_STRING_H 1
 
-/* inotify reachable using syscall */
-#cmakedefine HAVE_SYSCALL_INOTIFY 1
-
 /* Define to 1 if you have the <sys/inotify.h> header file. */
 #cmakedefine HAVE_SYS_INOTIFY_H 1
+
+/* Define to 1 if you have the <sys/eventfd.h> header file. */
+#cmakedefine HAVE_SYS_EVENTFD_H
+
+/* Define to 1 if you have the <sys/file.h> header file. */
+#cmakedefine HAVE_SYS_FILE_H 1
 
 /* Define to 1 if you have the <sys/socket.h> header file. */
 #cmakedefine HAVE_SYS_SOCKET_H 1
@@ -94,8 +100,8 @@
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #cmakedefine HAVE_SYS_STAT_H 1
 
-/* Define to 1 if you have the <sys/syscall.h> header file. */
-#cmakedefine HAVE_SYS_SYSCALL_H 1
+/* Define to 1 if you have the <sys/timerfd.h> header file. */
+#cmakedefine HAVE_SYS_TIMERFD_H 1
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #cmakedefine HAVE_SYS_TYPES_H 1
@@ -105,6 +111,8 @@
 
 /* Define to 1 if you have the `vasprintf' function. */
 #cmakedefine HAVE_VASPRINTF 1
+
+#cmakedefine HAVE_VFW32
 
 /* Define to 1 if you have the <X11/extensions/xf86vmode.h> header file. */
 #cmakedefine HAVE_X11_EXTENSIONS_XF86VMODE_H 1
@@ -194,6 +202,11 @@
 /* Define to 1 if you have support for nullptr. */
 #cmakedefine HAVE_NULLPTR 1
 
+/* Use Apple Cocoa for the UI */
+#cmakedefine USE_COCOA 1
+
+/* Define to 1 if your compiler supports static_assert */
+#cmakedefine HAVE_STATIC_ASSERT 1
 
 /* Generate minidumps on crash */
 #cmakedefine GENERATE_MINI_DUMP 1

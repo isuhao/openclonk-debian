@@ -3,7 +3,8 @@
  *
  * Copyright (c) 1998-2000, 2005  Matthes Bender
  * Copyright (c) 2005  Sven Eberhardt
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009-2010  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -54,27 +55,23 @@
 #include <C4GraphicsSystem.h>
 
 const int32_t C4PF_MaxDepth        = 35,
-                                     C4PF_MaxCrawl        = 800,
-                                                            C4PF_MaxRay          = 350,
-                                                                                   C4PF_Threshold       = 10,
-
-                                                                                                          C4PF_Direction_Left  = -1,
-                                                                                                                                 C4PF_Direction_Right = +1,
-                                                                                                                                                        C4PF_Direction_None  = 0,
-
-                                                                                                                                                                               C4PF_Ray_Launch      = 0,
-                                                                                                                                                                                                      C4PF_Ray_Crawl       = 1,
-                                                                                                                                                                                                                             C4PF_Ray_Still       = 2,
-                                                                                                                                                                                                                                                    C4PF_Ray_Failure     = 3,
-                                                                                                                                                                                                                                                                           C4PF_Ray_Deleted     = 4,
-
-                                                                                                                                                                                                                                                                                                  C4PF_Crawl_NoAttach  = 0,
-                                                                                                                                                                                                                                                                                                                         C4PF_Crawl_Top       = 1,
-                                                                                                                                                                                                                                                                                                                                                C4PF_Crawl_Right     = 2,
-                                                                                                                                                                                                                                                                                                                                                                       C4PF_Crawl_Bottom    = 3,
-                                                                                                                                                                                                                                                                                                                                                                                              C4PF_Crawl_Left      = 4,
-
-                                                                                                                                                                                                                                                                                                                                                                                                                     C4PF_Draw_Rate       = 10;
+              C4PF_MaxCrawl        = 800,
+              C4PF_MaxRay          = 350,
+              C4PF_Threshold       = 10,
+              C4PF_Direction_Left  = -1,
+              C4PF_Direction_Right = +1,
+              C4PF_Direction_None  = 0,
+              C4PF_Ray_Launch      = 0,
+              C4PF_Ray_Crawl       = 1,
+              C4PF_Ray_Still       = 2,
+              C4PF_Ray_Failure     = 3,
+              C4PF_Ray_Deleted     = 4,
+              C4PF_Crawl_NoAttach  = 0,
+              C4PF_Crawl_Top       = 1,
+              C4PF_Crawl_Right     = 2,
+              C4PF_Crawl_Bottom    = 3,
+              C4PF_Crawl_Left      = 4,
+              C4PF_Draw_Rate       = 10;
 
 //------------------------------- C4PathFinderRay ---------------------------------------------
 

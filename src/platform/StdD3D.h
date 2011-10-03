@@ -2,7 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2002, 2005  Sven Eberhardt
- * Copyright (c) 2005  Günther Brammer
+ * Copyright (c) 2005, 2009  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -30,8 +30,10 @@
 #endif // _MSC_VER
 #endif // _DEBUG
 
+#include <C4windowswrapper.h>
 #include <d3d9.h>
 #include <d3dx9tex.h>
+#undef DrawText
 #include <StdDDraw2.h>
 
 // debug memmgmt on
@@ -116,7 +118,7 @@ public:
 	// General
 	void Clear();
 	void Default();
-	bool PageFlip(RECT *pSrcRt=NULL, RECT *pDstRt=NULL, CStdWindow * pWindow = NULL);
+	bool PageFlip(C4Rect *pSrcRt=NULL, C4Rect *pDstRt=NULL, CStdWindow * pWindow = NULL);
 	bool BeginScene(); // prepare device for drawing
 	void EndScene();   // prepare device for surface locking, flipping etc.
 	virtual int GetEngine() { return fSoftware ? 2 : 0; }   // get indexed engine

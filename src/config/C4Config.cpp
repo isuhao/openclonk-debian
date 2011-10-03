@@ -1,13 +1,12 @@
-/* -*- Mode: C++; tab-width: 2; indent-tabs-mode: t; c-basic-offset: 2 -*- */
 /*
  * OpenClonk, http://www.openclonk.org
  * Copyright (c) 1998-2000, 2003-2004, 2007-2008  Matthes Bender
- * Copyright (c) 2002, 2006-2008  Sven Eberhardt
+ * Copyright (c) 2002, 2006-2008, 2011  Sven Eberhardt
  * Copyright (c) 2003, 2005-2007  Peter Wortmann
- * Copyright (c) 2005-2009  Günther Brammer
- * Copyright (c) 2006  Alex
+ * Copyright (c) 2005-2009, 2011  Günther Brammer
+ * Copyright (c) 2006  Alexander Post
  * Copyright (c) 2006-2007  Julian Raschke
- * Copyright (c) 2008  Armin Burgmeier
+ * Copyright (c) 2008, 2011  Armin Burgmeier
  * Copyright (c) 2009  Nicolas Hake
  *
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
@@ -39,6 +38,7 @@
 #include <StdFile.h>
 #include <StdWindow.h>
 #include <StdRegistry.h>
+#include <StdWindow.h>
 
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -49,22 +49,6 @@
 #ifdef HAVE_LOCALE_H
 #include <locale.h>
 #endif
-
-#include "MacUtility.h"
-
-bool isGermanSystem()
-{
-#ifdef _WIN32
-	if (PRIMARYLANGID(GetUserDefaultLangID()) == LANG_GERMAN) return true;
-#elif defined(__APPLE__)
-	return MacUtility::isGerman();
-#else
-	if (strstr(setlocale(LC_MESSAGES, 0), "de")) return true;
-#endif
-	return false;
-}
-
-C4Config *pConfig;
 
 void C4ConfigGeneral::CompileFunc(StdCompiler *pComp)
 {
@@ -82,16 +66,10 @@ void C4ConfigGeneral::CompileFunc(StdCompiler *pComp)
 	// assimilate old data
 	pComp->Value(mkNamingAdapt(s(Adopt.PlayerPath), "PlayerPath",       ""));
 
-	pComp->Value(mkNamingAdapt(SaveGameFolder,      "SaveGameFolder",     "Savegames.c4f", false, true));
-	pComp->Value(mkNamingAdapt(SaveDemoFolder,      "SaveDemoFolder",     "Records.c4f",   false, true  ));
 	pComp->Value(mkNamingAdapt(s(MissionAccess),    "MissionAccess",      "", false, true));
 	pComp->Value(mkNamingAdapt(FPS,                 "FPS",                0              ));
-	pComp->Value(mkNamingAdapt(Record,              "Record",             0              ));
 	pComp->Value(mkNamingAdapt(DefRec,              "DefRec",             0              ));
 	pComp->Value(mkNamingAdapt(ScreenshotFolder,    "ScreenshotFolder",   "Screenshots",  false, true));
-	pComp->Value(mkNamingAdapt(FairCrew,            "NoCrew",             0              ));
-	pComp->Value(mkNamingAdapt(FairCrewStrength,    "DefCrewStrength",    1000           ));
-	pComp->Value(mkNamingAdapt(MaxFairCrewStrength, "MaxFairCrewStrength",1000           ));
 	pComp->Value(mkNamingAdapt(ScrollSmooth,        "ScrollSmooth",       4              ));
 	pComp->Value(mkNamingAdapt(AlwaysDebug,         "DebugMode",          0              ));
 #ifdef _WIN32
@@ -101,17 +79,13 @@ void C4ConfigGeneral::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(RXFontSize,          "FontSize",           14,            false, true));
 	pComp->Value(mkNamingAdapt(GamepadEnabled,      "GamepadEnabled",     true           ));
 	pComp->Value(mkNamingAdapt(FirstStart,          "FirstStart",         true           ));
-	pComp->Value(mkNamingAdapt(UserPortraitsWritten,"UserPortraitsWritten",false         ));
 	pComp->Value(mkNamingAdapt(ConfigResetSafety,   "ConfigResetSafety",  static_cast<int32_t>(ConfigResetSafetyVal) ));
 }
 
 void C4ConfigDeveloper::CompileFunc(StdCompiler *pComp)
 {
-#ifdef _WIN32
-	pComp->Value(mkNamingAdapt(AutoEditScan,        "AutoEditScan",       1              ));
-#endif
-	pComp->Value(mkNamingAdapt(AutoFileReload,      "AutoFileReload",     1              ));
-	pComp->Value(mkNamingAdapt(AllErrorsFatal,      "AllErrorsFatal",     0              ));
+	pComp->Value(mkNamingAdapt(AutoFileReload,      "AutoFileReload",     1              ,false, true));
+	pComp->Value(mkNamingAdapt(ExtraWarnings,      "ExtraWarnings",     0              ,false, true));
 }
 
 void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
@@ -123,8 +97,6 @@ void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(GuiResY,                 "GuiResolutionY",       600           ,false, true));
 	pComp->Value(mkNamingAdapt(ShowAllResolutions,    "ShowAllResolutions",   0             ,false, true));
 	pComp->Value(mkNamingAdapt(SplitscreenDividers,   "SplitscreenDividers",  1             ));
-	pComp->Value(mkNamingAdapt(AddNewCrewPortraits,   "AddNewCrewPortraits",  0             ,false, true));
-	pComp->Value(mkNamingAdapt(SaveDefaultPortraits,  "SaveDefaultPortraits", 0             ,false, true));
 	pComp->Value(mkNamingAdapt(ShowStartupMessages,   "ShowStartupMessages",  1             ,false, true));
 	pComp->Value(mkNamingAdapt(ColorAnimation,        "ColorAnimation",       0             ,false, true));
 	pComp->Value(mkNamingAdapt(HighResLandscape,      "HighResLandscape",     0             ,false, true));
@@ -152,6 +124,7 @@ void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(EnableShaders,         "Shader",               0             ,false, true));
 	pComp->Value(mkNamingAdapt(NoOffscreenBlits,      "NoOffscreenBlits",     1             ));
 	pComp->Value(mkNamingAdapt(ClipManuallyE,         "ClipManuallyE",        1             ));
+	pComp->Value(mkNamingAdapt(MultiSampling,         "MultiSampling",        4             ));
 }
 
 void C4ConfigSound::CompileFunc(StdCompiler *pComp)
@@ -181,7 +154,6 @@ void C4ConfigNetwork::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(PortDiscovery,           "PortDiscovery",        C4NetStdPortDiscovery ,false, true));
 	pComp->Value(mkNamingAdapt(PortRefServer,           "PortRefServer",        C4NetStdPortRefServer ,false, true));
 	pComp->Value(mkNamingAdapt(ControlMode,             "ControlMode",          0             ));
-	pComp->Value(mkNamingAdapt(SendPortraits,           "SendPortraits",        0             ,false, true));
 	pComp->Value(mkNamingAdapt(Nick,                    "Nick",                 ""            ,false, true));
 	pComp->Value(mkNamingAdapt(MaxLoadFileSize,         "MaxLoadFileSize",      5*1024*1024   ,false, true));
 
@@ -269,100 +241,23 @@ void C4ConfigGamepad::Reset()
 	StdCompilerNull Comp; Comp.Compile(mkParAdapt(*this, false));
 }
 
-void C4ConfigControls::CompileFunc(StdCompiler *pComp, bool fKeysOnly)
+void C4ConfigControls::CompileFunc(StdCompiler *pComp)
 {
 #ifndef USE_CONSOLE
-#ifdef _WIN32
-#define KEY(win, x, sdl) win
-#elif defined(USE_X11)
-#define KEY(win, x, sdl) x
-#else
-#define KEY(win, x, sdl) sdl
-#endif
-
-	bool fGer = isGermanSystem();
-
-	pComp->Value(mkNamingAdapt(Keyboard[0][0],    "Kbd1Key1",             KEY('Q',          XK_q,             SDLK_q)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][1],    "Kbd1Key2",             KEY('W',          XK_w,             SDLK_w)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][2],    "Kbd1Key3",             KEY('E',          XK_e,             SDLK_e)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][3],    "Kbd1Key4",             KEY('A',          XK_a,             SDLK_a)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][4],    "Kbd1Key5",             KEY('S',          XK_s,             SDLK_s)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][5],    "Kbd1Key6",             KEY('D',          XK_d,             SDLK_d)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][6],    "Kbd1Key7",             fGer ? KEY('Y', XK_y, SDLK_y) : KEY('Z', XK_z, SDLK_z)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][7],    "Kbd1Key8",             KEY('X',          XK_x,             SDLK_x)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][8],    "Kbd1Key9",             KEY('C',          XK_c,             SDLK_c)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][9],    "Kbd1Key10",            fGer ? KEY(226, XK_less, SDLK_LESS) : KEY('R', XK_r, SDLK_r)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][10],   "Kbd1Key11",            KEY('V',          XK_v,             SDLK_v)));
-	pComp->Value(mkNamingAdapt(Keyboard[0][11],   "Kbd1Key12",            KEY('F',          XK_f,             SDLK_f)));
-
-	pComp->Value(mkNamingAdapt(Keyboard[1][0],    "Kbd2Key1",             KEY(103,          XK_KP_Home,       SDLK_KP7)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][1],    "Kbd2Key2",             KEY(104,          XK_KP_Up,         SDLK_KP8)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][2],    "Kbd2Key3",             KEY(105,          XK_KP_Page_Up,    SDLK_KP9)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][3],    "Kbd2Key4",             KEY(100,          XK_KP_Left,       SDLK_KP4)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][4],    "Kbd2Key5",             KEY(101,          XK_KP_Begin,      SDLK_KP5)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][5],    "Kbd2Key6",             KEY(102,          XK_KP_Right,      SDLK_KP6)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][6],    "Kbd2Key7",             KEY(97,           XK_KP_End,        SDLK_KP1)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][7],    "Kbd2Key8",             KEY(98,           XK_KP_Down,       SDLK_KP2)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][8],    "Kbd2Key9",             KEY(99,           XK_KP_Page_Down,  SDLK_KP3)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][9],    "Kbd2Key10",            KEY(96,           XK_KP_Insert,     SDLK_KP0)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][10],   "Kbd2Key11",            KEY(110,          XK_KP_Delete,     SDLK_KP_PERIOD)));
-	pComp->Value(mkNamingAdapt(Keyboard[1][11],   "Kbd2Key12",            KEY(107,          XK_KP_Add,        SDLK_KP_PLUS)));
-
-	pComp->Value(mkNamingAdapt(Keyboard[2][0],    "Kbd3Key1",             KEY('I',          XK_i,             SDLK_i)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][1],    "Kbd3Key2",             KEY('O',          XK_o,             SDLK_o)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][2],    "Kbd3Key3",             KEY('P',          XK_p,             SDLK_p)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][3],    "Kbd3Key4",             KEY('K',          XK_k,             SDLK_k)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][4],    "Kbd3Key5",             KEY('L',          XK_l,             SDLK_l)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][5],    "Kbd3Key6",             fGer ? KEY(192, XK_odiaeresis, SDLK_WORLD_4) : KEY(0xBA, XK_semicolon, SDLK_SEMICOLON)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][6],    "Kbd3Key7",             KEY(188, XK_comma, SDLK_COMMA)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][7],    "Kbd3Key8",             KEY(190, XK_period, SDLK_PERIOD)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][8],    "Kbd3Key9",             fGer ? KEY(189, XK_minus, SDLK_MINUS) : KEY(0xBF, XK_slash, SDLK_SLASH)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][9],    "Kbd3Key10",            KEY('M', XK_m, SDLK_m)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][10],   "Kbd3Key11",            KEY(222, XK_adiaeresis, SDLK_WORLD_3)));
-	pComp->Value(mkNamingAdapt(Keyboard[2][11],   "Kbd3Key12",            KEY(186, XK_udiaeresis, SDLK_WORLD_2)));
-
-	pComp->Value(mkNamingAdapt(Keyboard[3][0],    "Kbd4Key1",             KEY(VK_INSERT,    XK_Insert,        SDLK_INSERT)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][1],    "Kbd4Key2",             KEY(VK_HOME,      XK_Home,          SDLK_HOME)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][2],    "Kbd4Key3",             KEY(VK_PRIOR,     XK_Page_Up,       SDLK_PAGEUP)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][3],    "Kbd4Key4",             KEY(VK_DELETE,    XK_Delete,        SDLK_DELETE)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][4],    "Kbd4Key5",             KEY(VK_UP,        XK_Up,            SDLK_UP)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][5],    "Kbd4Key6",             KEY(VK_NEXT,      XK_Page_Down,     SDLK_PAGEDOWN)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][6],    "Kbd4Key7",             KEY(VK_LEFT,      XK_Left,          SDLK_LEFT)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][7],    "Kbd4Key8",             KEY(VK_DOWN,      XK_Down,          SDLK_DOWN)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][8],    "Kbd4Key9",             KEY(VK_RIGHT,     XK_Right,         SDLK_RIGHT)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][9],    "Kbd4Key10",            KEY(VK_END,       XK_End,           SDLK_END)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][10],   "Kbd4Key11",            KEY(VK_RETURN,    XK_Return,        SDLK_RETURN)));
-	pComp->Value(mkNamingAdapt(Keyboard[3][11],   "Kbd4Key12",            KEY(VK_BACK,      XK_BackSpace,     SDLK_BACKSPACE)));
-
-	if (fKeysOnly) return;
-
+	pComp->Value(mkNamingAdapt(UserSets, "UserSets",    C4PlayerControlAssignmentSets()));
 	pComp->Value(mkNamingAdapt(MouseAScroll,      "MouseAutoScroll",      0));
 	pComp->Value(mkNamingAdapt(GamepadGuiControl, "GamepadGuiControl",    0,     false, true));
-
-#undef KEY
-#undef s
-#endif //USE_CONSOLE
+#endif
 }
-
-const char *CfgAtTempPath(const char *szFilename)
-{
-	// safety
-	if (!pConfig) return NULL;
-	// get at temp path
-	return pConfig->AtTempPath(szFilename);
-}
-
 
 C4Config::C4Config()
 {
-	pConfig=this;
 	Default();
 }
 
 C4Config::~C4Config()
 {
 	fConfigLoaded = false;
-	pConfig=NULL;
 }
 
 void C4Config::Default()
@@ -469,6 +364,11 @@ bool C4Config::Load(bool forceWorkingDirectory, const char *szConfigFile)
 	if (Graphics.Engine == GFXENGN_DIRECTX || Graphics.Engine == GFXENGN_DIRECTXS)
 		Graphics.Engine = GFXENGN_OPENGL;
 #endif
+	// bit depth sanity check (might be corrupted by resolution check bug in old version)
+	if (Graphics.BitDepth < 16)
+	{
+		Graphics.BitDepth = 32;
+	}
 	// Warning against invalid ports
 	if (Config.Network.PortTCP>0 && Config.Network.PortTCP == Config.Network.PortRefServer)
 	{
@@ -525,33 +425,40 @@ void C4ConfigGeneral::DeterminePaths(bool forceWorkingDirectory)
 {
 #ifdef _WIN32
 	// Exe path
-	if (GetModuleFileName(NULL,ExePath,CFG_MaxString))
-		{ TruncatePath(ExePath); AppendBackslash(ExePath); }
+	wchar_t apath[CFG_MaxString];
+	if (GetModuleFileNameW(NULL,apath,CFG_MaxString))
+	{
+		ExePath = StdStrBuf(apath);
+		TruncatePath(ExePath.getMData());
+		ExePath.SetLength(SLen(ExePath.getMData()));
+		ExePath.AppendBackslash();
+	}
 	// Temp path
-	GetTempPath(CFG_MaxString,TempPath);
-	if (TempPath[0]) AppendBackslash(TempPath);
+	GetTempPathW(CFG_MaxString,apath);
+	TempPath = StdStrBuf(apath);
+	if (TempPath[0]) TempPath.AppendBackslash();
 #elif defined(__linux__)
-	GetParentPath(Application.Location, ExePath);
-	AppendBackslash(ExePath);
+	GetParentPath(Application.Location, &ExePath);
+	ExePath.AppendBackslash();
 	const char * t = getenv("TMPDIR");
 	if (t)
 	{
-		SCopy(t, TempPath, sizeof(TempPath)-2);
-		AppendBackslash(TempPath);
+		TempPath = t;
+		TempPath.AppendBackslash();
 	}
 	else
-		SCopy("/tmp/", TempPath);
+		TempPath = "/tmp/";
 #else
 	// Mac: Just use the working directory as ExePath.
-	SCopy(GetWorkingDirectory(), ExePath);
-	AppendBackslash(ExePath);
-	SCopy("/tmp/", TempPath);
+	ExePath = GetWorkingDirectory();
+	ExePath.AppendBackslash();
+	TempPath = "/tmp/";
 #endif
 	// Force working directory to exe path if desired
 
 #ifndef _DEBUG
 	if (forceWorkingDirectory)
-		SetWorkingDirectory(ExePath);
+		SetWorkingDirectory(ExePath.getData());
 #endif
 
 	// Find system-wide data path
@@ -560,8 +467,14 @@ void C4ConfigGeneral::DeterminePaths(bool forceWorkingDirectory)
 	SCopy(GetWorkingDirectory(),SystemDataPath);
 	AppendBackslash(SystemDataPath);
 #elif defined(__linux__)
-	// FIXME: Where to put this?
-	SCopy(ExePath,SystemDataPath);
+
+#ifdef OC_SYSTEM_DATA_DIR
+	SCopy(OC_SYSTEM_DATA_DIR, SystemDataPath);
+	AppendBackslash(SystemDataPath);
+#else
+#error Please define OC_SYSTEM_DATA_DIR!
+	//SCopy(ExePath,SystemDataPath);
+#endif
 #endif
 
 	// Find user-specific data path
@@ -615,31 +528,17 @@ void C4ConfigGeneral::AdoptOldSettings()
 		ForEachFile(FormatString("%s/%s", Config.AtExePath(Adopt.PlayerPath), C4CFN_PlayerFiles).getData(), &GrabOldPlayerFile);
 		*Adopt.PlayerPath = '\0';
 	}
-	else if (!ItemIdentical(Config.General.ExePath, Config.General.UserDataPath))
+	else if (!ItemIdentical(Config.General.ExePath.getData(), Config.General.UserDataPath))
 	{
 		ForEachFile(Config.AtExePath(C4CFN_PlayerFiles), &GrabOldPlayerFile);
 	}
 }
 
-void C4ConfigGeneral::ClearAdditionalDataPaths()
-{
-	for (PathList::iterator it = AdditionalDataPaths.begin(); it != AdditionalDataPaths.end(); ++it)
-		delete[] *it;
-	AdditionalDataPaths.clear();
-}
-
-void C4ConfigGeneral::AddAdditionalDataPath(const char *szPath)
-{
-	char *clone = new char[SLen(szPath)+1];
-	SCopy(szPath,clone);
-	AdditionalDataPaths.push_back(clone);
-}
-
-char AtPathFilename[_MAX_PATH+1];
+static char AtPathFilename[_MAX_PATH+1];
 
 const char* C4Config::AtExePath(const char *szFilename)
 {
-	SCopy(General.ExePath,AtPathFilename,_MAX_PATH);
+	SCopy(General.ExePath.getData(),AtPathFilename,_MAX_PATH);
 	SAppend(szFilename,AtPathFilename,_MAX_PATH);
 	return AtPathFilename;
 }
@@ -660,7 +559,7 @@ const char* C4Config::AtSystemDataPath(const char *szFilename)
 
 const char* C4Config::AtTempPath(const char *szFilename)
 {
-	SCopy(General.TempPath,AtPathFilename,_MAX_PATH);
+	SCopy(General.TempPath.getData(),AtPathFilename,_MAX_PATH);
 	SAppend(szFilename,AtPathFilename,_MAX_PATH);
 	return AtPathFilename;
 }
@@ -682,7 +581,7 @@ const char *C4Config::AtScreenshotPath(const char *szFilename)
 			AtPathFilename[len-1] = '\0';
 	if (!CreatePath(AtPathFilename))
 	{
-		SCopy(General.ExePath, General.ScreenshotPath, CFG_MaxString-1);
+		SCopy(General.ExePath.getData(), General.ScreenshotPath, CFG_MaxString-1);
 		SCopy(General.ScreenshotPath,AtPathFilename,_MAX_PATH);
 	}
 	else
@@ -738,55 +637,7 @@ void C4ConfigNetwork::CheckPortsForCollisions()
 }
 void C4ConfigControls::ResetKeys()
 {
-	StdCompilerNull Comp; Comp.Compile(mkParAdapt(*this, true));
-}
-
-const char* C4Config::AtDataReadPath(const char *szFilename, bool fPreferWorkdir)
-{
-	if (IsGlobalPath(szFilename)) return szFilename;
-	StdCopyStrBuf sfn(szFilename);
-	do
-	{
-		const char *path = AtDataReadPathCore(sfn.getData(), fPreferWorkdir);
-		if (path)
-		{
-			if (path != AtPathFilename) SCopy(path,AtPathFilename);
-			AtPathFilename[_MAX_PATH] = '\0';
-			AppendBackslash(AtPathFilename);
-			SAppend(szFilename,AtPathFilename,_MAX_PATH);
-			return AtPathFilename;
-		}
-	}
-	while (TruncatePath(sfn.getMData()));
-	return szFilename;
-}
-
-const char* C4Config::AtDataReadPathCore(const char *szFilename, bool fPreferWorkdir)
-{
-	if (fPreferWorkdir && FileExists(szFilename))
-	{
-		SCopy(GetWorkingDirectory(),AtPathFilename,_MAX_PATH-1);
-		return AtPathFilename;
-	}
-	// Check extra data paths
-	for (C4ConfigGeneral::PathList::iterator it = General.AdditionalDataPaths.begin();
-	     it != General.AdditionalDataPaths.end();
-	     ++it)
-	{
-		SCopy(*it, AtPathFilename, _MAX_PATH-1);
-		AppendBackslash(AtPathFilename);
-		SAppend(szFilename,AtPathFilename,_MAX_PATH);
-		if (FileExists(AtPathFilename))
-			return *it;
-	}
-	if (FileExists(AtUserDataPath(szFilename))) return General.UserDataPath;
-	if (FileExists(AtSystemDataPath(szFilename))) return General.SystemDataPath;
-	if (!fPreferWorkdir && FileExists(szFilename))
-	{
-		SCopy(GetWorkingDirectory(),AtPathFilename,_MAX_PATH-1);
-		return AtPathFilename;
-	}
-	return NULL;
+	UserSets.Clear();
 }
 
 const char* C4Config::AtUserDataRelativePath(const char *szFilename)
@@ -825,15 +676,11 @@ void C4Config::ForceRelativePath(StdStrBuf *sFilename)
 		// not in ExePath: Is it a global path?
 		if (IsGlobalPath(sFilename->getData()))
 		{
-			// then shorten it (e.g. C:\Temp\Missions.c4f\Goldmine.c4s to Missions.c4f\Goldmine.c4s)
+			// then shorten it (e.g. C:\Temp\Missions.ocf\Goldmine.ocs to Missions.ocf\Goldmine.ocs)
 			StdStrBuf sTemp; sTemp.Copy(GetC4Filename(sFilename->getData()));
 			sFilename->Take(std::move(sTemp));
 		}
 	}
-}
-
-namespace
-{
 }
 
 void C4ConfigGeneral::DefaultLanguage()
@@ -841,7 +688,7 @@ void C4ConfigGeneral::DefaultLanguage()
 	// No language defined: default to German or English by system language
 	if (!Language[0])
 	{
-		if (isGermanSystem())
+		if (IsGermanSystem())
 			SCopy("DE - Deutsch", Language);
 		else
 			SCopy("US - English", Language);
@@ -939,9 +786,9 @@ bool C4Config::RemoveModule(const char *szPath, char *szModules)
 void C4Config::ExpandEnvironmentVariables(char *strPath, size_t iMaxLen)
 {
 #ifdef _WIN32
-	char buf[_MAX_PATH + 1];
-	ExpandEnvironmentStrings(strPath, buf, _MAX_PATH);
-	SCopy(buf, strPath, iMaxLen);
+	wchar_t buf[_MAX_PATH + 1];
+	ExpandEnvironmentStringsW(GetWideChar(strPath), buf, _MAX_PATH);
+	SCopy(StdStrBuf(buf).getData(), strPath, iMaxLen);
 #else // __linux__ or __APPLE___
 	StdStrBuf home(getenv("HOME"));
 	char* rest;

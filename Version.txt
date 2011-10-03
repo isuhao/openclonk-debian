@@ -7,7 +7,14 @@ SET(C4PROJECT           "OpenClonk Project")
 SET(C4PROJECT_DOMAIN    "openclonk")
 SET(C4PROJECT_TLD       "org")
 SET(C4PROJECT_URL       "http://www.{C4PROJECT_DOMAIN}.{C4PROJECT_TLD}")
-SET(C4COPYRIGHT_YEAR    2010) # Gimme CMAKE_CURRENT_YEAR already...
+
+IF(CMAKE_HOST_UNIX)
+	EXECUTE_PROCESS(COMMAND "date" "+%Y" OUTPUT_VARIABLE DATE)
+ELSEIF(CMAKE_HOST_WIN32)
+	EXECUTE_PROCESS(COMMAND "cscript.exe" "//nologo" "${CMAKE_CURRENT_SOURCE_DIR}/tools/get_current_year.vbs" OUTPUT_VARIABLE DATE)
+ENDIF()
+STRING(REGEX REPLACE "(.+)\n" "\\1" YEARFIXED "${DATE}")
+SET(C4COPYRIGHT_YEAR ${YEARFIXED})
 
 SET(C4ENGINENAME        "OpenClonk")
 SET(C4ENGINENICK        "openclonk")
@@ -15,12 +22,14 @@ SET(C4ENGINECAPTION     ${C4ENGINENAME})
 SET(C4ENGINEID          "${C4PROJECT_TLD}.${C4PROJECT_DOMAIN}.${C4ENGINENICK}")
 
 SET(C4XVER1             5)
-SET(C4XVER2             1)
-SET(C4XVER3             2)
-SET(C4XVER4             4)
+SET(C4XVER2             2)
+SET(C4XVER3             0)
+SET(C4XVER4             1)
 
-SET(C4VERSIONBUILDNAME  "Back to the Rocks")
-
+# C4VERSIONBUILDNAME should be witty and somewhat frequently changing
+# for alpha and beta releases, and meaningful and stable for stable releases.
+# Both variables need to start with a space if they aren't empty.
+SET(C4VERSIONBUILDNAME  " Back to the Rocks")
 SET(C4VERSIONEXTRA      "")
 
 ############################################################################

@@ -7,7 +7,7 @@
     <title>SetCrewStatus</title>
     <category>Objects</category>
     <subcat>Crew</subcat>
-    <version>4.9.5.0 CE</version>
+    <version>5.1 OC</version>
     <syntax>
       <rtype>bool</rtype>
       <params>
@@ -26,7 +26,7 @@
     <desc>Adds or removes an object (usually a clonk) to or from the crew of a player. The object must have the CrewMember property set in the DefCore.</desc>
     <examples>
       <example>
-        <code>var nClonk = <funclink>CreateObject</funclink>(Clonk, 0, 0, <funclink>GetOwner</funclink>());
+        <code>var nClonk = <funclink>CreateObject</funclink>(Clonk);
 nClonk-&gt;SetCrewStatus(<funclink>GetOwner</funclink>(), true);</code>
         <text>This script creates a new clonk and adds it to the crew list of the owner.</text>
       </example>

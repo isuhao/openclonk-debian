@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2005  Sven Eberhardt
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005-2006, 2008, 2010  Günther Brammer
  * Copyright (c) 2006  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -26,8 +26,6 @@
 
 #include <StdWindow.h>
 
-class C4Viewport;
-
 #ifdef WITH_DEVELOPER_MODE
 #include <StdGtkWindow.h>
 typedef CStdGtkWindow C4ViewportBase;
@@ -41,7 +39,6 @@ public:
 	C4Viewport * cvp;
 	C4ViewportWindow(C4Viewport * cvp): cvp(cvp) { }
 #ifdef _WIN32
-	virtual CStdWindow * Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, bool);
 	static bool RegisterViewportClass(HINSTANCE hInst);
 #elif defined(WITH_DEVELOPER_MODE)
 	virtual GtkWidget* InitGUI();
@@ -54,7 +51,7 @@ public:
 	static gboolean OnMotionNotifyStatic(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 	static gboolean OnConfigureStatic(GtkWidget* widget, GdkEventConfigure* event, gpointer user_data);
 	static void OnRealizeStatic(GtkWidget* widget, gpointer user_data);
-	static gboolean OnExposeStatic(GtkWidget* widget, GdkEventExpose* event, gpointer user_data);
+	static gboolean OnExposeStatic(GtkWidget* widget, void *, gpointer user_data);
 	static void OnDragDataReceivedStatic(GtkWidget* widget, GdkDragContext* context, gint x, gint y, GtkSelectionData* data, guint info, guint time, gpointer user_data);
 
 	static gboolean OnConfigureDareaStatic(GtkWidget* widget, GdkEventConfigure* event, gpointer user_data);
@@ -69,10 +66,9 @@ public:
 	virtual void HandleMessage (XEvent &);
 #endif
 	void EditCursorMove(int X, int Y, uint16_t);
+	CStdWindow * Init(CStdWindow * pParent, CStdApp * pApp, int32_t iPlayer);
 	virtual void Close();
+	virtual void PerformUpdate();
 };
-
-#define C4ViewportClassName "C4Viewport"
-#define C4ViewportWindowStyle (WS_VISIBLE | WS_POPUP | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SIZEBOX)
 
 #endif

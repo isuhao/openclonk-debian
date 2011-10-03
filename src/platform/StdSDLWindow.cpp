@@ -2,6 +2,10 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2006  Julian Raschke
+ * Copyright (c) 2010  Peter Wortmann
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Armin Burgmeier
+ * Copyright (c) 2011  Günther Brammer
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,8 +30,8 @@
 #include <StdBuf.h>
 
 #include "C4Version.h"
-
-#include "MacUtility.h"
+#include <C4Rect.h>
+#include <C4Config.h>
 
 /* CStdWindow */
 
@@ -41,22 +45,34 @@ CStdWindow::~CStdWindow ()
 	Clear();
 }
 
-// Only set title.
-// FIXME: Read from application bundle on the Mac.
-
-CStdWindow * CStdWindow::Init(CStdApp * pApp)
-{
-	return Init(pApp, C4ENGINENAME);
-}
-
-CStdWindow * CStdWindow::Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, bool HideCursor)
+CStdWindow * CStdWindow::Init(WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, bool HideCursor)
 {
 	Active = true;
+	// SDL doesn't support multiple monitors.
+	if (!SDL_SetVideoMode(Config.Graphics.ResX, Config.Graphics.ResY, Config.Graphics.BitDepth, SDL_OPENGL | (Config.Graphics.Windowed ? 0 : SDL_FULLSCREEN)))
+	{
+		Log(SDL_GetError());
+		return 0;
+	}
+	SDL_ShowCursor(HideCursor ? SDL_DISABLE : SDL_ENABLE);
+	SetSize(Config.Graphics.ResX, Config.Graphics.ResY);
 	SetTitle(Title);
 	return this;
 }
 
+bool CStdWindow::ReInit(CStdApp* pApp)
+{
+	// TODO: How do we enable multisampling with SDL?
+	// Maybe re-call SDL_SetVideoMode?
+	return false;
+}
+
 void CStdWindow::Clear() {}
+
+void CStdWindow::EnumerateMultiSamples(std::vector<int>& samples) const
+{
+	// TODO: Enumerate multi samples
+}
 
 bool CStdWindow::StorePosition(const char *, const char *, bool) { return true; }
 
@@ -65,10 +81,10 @@ bool CStdWindow::RestorePosition(const char *, const char *, bool) { return true
 // Window size is automatically managed by CStdApp's display mode management.
 // Just remember the size for others to query.
 
-bool CStdWindow::GetSize(RECT * pRect)
+bool CStdWindow::GetSize(C4Rect * pRect)
 {
-	pRect->left = pRect->top = 0;
-	pRect->right = width, pRect->bottom = height;
+	pRect->x = pRect->y = 0;
+	pRect->Wdt = width, pRect->Hgt = height;
 	return true;
 }
 

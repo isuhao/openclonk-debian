@@ -23,6 +23,7 @@
 #define INC_C4Sector
 
 #include <C4ObjectList.h>
+#include <C4Rect.h>
 
 // class predefs
 class C4LSector;
@@ -50,7 +51,7 @@ public:
 	C4ObjectList Objects; // objects within this sector
 	C4ObjectList ObjectShapes; // objects with shapes that overlap this sector
 
-	void CompileFunc(StdCompiler *pComp);
+	void CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers);
 	void ClearObjects(); // remove all objects from object lists
 
 	friend class C4LSectors;

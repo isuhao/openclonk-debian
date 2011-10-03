@@ -19,7 +19,7 @@
  * See clonk_trademark_license.txt for full license.
  */
 
-/* Buffered fast and network-safe random */
+/* Network-safe random number generator */
 
 #ifndef INC_C4Random
 #define INC_C4Random
@@ -42,6 +42,7 @@ int Random(int iRange);
 #else
 inline int Random(int iRange)
 {
+	RandomCount++;
 	if (iRange==0) return 0;
 	RandomHold = RandomHold * 214013L + 2531011L;
 	return (RandomHold >> 16) % iRange;
@@ -61,8 +62,5 @@ inline int SafeRandom(int range)
 	if (!range) return 0;
 	return rand()%range;
 }
-
-void Randomize3();
-int Rnd3();
 
 #endif // INC_C4Random

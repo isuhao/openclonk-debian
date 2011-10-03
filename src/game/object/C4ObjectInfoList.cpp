@@ -4,7 +4,7 @@
  * Copyright (c) 1998-2000, 2003  Matthes Bender
  * Copyright (c) 2002, 2004-2005  Sven Eberhardt
  * Copyright (c) 2002, 2008  Peter Wortmann
- * Copyright (c) 2006, 2008  Günther Brammer
+ * Copyright (c) 2006, 2008-2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -24,6 +24,7 @@
 #include <C4Include.h>
 #include <C4ObjectInfoList.h>
 
+#include <C4DefList.h>
 #include <C4ObjectInfo.h>
 #include <C4Components.h>
 #include <C4Game.h>
@@ -58,18 +59,18 @@ void C4ObjectInfoList::Clear()
 	}
 }
 
-int32_t C4ObjectInfoList::Load(C4Group &hGroup, bool fLoadPortraits)
+int32_t C4ObjectInfoList::Load(C4Group &hGroup)
 {
 	C4ObjectInfo *ninf;
 	int32_t infn=0;
 	char entryname[256+1];
 
-	// Search all c4i files
+	// Search all oci files
 	hGroup.ResetSearch();
 	while (hGroup.FindNextEntry(C4CFN_ObjectInfoFiles,entryname))
 		if ((ninf=new C4ObjectInfo))
 		{
-			if (ninf->Load(hGroup,entryname,fLoadPortraits))  { Add(ninf); infn++; }
+			if (ninf->Load(hGroup,entryname))  { Add(ninf); infn++; }
 			else delete ninf;
 		}
 
@@ -86,7 +87,7 @@ int32_t C4ObjectInfoList::Load(C4Group &hGroup, bool fLoadPortraits)
 	{
 		C4Group ItemGroup;
 		if (ItemGroup.OpenAsChild(&hGroup, entryname))
-			Load(ItemGroup, fLoadPortraits);
+			Load(ItemGroup);
 	}
 
 	return infn;
@@ -162,7 +163,7 @@ C4ObjectInfo* C4ObjectInfoList::New(C4ID n_id, C4DefList *pDefs)
 	C4Def *pDef = NULL;
 	if (pDefs)
 		if (!(pDef = pDefs->ID2Def(n_id)))
-			{ delete pInfo; return false; }
+			{ delete pInfo; return NULL; }
 	// Set name source
 	const char *cpNames = Game.Names.GetData();
 	if (pDef->pClonkNames) cpNames = pDef->pClonkNames->GetData();
@@ -172,9 +173,6 @@ C4ObjectInfo* C4ObjectInfoList::New(C4ID n_id, C4DefList *pDefs)
 	pInfo->Birthday=time(NULL);
 	// Make valid names
 	MakeValidName(pInfo->Name);
-	// Add new portrait (permanently w/o copying file)
-	if (Config.Graphics.AddNewCrewPortraits)
-		pInfo->SetRandomPortrait(C4ID::None, true, false);
 	// Add
 	Add(pInfo);
 	++iNumCreated;

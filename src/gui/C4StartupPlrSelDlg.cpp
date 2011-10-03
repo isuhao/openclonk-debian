@@ -1,11 +1,14 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2008  Sven Eberhardt
- * Copyright (c) 2005-2006, 2008  Günther Brammer
- * Copyright (c) 2006  Florian Groß
+ * Copyright (c) 2005-2011  Sven Eberhardt
+ * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
  * Copyright (c) 2006-2008  Matthes Bender
+ * Copyright (c) 2006  Florian Groß
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Armin Burgmeier
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2011  Tobias Zwick
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -22,9 +25,10 @@
 // Startup screen for non-parameterized engine start: Player selection dialog
 // Also contains player creation, editing and crew management
 
+#include <C4Include.h>
+
 #include <utility>
 
-#include <C4Include.h>
 #include <C4StartupPlrSelDlg.h>
 
 #include <C4StartupMainDlg.h>
@@ -62,21 +66,6 @@ StdStrBuf DateString(int iTime)
 	                      pLocalTime->tm_year+1900,
 	                      pLocalTime->tm_hour,
 	                      pLocalTime->tm_min);
-}
-
-// Fixme: This should use the already open group from C4GraphicsResource
-static bool GetPortrait(char **ppBytes, size_t *ipSize)
-{
-	// select random portrait from Graphics.c4g
-	C4Group GfxGroup;
-	int iCount;
-	StdStrBuf EntryName;
-	if (!GfxGroup.Open(Config.AtSystemDataPath(C4CFN_Graphics))) return false;
-	if ((iCount = GfxGroup.EntryCount("Portrait*.png")) < 1) return false;
-	EntryName.Format("Portrait%d.png", SafeRandom(iCount) + 1);
-	if (!GfxGroup.LoadEntry(EntryName.getData(), ppBytes, ipSize)) return false;
-	GfxGroup.Close();
-	return true;
 }
 
 // ------------------------------------------------
@@ -149,47 +138,6 @@ void C4StartupPlrSelDlg::ListItem::SetIcon(C4GUI::Icons icoNew)
 	pIcon->SetIcon(icoNew);
 }
 
-void C4StartupPlrSelDlg::ListItem::LoadPortrait(C4Group &rGrp, bool fUseDefault)
-{
-	bool fPortraitLinked = false;
-	if (!rGrp.FindEntry(C4CFN_Portrait) || !fctPortraitBase.Load(rGrp, C4CFN_Portrait))
-		if (!rGrp.FindEntry(C4CFN_Portrait_Old) || !fctPortraitBase.Load(rGrp, C4CFN_Portrait_Old))
-		{
-			// no custom portrait: Link to some default if desired
-			if (!fUseDefault) return;
-			SetDefaultPortrait();
-			fPortraitLinked = true;
-		}
-	if (!fPortraitLinked) CreateColoredPortrait();
-}
-
-void C4StartupPlrSelDlg::ListItem::CreateColoredPortrait()
-{
-	if (fctPortrait.CreateClrByOwner(fctPortraitBase.Surface))
-	{
-		fctPortrait.Wdt=fctPortraitBase.Wdt;
-		fctPortrait.Hgt=fctPortraitBase.Hgt;
-	}
-}
-
-void C4StartupPlrSelDlg::ListItem::SetDefaultPortrait()
-{
-	fctPortrait.Set(::GraphicsResource.fctPlayerClr);
-}
-
-void C4StartupPlrSelDlg::ListItem::GrabPortrait(C4FacetSurface *pFromFacet)
-{
-	if (pFromFacet && pFromFacet->Surface)
-	{
-		fctPortraitBase.GrabFrom(*pFromFacet);
-		CreateColoredPortrait();
-	}
-	else
-	{
-		SetDefaultPortrait();
-	}
-}
-
 void C4StartupPlrSelDlg::ListItem::UpdateOwnPos()
 {
 	// parent for client rect
@@ -246,8 +194,6 @@ void C4StartupPlrSelDlg::PlayerListItem::Load(const StdStrBuf &rsFilename)
 		::GraphicsResource.fctPlayerClr.DrawClr(fctIcon, true, Core.PrefColorDw);
 	}
 	GrabIcon(fctIcon);
-	// load portrait
-	LoadPortrait(PlrGroup, true);
 	// done loading
 	if (!PlrGroup.Close())
 		throw LoadError(FormatString("Error loading player file from %s: Error closing group: %s", rsFilename.getData(), PlrGroup.GetError()));
@@ -327,9 +273,13 @@ StdStrBuf C4StartupPlrSelDlg::PlayerListItem::GetDelWarning()
 bool C4StartupPlrSelDlg::PlayerListItem::MoveFilename(const char *szToFilename)
 {
 	// anything to do?
-	if (ItemIdentical(Config.AtUserDataPath(GetFilename().getData()), szToFilename)) return true;
+	if (ItemIdentical(GetFilename().getData(), szToFilename)) return true;
 	// do it
-	if (!MoveItem(GetFilename().getData(), szToFilename)) return false;
+	StdStrBuf PathFrom(Config.General.UserDataPath);
+	PathFrom.Append(GetFilename());
+	StdStrBuf PathTo(Config.General.UserDataPath);
+	PathTo.Append(szToFilename);
+	if (!MoveItem(PathFrom.getData(), PathTo.getData())) return false;
 	// reflect change in class
 	SetFilename(StdStrBuf(szToFilename));
 	return true;
@@ -379,8 +329,6 @@ void C4StartupPlrSelDlg::CrewListItem::Load(C4Group &rGrp, const StdStrBuf &rsFi
 		if (C4RankSystem::DrawRankSymbol(&fctIcon, Core.Rank, &::GraphicsResource.fctRank, ::GraphicsResource.iNumRanks, true))
 			GrabIcon(fctIcon);
 	}
-	// load portrait; empty by default
-	LoadPortrait(CrewGroup, false);
 	// backup group loaded from - assumes it stays valid!
 	pParentGrp = &rGrp;
 	// load success!
@@ -442,7 +390,7 @@ bool C4StartupPlrSelDlg::CrewListItem::SetName(const char *szNewName)
 	SCopy(szNewName, fn, _MAX_PATH);
 	MakeFilenameFromTitle(fn);
 	if (!*fn) return false;
-	SAppend(".c4i", fn, _MAX_PATH);
+	SAppend(".oci", fn, _MAX_PATH);
 	// check if a rename is due
 	if (!ItemIdentical(fn, GetFilename().getData()))
 	{
@@ -470,15 +418,6 @@ bool C4StartupPlrSelDlg::CrewListItem::SetName(const char *szNewName)
 	return true;
 }
 
-StdStrBuf C4StartupPlrSelDlg::CrewListItem::GetPhysicalTextLine(int32_t iPhysValue, const char *idsName)
-{
-	const int32_t iMaxBars = 10;
-	StdStrBuf sResult;
-	sResult.Format("%s ", LoadResStr(idsName));
-	sResult.AppendChars('�', iMaxBars * iPhysValue / C4MaxPhysical);
-	return sResult;
-}
-
 void C4StartupPlrSelDlg::CrewListItem::SetSelectionInfo(C4GUI::TextWindow *pSelectionInfo)
 {
 	// write info text for player
@@ -494,28 +433,6 @@ void C4StartupPlrSelDlg::CrewListItem::SetSelectionInfo(C4GUI::TextWindow *pSele
 	                            Core.TypeName, Core.Experience, Core.Rounds, Core.DeathCount,
 	                            sPromo.getData(), TimeString(Core.TotalPlayingTime).getData(), DateString(Core.Birthday).getData()).getData(),
 	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Energy, "IDS_DESC_ENERGY").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Breath, "IDS_DESC_BREATH").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Walk, "IDS_DESC_WALK").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Jump, "IDS_DESC_JUMP").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	if (Core.Physical.CanScale) pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Scale, "IDS_DESC_SCALE").getData(),
-		    &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	if (Core.Physical.CanHangle) pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Hangle, "IDS_DESC_HANGLE").getData(),
-		    &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Dig, "IDS_DESC_DIG").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Swim, "IDS_DESC_SWIM").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Throw, "IDS_DESC_THROW").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Push, "IDS_DESC_PUSH").getData(),
-	                            &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
-	if (Core.Physical.Magic) pSelectionInfo->AddTextLine(GetPhysicalTextLine(Core.Physical.Magic, "IDS_DESC_MAGIC").getData(),
-		    &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
 	pSelectionInfo->UpdateHeight();
 }
 
@@ -574,10 +491,7 @@ C4StartupPlrSelDlg::C4StartupPlrSelDlg() : C4StartupDlg("W"), eMode(PSDM_Player)
 	iBottomButtonWidth = (caButtonArea.GetWidth() - iButtonXSpacing * (iButtonCount-1)) / iButtonCount;
 	C4Rect rcMain = caMain.GetAll();
 	C4Rect rcPlrList = C4Rect(rcMain.Wdt/10, rcMain.Hgt*10/36, rcMain.Wdt*25/81, rcMain.Hgt*2/3);
-	C4Rect rcInfoWindow = C4Rect(rcMain.Wdt*371/768, rcMain.Hgt*197/451, rcMain.Wdt*121/384, rcMain.Hgt*242/451);
-	int iPictureWidth = Min(rcMain.Wdt*121/384, 200);
-	int iPictureHeight = iPictureWidth * 3 / 4;
-	C4Rect rcPictureArea = C4Rect(rcMain.Wdt*613/768 - iPictureWidth, rcMain.Hgt*197/451 - iPictureHeight, iPictureWidth, iPictureHeight);
+	C4Rect rcInfoWindow = C4Rect(rcMain.Wdt*371/768, rcMain.Hgt*10/36, rcMain.Wdt*121/384, rcMain.Hgt*2/3);
 
 	AddElement(pPlrListBox = new C4GUI::ListBox(rcPlrList));
 	pPlrListBox->SetToolTip(LoadResStr("IDS_DLGTIP_PLAYERFILES"));
@@ -588,7 +502,6 @@ C4StartupPlrSelDlg::C4StartupPlrSelDlg() : C4StartupDlg("W"), eMode(PSDM_Player)
 	AddElement(pSelectionInfo = new C4GUI::TextWindow(rcInfoWindow));
 	pSelectionInfo->SetDecoration(false, false, &C4Startup::Get()->Graphics.sfctBookScroll, true);
 	pSelectionInfo->UpdateHeight();
-	AddElement(pPortraitPict = new C4GUI::Picture(rcPictureArea, true));
 
 	// bottom line buttons - positioning done in UpdateBottomButtons by UpdatePlayerList
 	C4Rect rcDefault(0,0,10,10);
@@ -752,7 +665,7 @@ void C4StartupPlrSelDlg::UpdatePlayerList()
 		SetTitle(FormatString("%s %s", LoadResStrNoAmp("IDS_CTL_CREW"), CurrPlayer.Core.PrefName).getData());
 		// crew mode: Insert complete crew of player (2do: sort)
 		bool fSucc; char szFn[_MAX_PATH+1];
-		for (fSucc=CurrPlayer.Grp.FindEntry(C4CFN_ObjectInfoFiles, szFn); fSucc; fSucc=CurrPlayer.Grp.FindNextEntry(C4CFN_ObjectInfoFiles, szFn, NULL, NULL, true))
+		for (fSucc=CurrPlayer.Grp.FindEntry(C4CFN_ObjectInfoFiles, szFn); fSucc; fSucc=CurrPlayer.Grp.FindNextEntry(C4CFN_ObjectInfoFiles, szFn, NULL, true))
 		{
 			CrewListItem *pCrewItem = new CrewListItem(this, pPlrListBox, CurrPlayer.Core.PrefColorDw);
 			try
@@ -808,15 +721,11 @@ void C4StartupPlrSelDlg::UpdateSelection()
 	if (!pSel)
 	{
 		pSelectionInfo->ClearText(true);
-		pPortraitPict->GetMFacet().Clear();
 		// 2do: disable buttons
 		return;
 	}
 	// info text for selection
 	pSel->SetSelectionInfo(pSelectionInfo);
-	// portrait for selection
-	pPortraitPict->SetFacet(pSel->GetPortrait());
-	pPortraitPict->SetDrawColor(pSel->GetColorDw());
 }
 
 void C4StartupPlrSelDlg::OnItemCheckChange(C4GUI::Element *pCheckBox)
@@ -913,18 +822,18 @@ bool C4StartupPlrSelDlg::CheckPlayerName(const StdStrBuf &Playername, StdStrBuf 
 	SReplaceChar(Filename.getMData(), '>', '_');
 	SReplaceChar(Filename.getMData(), '|', '_');
 	if (*Filename.getData() == '.') *Filename.getMData() = '_';
-	Filename.Append(".c4p");
+	Filename.Append(".ocp");
 	StdStrBuf Path(Config.General.UserDataPath); // start at local path
-//  Path.Append(Config.General.PlayerPath);
+
 	Path.Append(Filename);
 	// validity check: Must not exist yet if renamed
 	if (!pPrevFilename || !ItemIdentical(Path.getData(), Config.AtUserDataPath(pPrevFilename->getData()))) if (ItemExists(Path.getData()))
-		{
-			C4GUI::Screen::GetScreenS()->ShowMessage(FormatString(LoadResStr("IDS_ERR_PLRNAME_TAKEN"),
-			    Playername.getData()).getData(), "", C4GUI::Ico_Error);
-			return false;
-		}
-	Filename.Take(std::move(Path));
+	{
+		C4GUI::Screen::GetScreenS()->ShowMessage(FormatString(LoadResStr("IDS_ERR_PLRNAME_TAKEN"),
+		    Playername.getData()).getData(), "", C4GUI::Ico_Error);
+		return false;
+	}
+
 	return true;
 }
 
@@ -1121,8 +1030,7 @@ void C4StartupPlrSelDlg::ResortCrew()
 /* ---- Player property dlg ---- */
 
 C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerListItem * pForPlayer, C4StartupPlrSelDlg *pParentDlg)
-		: Dialog(C4Startup::Get()->Graphics.fctPlrPropBG.Wdt, C4Startup::Get()->Graphics.fctPlrPropBG.Hgt, "", false), pMainDlg(pParentDlg), pForPlayer(pForPlayer),
-		fClearPicture(false), fClearBigIcon(false)
+		: Dialog(C4Startup::Get()->Graphics.fctPlrPropBG.Wdt, C4Startup::Get()->Graphics.fctPlrPropBG.Hgt, "", false), pMainDlg(pParentDlg), pForPlayer(pForPlayer), fClearBigIcon(false)
 {
 	if (pForPlayer)
 	{
@@ -1268,20 +1176,6 @@ C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerL
 	// Cancel
 	C4GUI::Button *pBtnAbort = new C4GUI::CancelIconButton(C4Rect(317-GetMarginLeft(), 16-GetMarginTop(), 21, 21), C4GUI::Ico_None);
 	AddElement(pBtnAbort); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
-	// New player
-	if (!pForPlayer)
-	{
-		// Set initial portrait and bigicon
-		C4Group hGroup;
-		StdStrBuf strPortrait; strPortrait.Format("Portrait%d.png", 1 + Random(5));
-		if (hGroup.Open(Config.AtSystemDataPath(C4CFN_Graphics)))
-		{
-			hGroup.Extract(strPortrait.getData(), Config.AtTempPath("Portrait.png"));
-			hGroup.Close();
-			SetNewPicture(Config.AtTempPath("Portrait.png"), true, true);
-			EraseItem(Config.AtTempPath("Portrait.png"));
-		}
-	}
 	// when called from player selection screen: input dlg always closed in the end
 	// otherwise, modal proc will delete
 	if (pMainDlg) SetDelOnClose();
@@ -1346,8 +1240,8 @@ void C4StartupPlrPropertiesDlg::OnClrSliderBChange(int32_t iNewVal)
 
 void C4StartupPlrPropertiesDlg::UpdatePlayerControl()
 {
-	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlAssignmentSets.GetSetByName(C4P.PrefControl.getData());
-	if (!control_set) control_set = Game.PlayerControlAssignmentSets.GetDefaultSet();
+	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlUserAssignmentSets.GetSetByName(C4P.PrefControl.getData());
+	if (!control_set) control_set = Game.PlayerControlUserAssignmentSets.GetDefaultSet();
 	// update keyboard image of selected control
 	C4Facet fctCtrlPic;
 	if (control_set) fctCtrlPic = control_set->GetPicture();
@@ -1365,11 +1259,11 @@ void C4StartupPlrPropertiesDlg::UpdatePlayerControl()
 void C4StartupPlrPropertiesDlg::OnCtrlChangeLeft(C4GUI::Control *pBtn)
 {
 	// previous control set in list
-	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlAssignmentSets.GetSetByName(C4P.PrefControl.getData());
-	int32_t index = Game.PlayerControlAssignmentSets.GetSetIndex(control_set);
+	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlUserAssignmentSets.GetSetByName(C4P.PrefControl.getData());
+	int32_t index = Game.PlayerControlUserAssignmentSets.GetSetIndex(control_set);
 	if (index < 0) index = 0; // defined control set not found - probably an old CR player file
-	if (!index--) index = Game.PlayerControlAssignmentSets.GetSetCount() - 1;
-	control_set = Game.PlayerControlAssignmentSets.GetSetByIndex(index);
+	if (!index--) index = Game.PlayerControlUserAssignmentSets.GetSetCount() - 1;
+	control_set = Game.PlayerControlUserAssignmentSets.GetSetByIndex(index);
 	if (control_set) C4P.PrefControl = control_set->GetName();
 	UpdatePlayerControl();
 }
@@ -1377,11 +1271,11 @@ void C4StartupPlrPropertiesDlg::OnCtrlChangeLeft(C4GUI::Control *pBtn)
 void C4StartupPlrPropertiesDlg::OnCtrlChangeRight(C4GUI::Control *pBtn)
 {
 	// next control set in list
-	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlAssignmentSets.GetSetByName(C4P.PrefControl.getData());
-	int32_t index = Game.PlayerControlAssignmentSets.GetSetIndex(control_set);
+	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlUserAssignmentSets.GetSetByName(C4P.PrefControl.getData());
+	int32_t index = Game.PlayerControlUserAssignmentSets.GetSetIndex(control_set);
 	if (index < 0) index = 0; // defined control set not found - probably an old CR player file
-	if (++index >= int32_t(Game.PlayerControlAssignmentSets.GetSetCount())) index = 0;
-	control_set = Game.PlayerControlAssignmentSets.GetSetByIndex(index);
+	if (++index >= int32_t(Game.PlayerControlUserAssignmentSets.GetSetCount())) index = 0;
+	control_set = Game.PlayerControlUserAssignmentSets.GetSetByIndex(index);
 	if (control_set) C4P.PrefControl = control_set->GetName();
 	UpdatePlayerControl();
 }
@@ -1420,19 +1314,16 @@ void C4StartupPlrPropertiesDlg::OnClosed(bool fOK)
 			{
 				if (!pForPlayer->MoveFilename(Filename.getData()))
 					GetScreen()->ShowMessage(LoadResStr("IDS_FAIL_RENAME"), "", C4GUI::Ico_Error);
-				// update picture/bigicon
-				if (fClearPicture || fClearBigIcon || fctNewPicture.Surface || fctNewBigIcon.Surface)
+				// update bigicon
+				if (fClearBigIcon || fctNewBigIcon.Surface)
 				{
 					C4Group PlrGroup;
-					if (PlrGroup.Open(Filename.getData()))
+					if (PlrGroup.Open(Config.AtUserDataPath(Filename.getData())))
 					{
-						if (fClearPicture || fctNewPicture.Surface) PlrGroup.Delete(C4CFN_Portrait);
 						if (fClearBigIcon || fctNewBigIcon.Surface) PlrGroup.Delete(C4CFN_BigIcon);
-						if (fctNewPicture.Surface) fctNewPicture.GetFace().SavePNG(PlrGroup, C4CFN_Portrait);
 						if (fctNewBigIcon.Surface) fctNewBigIcon.GetFace().SavePNG(PlrGroup, C4CFN_BigIcon);
 						if (PlrGroup.Close()) fSucc = true;
 						if (fClearBigIcon || fctNewBigIcon.Surface) pForPlayer->GrabCustomIcon(fctNewBigIcon);
-						if (fClearPicture || fctNewPicture.Surface) pForPlayer->GrabPortrait(&fctNewPicture);
 					}
 				}
 				else
@@ -1446,26 +1337,12 @@ void C4StartupPlrPropertiesDlg::OnClosed(bool fOK)
 			else
 			{
 				// NewPlayer: Open new player group
-				if (PlrGroup.Open(Filename.getData(), true))
+				if (PlrGroup.Open(Config.AtUserDataPath(Filename.getData()), true))
 				{
 					// Do not overwrite (should have been caught earlier anyway)
 					if (PlrGroup.FindEntry(C4CFN_PlayerInfoCore)) return;
 					// Save info core
 					C4P.Save(PlrGroup);
-					// Add portrait
-					if (fctNewPicture.Surface)
-					{
-						fctNewPicture.GetFace().SavePNG(PlrGroup, C4CFN_Portrait);
-					}
-					else if (!fClearPicture)
-					{
-						// default picture
-						char *pBytes; size_t iSize;
-						if (GetPortrait(&pBytes,&iSize))
-						{
-							PlrGroup.Add(C4CFN_Portrait, pBytes, iSize, false, true);
-						}
-					}
 					// Add BigIcon
 					if (fctNewBigIcon.Surface)
 					{
@@ -1508,17 +1385,17 @@ bool C4StartupPlrPropertiesDlg::SetNewPicture(C4Surface &srcSfc, C4FacetSurface 
 	}
 }
 
-void C4StartupPlrPropertiesDlg::SetNewPicture(const char *szFromFilename, bool fSetPicture, bool fSetBigIcon)
+void C4StartupPlrPropertiesDlg::SetNewPicture(const char *szFromFilename)
 {
 	if (!szFromFilename)
 	{
-		// If szFromFilename==NULL, clear picture/bigicon
-		if (fSetPicture) { fClearPicture = true; fctNewPicture.Clear(); }
-		if (fSetBigIcon) { fClearBigIcon = true; fctNewBigIcon.Clear(); }
+		// If szFromFilename==NULL, clear bigicon
+		fClearBigIcon = true;
+		fctNewBigIcon.Clear();
 	}
-	else if (fSetPicture || fSetBigIcon)
+	else
 	{
-		// else set new picture/bigicon by loading and scaling if necessary.
+		// else set new bigicon by loading and scaling if necessary.
 		C4Surface sfcNewPic;
 		C4Group SrcGrp;
 		StdStrBuf sParentPath;
@@ -1529,8 +1406,7 @@ void C4StartupPlrPropertiesDlg::SetNewPicture(const char *szFromFilename, bool f
 			if (sfcNewPic.Load(SrcGrp, GetFilename(szFromFilename)))
 			{
 				fSucc = true;
-				if (fSetPicture) if (!SetNewPicture(sfcNewPic, &fctNewPicture, C4MaxPictureSize, false)) fSucc = false;
-				if (fSetBigIcon) if (!SetNewPicture(sfcNewPic, &fctNewBigIcon, C4MaxBigIconSize, true)) fSucc = false;
+				if (!SetNewPicture(sfcNewPic, &fctNewBigIcon, C4MaxBigIconSize, true)) fSucc = false;
 			}
 		}
 		if (!fSucc)
@@ -1540,15 +1416,15 @@ void C4StartupPlrPropertiesDlg::SetNewPicture(const char *szFromFilename, bool f
 		}
 	}
 	// update icon
-	if (fSetBigIcon) UpdateBigIcon();
+	UpdateBigIcon();
 }
 
 void C4StartupPlrPropertiesDlg::OnPictureBtn(C4GUI::Control *pBtn)
 {
-	StdStrBuf sNewPic; bool fSetPicture=true, fSetBigIcon=true;
-	if (C4PortraitSelDlg::SelectPortrait(GetScreen(), &sNewPic, &fSetPicture, &fSetBigIcon))
+	StdStrBuf sNewPic;
+	if (C4PortraitSelDlg::SelectPortrait(GetScreen(), &sNewPic))
 	{
-		SetNewPicture(sNewPic.getData(), fSetPicture, fSetBigIcon);
+		SetNewPicture(sNewPic.getData());
 	}
 }
 
@@ -1565,7 +1441,7 @@ void C4StartupPlrPropertiesDlg::UpdateBigIcon()
 	else if (!fClearBigIcon && pForPlayer)
 	{
 		C4Group PlrGroup;
-		if (PlrGroup.Open(pForPlayer->GetFilename().getData()))
+		if (PlrGroup.Open(Config.AtUserDataPath(pForPlayer->GetFilename().getData())))
 		{
 			if (PlrGroup.FindEntry(C4CFN_BigIcon))
 			{

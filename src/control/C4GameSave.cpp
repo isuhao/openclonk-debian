@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2004-2005, 2007-2008  Sven Eberhardt
  * Copyright (c) 2006  Florian Groß
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2007  Matthes Bender
  * Copyright (c) 2008  Peter Wortmann
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
@@ -23,7 +23,6 @@
 
 #include <C4Include.h>
 #include <C4GameSave.h>
-#include <C4Version.h>
 
 #include <C4Components.h>
 #include <C4Game.h>
@@ -34,9 +33,12 @@
 #include <C4Landscape.h>
 #include <C4PXS.h>
 #include <C4MassMover.h>
+#include <C4ScriptHost.h>
 #include <C4PlayerList.h>
 #include <C4GameObjects.h>
+#include <C4RoundResults.h>
 #include <C4Record.h>
+#include <C4Version.h>
 
 // *** C4GameSave main class
 
@@ -193,29 +195,21 @@ bool C4GameSave::SaveLandscape()
 
 bool C4GameSave::SaveRuntimeData()
 {
+	// Game.txt data (general runtime data and objects)
+	C4ValueNumbers numbers;
+	if (!Game.SaveData(*pSaveGroup, false, IsExact(), &numbers))
+		{ Log(LoadResStr("IDS_ERR_SAVE_RUNTIMEDATA")); return false; }
 	// scenario sections (exact only)
 	if (IsExact()) if (!SaveScenarioSections())
 			{ Log(LoadResStr("IDS_ERR_SAVE_SCENSECTIONS")); return false; }
 	// landscape
 	if (!SaveLandscape()) { Log(LoadResStr("IDS_ERR_SAVE_LANDSCAPE")); return false; }
-	// Objects
-	if (!::Objects.Save((*pSaveGroup),IsExact(),true))
-		{ Log(LoadResStr("IDS_ERR_SAVE_OBJECTS")); return false; }
 	// Round results
 	if (GetSaveUserPlayers()) if (!Game.RoundResults.Save(*pSaveGroup))
 			{ Log(LoadResStr("IDS_ERR_ERRORSAVINGROUNDRESULTS")); return false; }
 	// Teams
 	if (!Game.Teams.Save(*pSaveGroup))
 		{ Log(LoadResStr(LoadResStr("IDS_ERR_ERRORSAVINGTEAMS"))); return false; }
-	// some scenario components possiby modified in console mode
-	// such modifications cannot possibly be done before game start
-	// so it's runtime data
-	// Script
-	if (!Game.Script.Save((*pSaveGroup))) Log(LoadResStr("IDS_ERR_SAVE_SCRIPT")); /* nofail */
-	// Title - unexact only, because in savegames, the title will be set in core
-	if (!IsExact()) if (!Game.Title.Save((*pSaveGroup))) Log(LoadResStr("IDS_ERR_SAVE_TITLE")); /* nofail */
-	// Info
-	if (!Game.Info.Save((*pSaveGroup))) Log(LoadResStr("IDS_ERR_SAVE_INFO")); /* nofail */
 	if (GetSaveUserPlayers() || GetSaveScriptPlayers())
 	{
 		// player infos
@@ -239,8 +233,6 @@ bool C4GameSave::SaveRuntimeData()
 	else
 	{
 		// non-exact runtime data: remove any exact files
-		// No Game.txt
-		pSaveGroup->Delete(C4CFN_Game);
 		// No player files
 		pSaveGroup->Delete(C4CFN_PlayerInfos);
 		pSaveGroup->Delete(C4CFN_SavePlayerInfos);
@@ -458,9 +450,6 @@ bool C4GameSave::Save(C4Group &hToGroup, bool fKeepGroup)
 		pSaveGroup->Delete(C4CFN_Titles);
 		pSaveGroup->Delete(C4CFN_Info);
 	}
-	// Always save Game.txt; even for saved scenarios, because global effects need to be saved
-	if (!Game.SaveData(*pSaveGroup, false, fInitial, IsExact()))
-		{ Log(LoadResStr("IDS_ERR_SAVE_RUNTIMEDATA")); return false; }
 	// save additional runtime data
 	if (GetSaveRuntimeData()) if (!SaveRuntimeData()) return false;
 	// Desc

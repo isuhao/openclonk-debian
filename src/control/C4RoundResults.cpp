@@ -1,8 +1,11 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2008-2009  Sven Eberhardt
+ * Copyright (c) 2004, 2008-2009  Sven Eberhardt
+ * Copyright (c) 2005  Peter Wortmann
  * Copyright (c) 2008  Julian Raschke
+ * Copyright (c) 2009  David Dormagen
+ * Copyright (c) 2011  Maikel de Vries
  * Copyright (c) 2008-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -280,7 +283,6 @@ void C4RoundResults::EvaluateGoals(C4IDList &GoalList, C4IDList &FulfilledGoalLi
 	// clear prev
 	GoalList.Clear(); FulfilledGoalList.Clear();
 	// Items
-	bool fRivalvry = !!Game.ObjectCount(C4ID::Rivalry);
 	int32_t cnt; C4ID idGoal;
 	for (cnt=0; (idGoal=::Objects.GetListID(C4D_Goal,cnt)); cnt++)
 	{
@@ -289,13 +291,9 @@ void C4RoundResults::EvaluateGoals(C4IDList &GoalList, C4IDList &FulfilledGoalLi
 		C4Object *pObj;
 		if ((pObj = ::Objects.Find(idGoal)))
 		{
-			if (fRivalvry)
-			{
-				C4AulParSet pars(C4VInt(iPlayerNumber));
-				fFulfilled = !!pObj->Call(PSF_IsFulfilledforPlr, &pars);
-			}
-			else
-				fFulfilled = !!pObj->Call(PSF_IsFulfilled);
+			// Check fulfilled per player, this enables the possibility of rivalry.
+			C4AulParSet pars(C4VInt(iPlayerNumber));
+			fFulfilled = !!pObj->Call(PSF_IsFulfilled, &pars);
 		}
 		GoalList.SetIDCount(idGoal, cnt, true);
 		if (fFulfilled) FulfilledGoalList.SetIDCount(idGoal, 1, true);
@@ -385,7 +383,7 @@ bool C4RoundResults::Load(C4Group &hGroup, const char *szFilename)
 	Clear();
 	// load file contents
 	StdStrBuf Buf;
-	if (!hGroup.LoadEntryString(szFilename, Buf)) return false;
+	if (!hGroup.LoadEntryString(szFilename, &Buf)) return false;
 	// compile
 	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkNamingAdapt(*this, "RoundResults"), Buf, szFilename)) return false;
 	// done, success

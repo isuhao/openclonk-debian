@@ -1,8 +1,10 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2006  Sven Eberhardt
- * Copyright (c) 2008  Günther Brammer
+ * Copyright (c) 2002, 2004-2006  Sven Eberhardt
+ * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2008, 2011  Günther Brammer
+ * Copyright (c) 2009  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,6 +27,10 @@
 
 // helper function
 #define RGBA(r, g, b, a) (((DWORD)(a)<<24)|(((DWORD)(r)&0xff)<<16)|(((DWORD)(g)&0xff)<<8)|((b)&0xff))
+#define C4RGB(r, g, b) (((DWORD)(0xff)<<24)|(((DWORD)(r)&0xff)<<16)|(((DWORD)(g)&0xff)<<8)|((b)&0xff))
+#define GetBlueValue(rgb) ((unsigned char)(rgb))
+#define GetGreenValue(rgb) ((unsigned char)(((unsigned short)(rgb)) >> 8))
+#define GetRedValue(rgb) ((unsigned char)((rgb)>>16))
 
 inline void BltAlpha(DWORD &dwDst, DWORD dwSrc)
 {
@@ -170,7 +176,7 @@ inline DWORD DarkenClrBy(DWORD &dwDst, int iBy) // darken a color
 inline DWORD PlrClr2TxtClr(DWORD dwClr)
 {
 	// convert player color to text color, lightening up when necessary
-	int lgt=Max(Max(GetRValue(dwClr), GetGValue(dwClr)), GetBValue(dwClr));
+	int lgt=Max(Max(GetRedValue(dwClr), GetGreenValue(dwClr)), GetBlueValue(dwClr));
 	if (lgt<0x8f) LightenClrBy(dwClr, 0x8f-lgt);
 	return dwClr|0xff000000;
 }
@@ -292,7 +298,7 @@ struct CStdPalette
 	BYTE Alpha[3*256]; // TODO: alphapal: Why 3*? Isn't Alpha[256] enough?
 
 	DWORD GetClr(BYTE byCol)
-	{ return RGB(Colors[byCol*3+2], Colors[byCol*3+1], Colors[byCol*3])+(Alpha[byCol]<<24); }
+	{ return C4RGB(Colors[byCol*3], Colors[byCol*3+1], Colors[byCol*3+2])+(Alpha[byCol]<<24); }
 
 	void EnforceC0Transparency()
 	{

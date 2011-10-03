@@ -2,6 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2007-2008  Sven Eberhardt
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2007-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -33,9 +34,9 @@ namespace C4InVal
 	// validation options
 	enum ValidationOption
 	{
-		VAL_Filename,        // regular filenames only (Sven2.c4p)
-		VAL_SubPathFilename, // filenames and optional subpath (Spieler\Sven2.c4p)
-		VAL_FullPath,        // full filename paths (C:\Clonk\Sven2.c4p; ..\..\..\..\AutoExec.bat)
+		VAL_Filename,        // regular filenames only (Sven2.ocp)
+		VAL_SubPathFilename, // filenames and optional subpath (Spieler\Sven2.ocp)
+		VAL_FullPath,        // full filename paths (C:\Clonk\Sven2.ocp; ..\..\..\..\AutoExec.bat)
 		VAL_NameAllowEmpty,  // stuff like player names (Sven2). No markup. Max. C4MaxName characters. Spaces trimmed.
 		VAL_NameNoEmpty,     // same as above, but empty string not allowed
 		VAL_NameExAllowEmpty,// stuff like Clonk names (Joki the {{WIPF}}). Markup allowed. Max. C4MaxLongName  characters. Spaces trimmed.

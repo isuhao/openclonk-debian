@@ -3,7 +3,8 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2005, 2007-2008  Sven Eberhardt
- * Copyright (c) 2006-2008  Günther Brammer
+ * Copyright (c) 2006-2009  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -51,11 +52,7 @@ enum
 	C4MN_Extra_None       = 0,
 	C4MN_Extra_Components = 1,
 	C4MN_Extra_Value      = 2,
-	C4MN_Extra_MagicValue = 3,
 	C4MN_Extra_Info       = 4,
-	C4MN_Extra_ComponentsMagic= 5,
-	C4MN_Extra_LiveMagicValue = 6,
-	C4MN_Extra_ComponentsLiveMagic = 7
 };
 enum
 {
@@ -154,7 +151,6 @@ protected:
 	int32_t Lines; // async
 	int32_t Alignment;
 	int32_t VisibleCount;
-	int32_t LastSelection; // used by AutoContextMenus
 	StdStrBuf CloseCommand; // script command that will be executed on menu close
 	char Caption[C4MaxTitle+1];
 	C4FacetSurface Symbol;
@@ -196,7 +192,7 @@ public:
 	         int32_t iCount=C4MN_Item_NoCount, C4Object *pObject=NULL,
 	         const char *szInfoCaption=NULL,
 	         C4ID idID=C4ID::None, const char *szCommand2=NULL, bool fOwnValue=false, int32_t iValue=0, bool fIsSelectable=true);
-	void ClearItems(bool fResetSelection=false);
+	void ClearItems();
 	void ResetLocation() { LocationSet = false; }
 	bool SetLocation(int32_t iX, int32_t iY); // set location relative to user viewport
 	bool SetTextProgress(int32_t iToProgress, bool fAdd); // enable/disable progressive text display and set starting pos

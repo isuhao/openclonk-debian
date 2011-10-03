@@ -1,10 +1,12 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
+ * Copyright (c) 1998-2000, 2004, 2008  Matthes Bender
  * Copyright (c) 2002-2007  Sven Eberhardt
- * Copyright (c) 2002, 2005  Peter Wortmann
- * Copyright (c) 2004, 2008  Matthes Bender
- * Copyright (c) 2005-2009  Günther Brammer
+ * Copyright (c) 2002, 2005, 2010  Peter Wortmann
+ * Copyright (c) 2005-2011  Günther Brammer
+ * Copyright (c) 2009-2010  Armin Burgmeier
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -21,15 +23,19 @@
 
 /* NewGfx interfaces */
 #include "C4Include.h"
-#include <StdFacet.h>
 #include <StdDDraw2.h>
+
+#include "StdApp.h"
+#include <StdWindow.h>
+#include <StdDDraw2.h>
+#include <StdFacet.h>
 #include <StdD3D.h>
 #include <StdGL.h>
 #include <StdNoGfx.h>
 #include <StdMarkup.h>
 #include <StdFont.h>
-#include <StdWindow.h>
 #include "C4Rect.h"
+#include <C4Config.h>
 #include "StdMesh.h"
 
 #include <stdio.h>
@@ -41,11 +47,6 @@ int iGfxEngine=-1;
 
 // Transformation matrix to convert meshes from Ogre to Clonk coordinate system
 const StdMeshMatrix CStdDDraw::OgreToClonk = StdMeshMatrix::Scale(-1.0f, 1.0f, 1.0f) * StdMeshMatrix::Rotate(float(M_PI)/2.0f, 1.0f, 0.0f, 0.0f) * StdMeshMatrix::Rotate(float(M_PI)/2.0f, 0.0f, 0.0f, 1.0f);
-
-inline void SetRect(RECT &rect, int left, int top, int right, int bottom)
-{
-	rect.left=left; rect.top=top; rect.bottom=bottom; rect.right=right;
-}
 
 inline DWORD GetTextShadowClr(DWORD dwTxtClr)
 {
@@ -92,7 +93,7 @@ bool CBltTransform::SetAsInv(CBltTransform &r)
 	return true;
 }
 
-void CBltTransform::TransformPoint(float &rX, float &rY)
+void CBltTransform::TransformPoint(float &rX, float &rY) const
 {
 	// apply matrix
 	float fW = mat[6] * rX + mat[7] * rY + mat[8];
@@ -200,15 +201,15 @@ void CGammaControl::SetClrChannel(WORD *pBuf, BYTE c1, BYTE c2, int c3)
 void CGammaControl::Set(DWORD dwClr1, DWORD dwClr2, DWORD dwClr3)
 {
 	// set red, green and blue channel
-	SetClrChannel(ramp.red  , GetBValue(dwClr1), GetBValue(dwClr2), GetBValue(dwClr3));
-	SetClrChannel(ramp.green, GetGValue(dwClr1), GetGValue(dwClr2), GetGValue(dwClr3));
-	SetClrChannel(ramp.blue , GetRValue(dwClr1), GetRValue(dwClr2), GetRValue(dwClr3));
+	SetClrChannel(ramp.red  , GetRedValue(dwClr1), GetRedValue(dwClr2), GetRedValue(dwClr3));
+	SetClrChannel(ramp.green, GetGreenValue(dwClr1), GetGreenValue(dwClr2), GetGreenValue(dwClr3));
+	SetClrChannel(ramp.blue , GetBlueValue(dwClr1), GetBlueValue(dwClr2), GetBlueValue(dwClr3));
 }
 
 DWORD CGammaControl::ApplyTo(DWORD dwClr)
 {
 	// apply to red, green and blue color component
-	return RGBA(ramp.red[GetBValue(dwClr)]>>8, ramp.green[GetGValue(dwClr)]>>8, ramp.blue[GetRValue(dwClr)]>>8, dwClr>>24);
+	return RGBA(ramp.red[GetRedValue(dwClr)]>>8, ramp.green[GetGreenValue(dwClr)]>>8, ramp.blue[GetBlueValue(dwClr)]>>8, dwClr>>24);
 }
 
 
@@ -337,13 +338,13 @@ uint32_t CClrModAddMap::GetModAt(int x, int y) const
 
 	// TODO: Alphafixed. Correct?
 	unsigned char Vis = pMap[ty*Wdt+tx];
-	uint32_t c1 = FadeTransparent ? 0xffffff | (Vis << 24) : 0xff000000|RGB(Vis, Vis, Vis);
+	uint32_t c1 = FadeTransparent ? 0xffffff | (Vis << 24) : C4RGB(Vis, Vis, Vis);
 	Vis = pMap[ty*Wdt+tx2];
-	uint32_t c2 = FadeTransparent ? 0xffffff | (Vis << 24) : 0xff000000|RGB(Vis, Vis, Vis);
+	uint32_t c2 = FadeTransparent ? 0xffffff | (Vis << 24) : C4RGB(Vis, Vis, Vis);
 	Vis = pMap[ty2*Wdt+tx];
-	uint32_t c3 = FadeTransparent ? 0xffffff | (Vis << 24) : 0xff000000|RGB(Vis, Vis, Vis);
+	uint32_t c3 = FadeTransparent ? 0xffffff | (Vis << 24) : C4RGB(Vis, Vis, Vis);
 	Vis = pMap[ty2*Wdt+tx2];
-	uint32_t c4 = FadeTransparent ? 0xffffff | (Vis << 24) : 0xff000000|RGB(Vis, Vis, Vis);
+	uint32_t c4 = FadeTransparent ? 0xffffff | (Vis << 24) : C4RGB(Vis, Vis, Vis);
 	CColorFadeMatrix clrs(tx*ResolutionX, ty*ResolutionY, ResolutionX, ResolutionY, c1, c2, c3, c4);
 	return clrs.GetColorAt(x, y);
 #endif
@@ -503,21 +504,21 @@ void CStdDDraw::Blit8Fast(CSurface8 * sfcSource, int fx, int fy,
 
 bool CStdDDraw::Blit(SURFACE sfcSource, float fx, float fy, float fwdt, float fhgt,
                      SURFACE sfcTarget, float tx, float ty, float twdt, float thgt,
-                     bool fSrcColKey, CBltTransform *pTransform)
+                     bool fSrcColKey, const CBltTransform *pTransform)
 {
 	// safety
 	if (!sfcSource || !sfcTarget || !twdt || !thgt || !fwdt || !fhgt) return false;
 	// Apply Zoom
+	CBltTransform t;
 	if (pTransform && Zoom != 1.0)
 	{
 		//tx = tx * Zoom - ZoomX * Zoom + ZoomX;
 		//ty = ty * Zoom - ZoomY * Zoom + ZoomY;
 		// The transformation is not location-independant, thus has to be zoomed, too.
-		CBltTransform t;
-		t.Set(Zoom, 0, ZoomX * (1 - Zoom),
-		      0, Zoom, ZoomY * (1 - Zoom),
-		      0, 0, 1);
-		*pTransform *= t;
+		t.Set(pTransform->mat[0]*Zoom, pTransform->mat[1]*Zoom, pTransform->mat[2]*Zoom + ZoomX*(1-Zoom),
+		      pTransform->mat[3]*Zoom, pTransform->mat[4]*Zoom, pTransform->mat[5]*Zoom + ZoomY*(1-Zoom),
+		      pTransform->mat[6], pTransform->mat[7], pTransform->mat[8]);
+		pTransform = &t;
 	}
 	else if (Zoom != 1.0)
 	{
@@ -632,10 +633,6 @@ bool CStdDDraw::Blit(SURFACE sfcSource, float fx, float fy, float fwdt, float fh
 				scaleY2 = scaleY * iTexSizeY;
 			}
 
-			// Size of this texture actually containing image data
-			const int iImgSizeX = (iX == sfcSource->iTexX-1) ? ((sfcSource->Wdt - 1) % iTexSizeX + 1) : (iTexSizeX);
-			const int iImgSizeY = (iY == sfcSource->iTexY-1) ? ((sfcSource->Hgt - 1) % iTexSizeY + 1) : (iTexSizeY);
-
 			// get new texture source bounds
 			FLOAT_RECT fTexBlt;
 			fTexBlt.left  = Max<float>(fx - iBlitX, 0);
@@ -670,6 +667,9 @@ bool CStdDDraw::Blit(SURFACE sfcSource, float fx, float fy, float fwdt, float fh
 			// in question is currently fixed by using non-power-of-two
 			// and non-square textures.
 #if 0
+			// Size of this texture actually containing image data
+			const int iImgSizeX = (iX == sfcSource->iTexX-1) ? ((sfcSource->Wdt - 1) % iTexSizeX + 1) : (iTexSizeX);
+			const int iImgSizeY = (iY == sfcSource->iTexY-1) ? ((sfcSource->Hgt - 1) % iTexSizeY + 1) : (iTexSizeY);			
 			// Make sure we don't access border pixels. Normally this is prevented
 			// by GL_CLAMP_TO_EDGE anyway but for the bottom and rightmost textures
 			// this does not work as the textures might only be partially filled.
@@ -743,7 +743,7 @@ bool CStdDDraw::RenderMesh(StdMeshInstance &instance, SURFACE sfcTarget, float t
 
 bool CStdDDraw::Blit8(SURFACE sfcSource, int fx, int fy, int fwdt, int fhgt,
                       SURFACE sfcTarget, int tx, int ty, int twdt, int thgt,
-                      bool fSrcColKey, CBltTransform *pTransform)
+                      bool fSrcColKey, const CBltTransform *pTransform)
 {
 	if (!pTransform) return BlitRotate(sfcSource, fx, fy, fwdt, fhgt, sfcTarget, tx, ty, twdt, thgt, 0, fSrcColKey!=false);
 	// safety
@@ -1153,7 +1153,7 @@ void CStdDDraw::Grayscale(SURFACE sfcSfc, int32_t iOffset)
 		for (xcnt=0; xcnt<wdt; xcnt++)
 		{
 			DWORD dwColor = sfcSfc->GetPixDw(xcnt,ycnt,false);
-			uint32_t r = GetRValue(dwColor), g = GetGValue(dwColor), b = GetBValue(dwColor), a = dwColor >> 24;
+			uint32_t r = GetRedValue(dwColor), g = GetGreenValue(dwColor), b = GetBlueValue(dwColor), a = dwColor >> 24;
 			int32_t gray = BoundBy<int32_t>((r + g + b) / 3 + iOffset, 0, 255);
 			sfcSfc->SetPixDw(xcnt, ycnt, RGBA(gray, gray, gray, a));
 		}
@@ -1197,7 +1197,7 @@ void CStdDDraw::ApplyGamma()
 	// calc offset for curve points
 	for (int32_t iCurve=0; iCurve<3; ++iCurve)
 	{
-		ZeroMemory(ChanOff, sizeof(int32_t)*3);
+		memset(ChanOff, 0, sizeof(int32_t)*3);
 		// ...channels...
 		for (int32_t iChan=0; iChan<3; ++iChan)
 			// ...ramps...

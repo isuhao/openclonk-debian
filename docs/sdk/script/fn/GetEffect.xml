@@ -6,7 +6,7 @@
   <func>
     <title>GetEffect</title>
     <category>Effects</category>
-    <version>4.9.5.0 CE</version>
+    <version>5.1 OC</version>
     <syntax>
       <rtype>any</rtype>
       <params>
@@ -19,20 +19,14 @@
         <param>
           <type>object</type>
           <name>target</name>
-          <desc>Target object in which to access effects. If 0, the global effects are accessed.</desc>
+          <desc>Target object in which to access effects. If <code>nil</code>, the global effects are accessed.</desc>
           <optional />
         </param>
         <param>
           <type>int</type>
           <name>index</name>
-          <desc>Effect index. With name specified and multiple matches for the search this will give you the indicated effect from the list of results. If name is not specified, this index is the effect number. Effect numbers do not necessarily run continuously from 0 to the number of effects. When using the index, this continuity is ensured.</desc>
+          <desc>Effect index. With name specified and multiple matches for the search this will give you the indicated effect from the list of results.</desc>
           <optional />
-        </param>
-        <param>
-          <type>int</type>
-          <name>query_value</name>
-          <optional />
-          <desc>Index of the value to be retrieved. See remarks.</desc>
         </param>
         <param>
           <type>int</type>
@@ -42,73 +36,33 @@
         </param>
       </params>
     </syntax>
-    <desc>Retrieves effect data or determines whether a certain effect is present. The return value depend on the requested value. If an effect cannot be found the return value is always 0.</desc>
-    <remark>
-      Using the parameter query_value the following values can be retrieved:<br/><br/>
-      <table>
-        <rowh>
-          <col>query_value</col>
-          <col>Value</col>
-        </rowh>
-        <row>
-          <col>0</col>
-          <col>Effect number</col>
-        </row>
-        <row>
-          <col>1</col>
-          <col>Name</col>
-        </row>
-        <row>
-          <col>2</col>
-          <col>Priority</col>
-        </row>
-        <row>
-          <col>3</col>
-          <col>Timer interval</col>
-        </row>
-        <row>
-          <col>4</col>
-          <col>Command target</col>
-        </row>
-        <row>
-          <col>5</col>
-          <col>Command target id</col>
-        </row>
-        <row>
-          <col>6</col>
-          <col>Duration of the effect</col>
-        </row>
-      </table>
-
-    </remark>
+    <desc>Retrieves a certain effect. If an effect cannot be found the return value is <code>nil</code>.</desc>
     <examples>
       <example>
-        <code>var obj, i, effect;
-// Alle Objekte durchsuchen
-<funclink>while</funclink> (obj=<funclink>FindObject</funclink>(0, 0,0,0,0, 0, 0,0, 0, obj))
-  {
-  // Von Effektzahl abwärts zählen, da Effekte entfernt werden
+        <code>var i, effect;
+// Search all objects
+<funclink>for</funclink> (var obj in <funclink>FindObjects</funclink>(Find_And()))
+{
+  // Count down from the effect count because effects are being removed
   i = <funclink>GetEffectCount</funclink>(0, obj);
   <funclink>while</funclink> (i--)
     <funclink>if</funclink> (effect = GetEffect(&quot;*Spell&quot;, obj, i))
       <funclink>RemoveEffect</funclink>(0, obj, effect);
-  }
-// Globale Effekte entfernen
+}
+// remove global effects
 i = <funclink>GetEffectCount</funclink>();
 <funclink>while</funclink> (i--)
-  <funclink>if</funclink> (effect = GetEffect(&quot;*Spell&quot;, 0, i))
-    <funclink>RemoveEffect</funclink>(0, 0, effect);</code>
+  <funclink>if</funclink> (effect = GetEffect(&quot;*Spell&quot;, nil, i))
+    <funclink>RemoveEffect</funclink>(0, nil, effect);</code>
         <text>Removes all magic effects from all objects and the global list.</text>
       </example>
     </examples>
     <related>
       <emlink href="script/Effects.html">Effects Documentation</emlink>
       <funclink>AddEffect</funclink>
-      <funclink>ChangeEffect</funclink>
       <funclink>CheckEffect</funclink>
       <funclink>GetEffectCount</funclink>
       <funclink>EffectCall</funclink>
-      <funclink>EffectVar</funclink>
       <funclink>RemoveEffect</funclink>
     </related>
   </func>

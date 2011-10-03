@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2007-2008  Sven Eberhardt
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2011  Julius Michaelis
  * Copyright (c) 2007-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -74,7 +75,7 @@ namespace C4InVal
 			if (rsString.ReplaceChar(';', '_')) fValid = false;
 			if (rsString.ReplaceChar('|', '_')) fValid = false;
 			// the colon is generally prohibited except at pos 2 (C:\...), because it could lead to creation of (invisible) streams on NTFS
-			if (rsString.ReplaceChar(':', '_', 2)) fValid = false;
+			if (rsString.ReplaceChar(':', '_'/*, 2*/)) fValid = false;
 			if (*rsString.getData() == ':') { *rsString.getMData() = '_'; fValid = false; }
 			// validate drive letter
 			if (rsString.getLength()>=2 && *rsString.getPtr(1) == ':')
@@ -132,11 +133,29 @@ namespace C4InVal
 			break;
 
 		case VAL_IRCChannel: // IRC channel name
-			if (rsString.getLength() > 32) { fValid = false; rsString.SetLength(32); }
-			else if (rsString.getLength() < 2) { fValid = false; rsString.Copy("#clonken"); }
-			else if (*rsString.getData() != '#' && *rsString.getData() != '+') { fValid = false; *rsString.getMData() = '#'; }
-			if (rsString.ReplaceChar(' ', '_')) fValid = false;
+		{ // needed for the vector
+			std::vector<StdCopyStrBuf> chans;
+			StdStrBuf SplitPart;
+			StdCopyStrBuf tmp; tmp.Copy(rsString);
+			while(tmp.SplitAtChar(',', &SplitPart)) // Split
+			{
+				chans.push_back(tmp);
+				tmp.Copy(SplitPart);
+			}
+			chans.push_back(tmp);
+			rsString.Clear();
+			for(std::vector<StdCopyStrBuf>::iterator it = chans.begin(); it < chans.end(); ++it) // Reassemble clean
+			{
+				if (it->getLength() > 32) { fValid = false; it->SetLength(32); }
+				else if (it->getLength() < 2) { fValid = false; it->Clear(); }
+				else if (*it->getData() != '#' && *it->getData() != '+') { fValid = false; it->InsertChar('#', 0); }
+				if (it->ReplaceChar(' ', '_')) fValid = false;
+				rsString.Append(*it);
+				if(it+1 < chans.end() && it->getLength() > 0) rsString.Append(",");
+			}
+			if(rsString.getLength() < 2) rsString.Copy("#openclonk");
 			break;
+		}
 
 		case VAL_Comment: // comment - just limit length
 			if (rsString.getLength() > C4MaxComment) { fValid = false; rsString.SetLength(C4MaxComment); }
@@ -146,7 +165,7 @@ namespace C4InVal
 			assert(!"not yet implemented");
 		}
 		// issue warning for invalid adjustments
-		if (!fValid)
+		if (0) if (!fValid)
 		{
 			const char *szOption = "unknown";
 			switch (eOption)
@@ -163,7 +182,7 @@ namespace C4InVal
 			case VAL_IRCChannel:       szOption = "IRC channel";      break;
 			case VAL_Comment:          szOption = "Comment";          break;
 			}
-			//LogF("WARNING: Adjusted invalid user input for \"%s\" to \"%s\"", szOption, rsString.getData());
+			LogF("WARNING: Adjusted invalid user input for \"%s\" to \"%s\"", szOption, rsString.getData());
 		}
 		return !fValid;
 	}

@@ -2,11 +2,13 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000  Matthes Bender
- * Copyright (c) 2005, 2007-2008  Günther Brammer
- * Copyright (c) 2005, 2008  Peter Wortmann
+ * Copyright (c) 2005, 2007-2008, 2010-2011  Günther Brammer
  * Copyright (c) 2005  Sven Eberhardt
+ * Copyright (c) 2005, 2008  Peter Wortmann
  * Copyright (c) 2006  Armin Burgmeier
  * Copyright (c) 2007  Julian Raschke
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2011  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -31,45 +33,10 @@
 #include <C4Version.h>
 #include "C4Network2.h"
 
-#include "MacUtility.h"
+void InstallCrashHandler();
 
 #ifdef _WIN32
 #include <shellapi.h>
-
-#ifdef GENERATE_MINI_DUMP
-
-// Dump generation on crash
-#include <specstrings.h>
-#include <dbghelp.h>
-#include <fcntl.h>
-
-static bool FirstCrash = true;
-
-LONG WINAPI GenerateDump(EXCEPTION_POINTERS* pExceptionPointers)
-{
-	if (!FirstCrash) return EXCEPTION_EXECUTE_HANDLER;
-	FirstCrash = false;
-
-	// Open dump file
-	const char *szFilename = Config.AtExePath("Clonk.dmp");
-	HANDLE file = CreateFile(szFilename, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, 0);
-
-	// Write dump
-	MINIDUMP_EXCEPTION_INFORMATION ExpParam;
-	ExpParam.ThreadId = GetCurrentThreadId();
-	ExpParam.ExceptionPointers = pExceptionPointers;
-	ExpParam.ClientPointers = true;
-	MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(),
-	                  file, MiniDumpNormal, &ExpParam, NULL, NULL);
-
-	// (Try to) log it
-	LogF("FATAL: Clonk crashed! Some developer might be interested in Clonk.dmp...");
-
-	// Pass exception
-	return EXCEPTION_EXECUTE_HANDLER;
-}
-
-#endif // GENERATE_MINI_DUMP
 
 int WINAPI WinMain (HINSTANCE hInst,
                     HINSTANCE hPrevInstance,
@@ -81,9 +48,8 @@ int WINAPI WinMain (HINSTANCE hInst,
 	_CrtSetDbgFlag( _CrtSetDbgFlag( _CRTDBG_REPORT_FLAG ) | _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-#if defined(GENERATE_MINI_DUMP)
-	SetUnhandledExceptionFilter(GenerateDump);
-#endif
+	InstallCrashHandler();
+
 	// Split wide command line to wide argv array
 	std::vector<char*> argv;
 	int argc = 0;
@@ -153,23 +119,22 @@ int main()
 static void crash_handler(int signo)
 {
 	int logfd = STDERR_FILENO;
-	ssize_t ignore;
 	for (;;)
 	{
 		// Print out the signal
-		ignore = write(logfd, C4VERSION ": Caught signal ", sizeof (C4VERSION ": Caught signal ") - 1);
+		write(logfd, C4VERSION ": Caught signal ", sizeof (C4VERSION ": Caught signal ") - 1);
 		switch (signo)
 		{
-		case SIGBUS:  ignore = write(logfd, "SIGBUS", sizeof ("SIGBUS") - 1); break;
-		case SIGILL:  ignore = write(logfd, "SIGILL", sizeof ("SIGILL") - 1); break;
-		case SIGSEGV: ignore = write(logfd, "SIGSEGV", sizeof ("SIGSEGV") - 1); break;
-		case SIGABRT: ignore = write(logfd, "SIGABRT", sizeof ("SIGABRT") - 1); break;
-		case SIGINT:  ignore = write(logfd, "SIGINT", sizeof ("SIGINT") - 1); break;
-		case SIGQUIT: ignore = write(logfd, "SIGQUIT", sizeof ("SIGQUIT") - 1); break;
-		case SIGFPE:  ignore = write(logfd, "SIGFPE", sizeof ("SIGFPE") - 1); break;
-		case SIGTERM: ignore = write(logfd, "SIGTERM", sizeof ("SIGTERM") - 1); break;
+		case SIGBUS:  write(logfd, "SIGBUS", sizeof ("SIGBUS") - 1); break;
+		case SIGILL:  write(logfd, "SIGILL", sizeof ("SIGILL") - 1); break;
+		case SIGSEGV: write(logfd, "SIGSEGV", sizeof ("SIGSEGV") - 1); break;
+		case SIGABRT: write(logfd, "SIGABRT", sizeof ("SIGABRT") - 1); break;
+		case SIGINT:  write(logfd, "SIGINT", sizeof ("SIGINT") - 1); break;
+		case SIGQUIT: write(logfd, "SIGQUIT", sizeof ("SIGQUIT") - 1); break;
+		case SIGFPE:  write(logfd, "SIGFPE", sizeof ("SIGFPE") - 1); break;
+		case SIGTERM: write(logfd, "SIGTERM", sizeof ("SIGTERM") - 1); break;
 		}
-		ignore = write(logfd, "\n", sizeof ("\n") - 1);
+		write(logfd, "\n", sizeof ("\n") - 1);
 		if (logfd == STDERR_FILENO) logfd = GetLogFD();
 		else break;
 		if (logfd < 0) break;
@@ -189,12 +154,6 @@ static void crash_handler(int signo)
 }
 #endif // HAVE_SIGNAL_H
 
-#ifdef __APPLE__
-void restart(char* args[])
-{
-	MacUtility::restart(args);
-}
-#else
 static void restart(char * argv[])
 {
 	// Close all file descriptors except stdin, stdout, stderr
@@ -204,7 +163,6 @@ static void restart(char * argv[])
 	// Execute the new engine
 	execlp(argv[0], argv[0], static_cast<char *>(0));
 }
-#endif
 
 int main (int argc, char * argv[])
 {

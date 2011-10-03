@@ -4,8 +4,11 @@
  * Copyright (c) 1998-2000, 2007  Matthes Bender
  * Copyright (c) 2002, 2004-2005, 2007  Sven Eberhardt
  * Copyright (c) 2005, 2007, 2009  Peter Wortmann
- * Copyright (c) 2005-2009  Günther Brammer
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2005-2011  Günther Brammer
+ * Copyright (c) 2009-2011  Nicolas Hake
+ * Copyright (c) 2010  Tobias Zwick
+ * Copyright (c) 2010  Martin Plicht
+ * Copyright (c) 2010-2011  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -29,36 +32,28 @@
 #include <config.h>
 #endif // HAVE_CONFIG_H
 
+// We need to #define the target Windows version selector macros before we
+// including any MinGW header.
+#ifdef _WIN64
+# define WINVER 0x0501
+# define _WIN32_WINDOWS 0x0501
+# define _WIN32_WINNT  0x0501
+# define _WIN32_IE 0x0501
+# define _AMD64_ 1
+#elif defined(_WIN32)
+# define WINVER 0x0500
+# define _WIN32_WINDOWS 0x0500
+# define _WIN32_WINNT  0x0501
+# define _WIN32_IE 0x0501
+# define _X86_ 1
+#endif
 #ifdef _WIN32
-# ifndef _INC_WINDOWS
-#  ifdef _WIN64
-#   define WINVER 0x0501
-#   define _WIN32_WINDOWS 0x0501
-#   define _WIN32_WINNT  0x0501
-#   define _WIN32_IE 0x0501
-#  else
-#   define WINVER 0x0500
-#   define _WIN32_WINDOWS 0x0500
-#   define _WIN32_WINNT  0x0501
-#   define _WIN32_IE 0x0501
-#  endif
-#  define WIN32_LEAN_AND_MEAN
-#  ifndef NOMINMAX
-#   define NOMINMAX
-#  endif
-#  include <windows.h>
-#  include <mmsystem.h>
-# endif
+#define WIN32_LEAN_AND_MEAN
+#define UNICODE
+#ifndef NOMINMAX
+# define NOMINMAX
 #endif
-
-
-#ifdef _MSC_VER
-#pragma warning(disable : 4786) // long symbol names
-#pragma warning(disable: 4706)
-#pragma warning(disable: 4239)
 #endif
-
-
 
 #ifdef _MSC_VER
 #define DEPRECATED __declspec(deprecated)
@@ -68,26 +63,13 @@
 #define DEPRECATED
 #endif
 
-
-
-// debug memory management
-#ifndef NODEBUGMEM
-#if defined(_DEBUG) && defined(_MSC_VER)
-#if _MSC_VER <= 1200
-#include <new>
-#include <memory>
-#include <crtdbg.h>
-#include <malloc.h>
-inline void *operator new(unsigned int s, const char *szFile, long iLine)
-{ return ::operator new(s, _NORMAL_BLOCK, szFile, iLine); }
-inline void operator delete(void *p, const char *, long)
-{ ::operator delete(p); }
-#define new new(__FILE__, __LINE__)
-#define malloc(size) ::_malloc_dbg(size, _NORMAL_BLOCK, __FILE__, __LINE__)
-#else
-#include <crtdbg.h>
-#endif
-#endif
+#ifdef _MSC_VER
+#pragma warning(disable : 4786) // long symbol names
+#pragma warning(disable: 4706)
+#pragma warning(disable: 4239)
+#pragma warning(disable: 4521) // multiple copy constructors specified
+// Get non-standard <cmath> constants (M_PI etc.)
+#	define _USE_MATH_DEFINES
 #endif
 
 
@@ -136,6 +118,15 @@ typedef ptrdiff_t ssize_t;
 
 
 
+#ifndef HAVE_STATIC_ASSERT
+#include <boost/static_assert.hpp>
+#ifndef BOOST_HAS_STATIC_ASSERT
+#define static_assert(x, y) BOOST_STATIC_ASSERT(x)
+#endif
+#endif
+
+
+
 #if defined(__GNUC__)
 // Allow checks for correct printf-usage
 #define GNUC_FORMAT_ATTRIBUTE __attribute__ ((format (printf, 1, 2)))
@@ -152,7 +143,7 @@ typedef ptrdiff_t ssize_t;
 
 
 // Temporary-To-Reference-Fix
-#if defined(__GNUC__) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 3))
+#if !defined(__clang__) && defined(__GNUC__) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 3))
 #define ALLOW_TEMP_TO_REF(ClassName) operator ClassName & () { return *this; }
 #else
 #define ALLOW_TEMP_TO_REF(ClassName)
@@ -185,19 +176,18 @@ namespace std { template<typename T> inline T &move (T &t) { return t; } }
 
 
 
-#ifndef _WIN32
+#ifdef _WIN32
+
+typedef unsigned long DWORD;
+typedef unsigned char  BYTE;
+typedef unsigned short WORD;
+
+#else
 
 // Windows integer types
 typedef uint32_t       DWORD;
 typedef uint8_t        BYTE;
 typedef uint16_t       WORD;
-
-typedef struct
-{
-	long left; long top; long right; long bottom;
-} RECT;
-
-unsigned long timeGetTime(void);
 
 #include <strings.h>
 inline int stricmp(const char *s1, const char *s2)
@@ -205,11 +195,6 @@ inline int stricmp(const char *s1, const char *s2)
 	return strcasecmp(s1, s2);
 }
 
-#define GetRValue(rgb) ((unsigned char)(rgb))
-#define GetGValue(rgb) ((unsigned char)(((unsigned short)(rgb)) >> 8))
-#define GetBValue(rgb) ((unsigned char)((rgb)>>16))
-#define RGB(r,g,b) ((DWORD)((BYTE)(r)|((BYTE)(g) << 8)|((BYTE)(b) << 16)))
-#define ZeroMemory(d,l) memset((d), 0, (l))
 #endif //_WIN32
 
 
@@ -230,10 +215,36 @@ inline int stricmp(const char *s1, const char *s2)
 #define C4_OS "unknown";
 #endif
 
+// delete item to the recycle bin
+bool EraseItemSafe(const char *szFilename);
+
+// Check whether the OS is "German"
+bool IsGermanSystem();
 
 // open a weblink in an external browser
-bool OpenURL(const char *szURL);
+bool OpenURL(const char* szURL);
 
-bool EraseItemSafe(const char *szFilename);
+// Get a monotonically increasing timestamp in milliseconds
+unsigned int GetTime();
+
+// Windows swprintf: MinGW vs MSVC
+#if defined(__MINGW32__) || defined(__MINGW64__)
+// See http://lists-archives.org/mingw-users/17617-compilation-problem-with-swprintf.html
+
+// For _vsnwprintf:
+#include <cstdio>
+#include <cstdarg>
+
+inline int swprintf(wchar_t* buffer, size_t n, const wchar_t* format, ...)
+{
+	int retval;
+	va_list argptr;
+
+	va_start(argptr, format);
+	retval = _vsnwprintf(buffer, n, format, argptr);
+	va_end(argptr);
+	return retval;
+}
+#endif
 
 #endif // INC_PLATFORMABSTRACTION

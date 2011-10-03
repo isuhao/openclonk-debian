@@ -4,7 +4,7 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2005-2006  Sven Eberhardt
  * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2005-2006, 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -24,6 +24,7 @@
 #include <C4Include.h>
 #include <C4MassMover.h>
 
+#include <C4Components.h>
 #include <C4Random.h>
 #include <C4Material.h>
 #include <C4Game.h>
@@ -158,23 +159,15 @@ bool C4MassMover::Execute()
 	    return true;
 	    }*/
 
-	// Save back material that is about to be overwritten.
-	int omat = 0;
-	if (Game.C4S.Game.Realism.LandscapeInsertThrust)
-		omat = GBackMat(tx, ty);
-
 	// Transfer mass
+	int32_t mat = ::Landscape.ExtractMaterial(x,y);
 	if (Random(10))
-		SBackPix(tx,ty,Mat2PixColDefault(::Landscape.ExtractMaterial(x,y))+GBackIFT(tx,ty));
+		::Landscape.InsertDeadMaterial(mat, tx, ty);
 	else
-		::Landscape.InsertMaterial(::Landscape.ExtractMaterial(x,y), tx, ty, 0, 1);
-
-	// Reinsert material (thrusted aside)
-	if (Game.C4S.Game.Realism.LandscapeInsertThrust && MatValid(omat) && ::MaterialMap.Map[omat].Density > 0)
-		::Landscape.InsertMaterial(omat, tx, ty + 1);
+		::Landscape.InsertMaterial(mat, tx, ty, 0, 1);
 
 	// Create new mover at target
-	::MassMover.Create(tx,ty,!Rnd3());
+	::MassMover.Create(tx,ty,!Random(3));
 
 	return true;
 }

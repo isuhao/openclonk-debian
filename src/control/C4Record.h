@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2001-2002, 2004-2007  Sven Eberhardt
  * Copyright (c) 2004-2006, 2008  Peter Wortmann
+ * Copyright (c) 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -60,6 +61,7 @@ enum C4RecordChunkType // record file chunk type
 	// Streaming
 	RCT_File   = 0x30,  // file data
 	// DEBUGREC
+	RCT_DbgFrame= 0x81,  // frame start in Game::Execute
 	RCT_Block   = 0x82,  // point in Game::Execute
 	RCT_SetPix  = 0x83,  // set landscape pixel
 	RCT_ExecObj = 0x84,  // exec object
@@ -154,7 +156,7 @@ struct C4RCRandom
 struct C4RCCreateObj
 {
 	int oei;
-	int id;
+	char id[32+1];
 	int x,y,ownr;
 };
 
@@ -252,6 +254,7 @@ class C4Record // demo recording
 {
 private:
 	CStdFile CtrlRec; // control file handle
+	CStdFile LogRec; // handle for additional log file in record
 	StdStrBuf sFilename; // recorded scenario file name
 	C4Group RecordGrp; // record scenario group
 	bool fRecording; // set if recording is active
@@ -281,6 +284,8 @@ public:
 	bool StartStreaming(bool fInitial);
 	void ClearStreamingBuf(unsigned int iAmount);
 	void StopStreaming();
+
+	CStdFile * GetLogFile() { return &LogRec; }
 
 private:
 	void Stream(const C4RecordChunkHead &Head, const StdBuf &sBuf);

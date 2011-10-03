@@ -1,7 +1,9 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2006-2008  Armin Burgmeier
+ * Copyright (c) 2006-2008, 2010  Armin Burgmeier
+ * Copyright (c) 2007, 2011  Günther Brammer
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2006-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -21,12 +23,16 @@
 #include <C4Include.h>
 #include <StdGtkWindow.h>
 
+#include <StdApp.h>
+#include "C4Version.h"
+#include "C4Config.h"
+
 #include <X11/Xlib.h>
+#include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
-#include "C4Version.h"
 
 /* CStdGtkWindow */
 
@@ -40,12 +46,18 @@ CStdGtkWindow::~CStdGtkWindow()
 	Clear();
 }
 
-CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, bool HideCursor)
+CStdWindow* CStdGtkWindow::Init(WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, bool HideCursor)
 {
 	Active = true;
 	dpy = pApp->dpy;
 
-	if (!FindInfo()) return 0;
+	if(!FindInfo(Config.Graphics.MultiSampling, &Info))
+	{
+		// Disable multisampling if we don't find a visual which
+		// supports the currently configured setting.
+		if(!FindInfo(0, &Info)) return NULL;
+		Config.Graphics.MultiSampling = 0;
+	}
 
 	assert(!window);
 
@@ -60,8 +72,15 @@ CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow *
 
 	GtkWidget* render_widget = InitGUI();
 
-	gtk_widget_set_colormap(render_widget, gdk_colormap_new(gdkx_visual_get(((XVisualInfo*)Info)->visualid), true));
-
+	GdkScreen * scr = gtk_widget_get_screen(render_widget);
+	GdkVisual * vis = gdk_x11_screen_lookup_visual(scr, ((XVisualInfo*)Info)->visualid);
+#if GTK_CHECK_VERSION(2,91,0)
+	gtk_widget_set_visual(render_widget,vis);
+#else
+	GdkColormap * cmap = gdk_colormap_new(vis, true);
+	gtk_widget_set_colormap(render_widget, cmap);
+	g_object_unref(cmap);
+#endif
 	gtk_widget_show_all(window);
 
 //  XVisualInfo vitmpl; int blub;
@@ -85,7 +104,7 @@ CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow *
 
 	// Wait until window is mapped to get the window's XID
 	gtk_widget_show_now(window);
-	wnd = GDK_WINDOW_XWINDOW(window_wnd);
+	wnd = GDK_WINDOW_XID(window_wnd);
 	gdk_window_add_filter(window_wnd, OnFilter, this);
 
 	XWMHints * wm_hint = XGetWMHints(dpy, wnd);
@@ -100,7 +119,7 @@ CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow *
 		GdkWindow* bin_wnd = GTK_LAYOUT(render_widget)->bin_window;
 #endif
 
-		renderwnd = GDK_WINDOW_XWINDOW(bin_wnd);
+		renderwnd = GDK_WINDOW_XID(bin_wnd);
 	}
 	else
 	{
@@ -110,7 +129,7 @@ CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow *
 		GdkWindow* render_wnd = render_widget->window;
 #endif
 
-		renderwnd = GDK_WINDOW_XWINDOW(render_wnd);
+		renderwnd = GDK_WINDOW_XID(render_wnd);
 	}
 
 	if (pParent) XSetTransientForHint(dpy, wnd, pParent->wnd);
@@ -127,6 +146,14 @@ CStdWindow* CStdGtkWindow::Init(CStdApp * pApp, const char * Title, CStdWindow *
 	gdk_flush();
 
 	return this;
+}
+
+bool CStdGtkWindow::ReInit(CStdApp* pApp)
+{
+	// TODO: Recreate the window with a newly chosen visual
+	// Probably we don't need this, since there is no way to change
+	// MultiSampling when no window is open.
+	return false;
 }
 
 void CStdGtkWindow::Clear()
@@ -147,7 +174,7 @@ void CStdGtkWindow::Clear()
 	// We must free it here since we do not call CStdWindow::Clear()
 	if (Info)
 	{
-		XFree(Info);
+		delete static_cast<XVisualInfo*>(Info);
 		Info = 0;
 	}
 }
@@ -184,7 +211,7 @@ gboolean CStdGtkWindow::OnUpdateKeyMask(GtkWidget* widget, GdkEventKey* event, g
 
 	// For keypress/relases, event->state contains the state _before_
 	// the event, but we need to store the current state.
-#if !GTK_CHECK_VERSION(2,90,7)
+#if !GTK_CHECK_VERSION(2,21,8)
 # define GDK_KEY_Shift_L GDK_Shift_L
 # define GDK_KEY_Shift_R GDK_Shift_R
 # define GDK_KEY_Control_L GDK_Control_L
@@ -204,4 +231,46 @@ gboolean CStdGtkWindow::OnUpdateKeyMask(GtkWidget* widget, GdkEventKey* event, g
 GtkWidget* CStdGtkWindow::InitGUI()
 {
 	return window;
+}
+
+void CStdWindow::RequestUpdate()
+{
+	// just invoke directly
+	PerformUpdate();
+}
+
+bool OpenURL(const char *szURL)
+{
+	GError *error = 0;
+#if GTK_CHECK_VERSION(2,14,0)
+	if (gtk_show_uri(NULL, szURL, GDK_CURRENT_TIME, &error))
+		return true;
+	if (error != NULL)
+	{
+		fprintf (stderr, "Unable to open URL: %s\n", error->message);
+		g_error_free (error);
+	}
+#endif
+	const char * argv[][3] =
+	{
+		{ "xdg-open", szURL, 0 },
+		{ "sensible-browser", szURL, 0 },
+		{ "firefox", szURL, 0 },
+		{ "mozilla", szURL, 0 },
+		{ "konqueror", szURL, 0 },
+		{ "epiphany", szURL, 0 },
+		{ 0, 0, 0 }
+	};
+	for (int i = 0; argv[i][0]; ++i)
+	{
+		error = 0;
+		if (g_spawn_async (g_get_home_dir(), const_cast<char**>(argv[i]), 0, G_SPAWN_SEARCH_PATH, 0, 0, 0, &error))
+			return true;
+		else
+		{
+			fprintf(stderr, "%s\n", error->message);
+			g_error_free (error);
+		}
+	}
+	return false;
 }

@@ -3,7 +3,8 @@
  *
  * Copyright (c) 1998-2000, 2007-2008  Matthes Bender
  * Copyright (c) 2001-2008  Sven Eberhardt
- * Copyright (c) 2004-2008  Günther Brammer
+ * Copyright (c) 2004-2010  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -23,6 +24,7 @@
 #include <C4Include.h>
 #include <C4Menu.h>
 
+#include <C4DefList.h>
 #include <C4Object.h>
 #include <C4FullScreen.h>
 #include <C4ObjectCom.h>
@@ -37,12 +39,12 @@
 #include <C4GameControl.h>
 
 const int32_t     C4MN_DefInfoWdt     = 270, // default width of info windows
-                                        C4MN_DlgWdt         = 270, // default width of dialog windows
-                                                              C4MN_DlgLines       = 5,  // default number of text lines visible in a dialog window
-                                                                                    C4MN_DlgLineMargin  = 5,  // px distance between text items
-                                                                                                          C4MN_DlgOptionLineMargin = 3,  // px distance between dialog option items
-                                                                                                                                     C4MN_DlgPortraitWdt = 64, // size of portrait
-                                                                                                                                                           C4MN_DlgPortraitIndent = 5; // space between portrait and text
+                  C4MN_DlgWdt         = 270, // default width of dialog windows
+                  C4MN_DlgLines       = 5,  // default number of text lines visible in a dialog window
+                  C4MN_DlgLineMargin  = 5,  // px distance between text items
+                  C4MN_DlgOptionLineMargin = 3,  // px distance between dialog option items
+                  C4MN_DlgPortraitWdt = 64, // size of portrait
+                  C4MN_DlgPortraitIndent = 5; // space between portrait and text
 
 const int32_t C4MN_InfoCaption_Delay = 90;
 
@@ -69,7 +71,7 @@ C4MenuItem::C4MenuItem(C4Menu *pMenu, int32_t iIndex, const char *szCaption,
 	if (idID)
 	{
 		C4Def *pDef = C4Id2Def(idID);
-		if (pDef) pDef->GetComponents(&Components, NULL, pMenu ? pMenu->GetParentObject(): NULL);
+		if (pDef) pDef->GetComponents(&Components, NULL);
 	}
 }
 
@@ -251,7 +253,6 @@ C4Menu::C4Menu() : C4GUI::Dialog(100, 100, NULL, true) // will be re-adjusted la
 	// initially invisible: Will be made visible at first drawing by viewport
 	// when the location will be inialized
 	SetVisibility(false);
-	LastSelection = -1;
 }
 
 void C4Menu::Default()
@@ -296,7 +297,7 @@ bool C4Menu::TryClose(bool fOK, bool fControl)
 	// close the menu
 	Close(fOK);
 	Clear();
-	if (::pGUI) ::pGUI->RemoveElement(this);
+	::pGUI->RemoveElement(this);
 
 	// invoke close command
 	if (fControl && CloseCommand.getData())
@@ -339,7 +340,7 @@ bool C4Menu::InitMenu(const char *szEmpty, int32_t iExtra, int32_t iExtraData, i
 		Columns=1;
 	if (iStyle & C4MN_Style_EqualItemHeight) SetEqualItemHeight(true);
 	if (Style == C4MN_Style_Dialog) Alignment = C4MN_Align_Top;
-	if (::pGUI) ::pGUI->ShowDialog(this, false);
+	::pGUI->ShowDialog(this, false);
 	fTextProgressing = false;
 	fActive = true;
 	return true;
@@ -791,7 +792,7 @@ void C4Menu::Draw(C4TargetFacet &cgo)
 	if (!fTextProgressing) ++TimeOnSelection;
 	if (TimeOnSelection >= C4MN_InfoCaption_Delay)
 		if (Style != C4MN_Style_Info) // No tooltips in info menus - doesn't make any sense...
-			if (!::Control.isReplay() && ::pGUI)
+			if (!::Control.isReplay())
 				if (!::pGUI->Mouse.IsActiveInput())
 				{
 					C4MenuItem *pSel = GetSelectedItem();
@@ -838,18 +839,6 @@ void C4Menu::DrawElement(C4TargetFacet &cgo)
 		DrawFrame(cgoExtra.Surface, cgoExtra.X-1, cgoExtra.Y-1, cgoExtra.Wdt+1, cgoExtra.Hgt+1);
 	}
 
-	// live max magic
-	int32_t iUseExtraData = 0;
-	if (Extra == C4MN_Extra_LiveMagicValue || Extra == C4MN_Extra_ComponentsLiveMagic)
-	{
-		C4Object *pMagicSourceObj = ::Objects.SafeObjectPointer(ExtraData);
-		if (pMagicSourceObj) iUseExtraData = pMagicSourceObj->MagicEnergy/MagicPhysicalFactor;
-	}
-	else
-	{
-		iUseExtraData = ExtraData;
-	}
-
 	// Draw specified extra
 	switch (Extra)
 	{
@@ -859,30 +848,8 @@ void C4Menu::DrawElement(C4TargetFacet &cgo)
 	case C4MN_Extra_Value:
 	{
 		if (pDef) ::GraphicsResource.fctWealth.DrawValue(cgoExtra,iValue,0,0,C4FCT_Right);
-		// Flag parent object's owner's wealth display
-		C4Player *pParentPlr = ::Players.Get(GetControllingPlayer());
 	}
 	break;
-	case C4MN_Extra_MagicValue:
-	case C4MN_Extra_LiveMagicValue:
-		if (pDef)
-		{
-			::GraphicsResource.fctMagic.DrawValue2(cgoExtra,iValue,iUseExtraData,0,0,C4FCT_Right);
-		}
-		break;
-	case C4MN_Extra_ComponentsMagic:
-	case C4MN_Extra_ComponentsLiveMagic:
-		// magic value and components
-		if (pItem)
-		{
-			// DrawValue2 kills the facet...
-			int32_t iOriginalX = cgoExtra.X;
-			::GraphicsResource.fctMagic.DrawValue2(cgoExtra,iValue,iUseExtraData,0,0,C4FCT_Right);
-			cgoExtra.Wdt = cgoExtra.X - iOriginalX - 5;
-			cgoExtra.X = iOriginalX;
-			pItem->Components.Draw(cgoExtra,-1,::Definitions,C4D_All,true,C4FCT_Right | C4FCT_Triple | C4FCT_Half);
-		}
-		break;
 	}
 
 	// Restore global clipper
@@ -932,18 +899,11 @@ bool C4Menu::RefillInternal()
 	return true;
 }
 
-void C4Menu::ClearItems(bool fResetSelection)
+void C4Menu::ClearItems()
 {
 	C4MenuItem *pItem;
 	while ((pItem = GetItem(0))) delete pItem;
 	ItemCount=0;
-	if (fResetSelection)
-	{
-		// Remember selection for nested menus
-		LastSelection = Selection;
-		SetSelection(-1, true, false);
-		LocationSet=false;
-	}
 	UpdateScrollBar();
 }
 
