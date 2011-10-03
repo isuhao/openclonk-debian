@@ -1,6 +1,8 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
+ * Copyright (c) 2009-2011  Sven Eberhardt
+ * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -91,6 +93,7 @@ class C4PlayerControlDefs
 private:
 	typedef std::vector<C4PlayerControlDef> DefVecImpl;
 	DefVecImpl Defs;
+	bool clear_previous; // if set is merged, all previous control defs are cleared - use 
 
 public:
 	struct CInternalCons
@@ -102,7 +105,7 @@ public:
 	void UpdateInternalCons();
 
 public:
-	C4PlayerControlDefs() {}
+	C4PlayerControlDefs() : clear_previous(false) {}
 	~C4PlayerControlDefs() {}
 	void Clear();
 
@@ -115,7 +118,7 @@ public:
 	int32_t GetControlIndexByIdentifier(const char *szIdentifier) const; // return CON_None for not found
 	size_t GetCount() const { return Defs.size(); }
 
-	bool operator ==(const C4PlayerControlDefs &cmp) const { return Defs == cmp.Defs; }
+	bool operator ==(const C4PlayerControlDefs &cmp) const { return Defs == cmp.Defs && clear_previous == cmp.clear_previous; }
 };
 
 struct C4PlayerControlRecentKey
@@ -142,6 +145,7 @@ private:
 		C4KeyCodeEx Key;
 		StdCopyStrBuf sKeyName;
 		void CompileFunc(StdCompiler *pComp);
+		void UpdateKeyName();
 		bool operator ==(const KeyComboItem &cmp) const { return sKeyName==cmp.sKeyName; }
 	};
 	typedef std::vector<KeyComboItem> KeyComboVec;
@@ -155,6 +159,10 @@ private:
 	int32_t iControl; // the control to be executed on this key, i.e. the resolved sControlName
 	int32_t iPriority;          // higher priority assignments get handled first
 	bool fOverrideAssignments;  // override all other assignments to the same key?
+	bool is_group_start; // true for first assignment in a group (for grouping in control config list box)
+
+	const C4PlayerControlAssignment *inherited_assignment; // valid for assignments that were copied from a parent: source assignment
+	bool is_inherited; // set for assignments that were copied from a parent set without modification
 
 public:
 	// action to be performed on the control upon this key
@@ -173,23 +181,33 @@ private:
 	bool fRefsResolved; // set to true after sControlName and sKeyNames have been resolved to runtime values
 
 public:
-	C4PlayerControlAssignment() : TriggerKey(), iControl(CON_None), iPriority(0), fOverrideAssignments(false), iTriggerMode(CTM_Default), fRefsResolved(false) {}
+	C4PlayerControlAssignment() : TriggerKey(), iControl(CON_None), iPriority(0), fOverrideAssignments(false), iTriggerMode(CTM_Default), fRefsResolved(false), inherited_assignment(NULL),is_inherited(false), is_group_start(false) {}
 	~C4PlayerControlAssignment() {}
 
 	void CompileFunc(StdCompiler *pComp);
+	void CopyKeyFrom(const C4PlayerControlAssignment &src_assignment);
 	bool ResolveRefs(class C4PlayerControlAssignmentSet *pParentSet, C4PlayerControlDefs *pControlDefs); // resolve references between assignments
 	bool IsComboMatched(const C4PlayerControlRecentKeyList &DownKeys, const C4PlayerControlRecentKeyList &RecentKeys) const; // check if combo is currently fulfilled (assuming TriggerKey is already matched)
+	void SetInherited(bool to_val) { is_inherited = to_val; }
+	void SetInheritedAssignment(const C4PlayerControlAssignment *to_val) { inherited_assignment = to_val; }
+	void ResetKeyToInherited();
+	bool IsKeyChanged() const;
+	void SetControlName(const char *control_name) { sControlName.Copy(control_name); }
+	void SetKey(const C4KeyCodeEx &key);
 
 	bool operator ==(const C4PlayerControlAssignment &cmp) const; // doesn't compare resolved TriggerKey/iControl
 	bool operator <(const C4PlayerControlAssignment &cmp) const { return iPriority > cmp.iPriority; } // assignments are processed in DESCENDING priority!
 	const char *GetControlName() const { return sControlName.getData(); }
 	int32_t GetControl() const { return iControl; }
+	bool IsGroupStart() const { return is_group_start; }
 	bool IsRefsResolved() const { return fRefsResolved; }
 	bool IsAlwaysUnhandled() const { return !!(iTriggerMode & CTM_AlwaysUnhandled); }
 	int32_t GetTriggerMode() const { return iTriggerMode; }
 	const C4KeyCodeEx &GetTriggerKey() const { return TriggerKey; }
 	bool HasCombo() const { return KeyCombo.size()>1; }
 	bool IsOverrideAssignments() const { return fOverrideAssignments; }
+	bool IsInherited() const { return is_inherited; }
+	const C4PlayerControlAssignment *GetInheritedAssignment() const { return inherited_assignment; }
 };
 
 typedef std::vector<C4PlayerControlAssignment> C4PlayerControlAssignmentVec;
@@ -200,26 +218,35 @@ typedef std::vector<const C4PlayerControlAssignment *> C4PlayerControlAssignment
 class C4PlayerControlAssignmentSet
 {
 private:
-	StdCopyStrBuf sName;
+	StdCopyStrBuf sName, sGUIName, sParentSetName;
+	const C4PlayerControlAssignmentSet *parent_set;
 	C4PlayerControlAssignmentVec Assignments;
-	bool has_keyboard;
+	bool has_keyboard;  
 	bool has_mouse;
 	bool has_gamepad;
 
 public:
-	C4PlayerControlAssignmentSet() : has_keyboard(true), has_mouse(true), has_gamepad(false) {}
+	C4PlayerControlAssignmentSet() : parent_set(NULL), has_keyboard(true), has_mouse(true), has_gamepad(false) {}
 	~C4PlayerControlAssignmentSet() {}
+	void InitEmptyFromTemplate(const C4PlayerControlAssignmentSet &template_set); // copy all fields except assignments
 
 	void CompileFunc(StdCompiler *pComp);
 	bool ResolveRefs(C4PlayerControlDefs *pControlDefs); // resolve references between assignments
+	void SortAssignments();
 
-	void MergeFrom(const C4PlayerControlAssignmentSet &Src, bool fLowPrio); // take over all assignments defined in Src
+	enum MergeMode { MM_Normal, MM_LowPrio, MM_Inherit, MM_ConfigOverload };
+
+	void MergeFrom(const C4PlayerControlAssignmentSet &Src, MergeMode merge_mode); // take over all assignments defined in Src
+	C4PlayerControlAssignment *CreateAssignmentForControl(const char *control_name);
+	void RemoveAssignmentByControlName(const char *control_name);
 
 	const char *GetName() const { return sName.getData(); }
+	const char *GetGUIName() const { return sGUIName.getData(); }
 	bool IsWildcardName() const { return IsWildcardString(sName.getData()); }
 
+	C4PlayerControlAssignment *GetAssignmentByIndex(int32_t index);
 	C4PlayerControlAssignment *GetAssignmentByControlName(const char *szControlName);
-	C4PlayerControlAssignment *GetAssignmentByControl(int control);
+	C4PlayerControlAssignment *GetAssignmentByControl(int32_t control);
 	void GetAssignmentsByKey(const C4PlayerControlDefs &rDefs, const C4KeyCodeEx &key, bool fHoldKeysOnly, C4PlayerControlAssignmentPVec *pOutVec, const C4PlayerControlRecentKeyList &DownKeys, const C4PlayerControlRecentKeyList &RecentKeys) const; // match only by TriggerKey (last key of Combo) if fHoldKeysOnly
 	void GetTriggerKeys(const C4PlayerControlDefs &rDefs, C4KeyCodeExVec *pRegularKeys, C4KeyCodeExVec *pHoldKeys) const; // put all trigger keys of keyset into output vectors
 
@@ -241,16 +268,22 @@ class C4PlayerControlAssignmentSets
 private:
 	typedef std::list<C4PlayerControlAssignmentSet> AssignmentSetList;
 	AssignmentSetList Sets;
+	bool clear_previous;
 
 public:
-	C4PlayerControlAssignmentSets() {}
+	C4PlayerControlAssignmentSets() : clear_previous(false) {}
 	~C4PlayerControlAssignmentSets() {}
 	void Clear();
 
 	void CompileFunc(StdCompiler *pComp);
+	bool operator ==(const C4PlayerControlAssignmentSets &cmp) const;
 	bool ResolveRefs(C4PlayerControlDefs *pControlDefs); // resolve references between assignments
+	void SortAssignments();
 
-	void MergeFrom(const C4PlayerControlAssignmentSets &Src, bool fLowPrio); // take over all assignments in known sets and new sets defined in Src
+	void MergeFrom(const C4PlayerControlAssignmentSets &Src, C4PlayerControlAssignmentSet::MergeMode merge_mode); // take over all assignments in known sets and new sets defined in Src
+
+	C4PlayerControlAssignmentSet *CreateEmptySetByTemplate(const C4PlayerControlAssignmentSet &template_set);
+	void RemoveSetByName(const char *set_name);
 
 	C4PlayerControlAssignmentSet *GetSetByName(const char *szName);
 	C4PlayerControlAssignmentSet *GetDefaultSet();

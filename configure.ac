@@ -1,21 +1,27 @@
-dnl Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
-
-dnl Permission to use, copy, modify, and/or distribute this software for any
-dnl purpose with or without fee is hereby granted, provided that the above
-dnl copyright notice and this permission notice appear in all copies.
-
-dnl THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-dnl WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-dnl MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-dnl ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-dnl WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-dnl ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-dnl OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 dnl Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)
-AC_INIT(clonk, 5)
-AC_COPYRIGHT([©2005-2010 Günther Brammer])
+# Copyright (c) 2005-2011  GÃ¼nther Brammer
+# Copyright (c) 2005, 2008  Peter Wortmann
+# Copyright (c) 2006  Julian Raschke
+# Copyright (c) 2010  Armin Burgmeier
+# Copyright (c) 2010  Martin Plicht
+# Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
+
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+AC_PREREQ([2.67])
+AC_INIT([clonk], [5])
+AC_COPYRIGHT([Â©2005-2011 GÃ¼nther Brammer])
 AC_CONFIG_SRCDIR([/src/C4Game.cpp])
 AC_CONFIG_AUX_DIR([autotools])
 AC_CONFIG_HEADER([config.h])
@@ -24,12 +30,12 @@ AC_CANONICAL_HOST
 dnl foreign to tell automake to shut up,
 dnl and subdir-objects because it makes the Makefile smaller.
 dnl no-define because PACKAGE and VERSION are not used
-AM_INIT_AUTOMAKE([foreign nostdinc no-define 1.10])
+AM_INIT_AUTOMAKE([foreign tar-ustar nostdinc no-define 1.10])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 AC_PROG_CXX
 AC_LANG([C++])
-AX_CHECK_COMPILER_FLAGS([-std=gnu++0x], [CXX="${CXX} -std=gnu++0x"])
+AX_CHECK_COMPILE_FLAG([-std=gnu++0x], [CXX="${CXX} -std=gnu++0x"], [])
 AC_COMPILE_IFELSE([
 void f(struct D&&); int main() { return 0; }
 ], [AC_DEFINE([HAVE_RVALUE_REF], [], [C++ Compiler has rvalue references, a C++0x feature.])], [AX_PROG_CXX_REFTOTEMP])
@@ -56,7 +62,7 @@ AM_CONDITIONAL(MACOSX, [test $osx = true])
 
 # various used headers
 dnl the whitespace is there to prevent AC_INCLUDES_DEFAULT
-AC_CHECK_HEADERS([stdint.h unistd.h poll.h sys/stat.h sys/types.h locale.h sys/socket.h signal.h langinfo.h sys/inotify.h sys/syscall.h], , , [[ ]])
+AC_CHECK_HEADERS([stdint.h unistd.h poll.h sys/file.h sys/stat.h sys/types.h locale.h sys/socket.h signal.h langinfo.h sys/eventfd.h sys/timerfd.h sys/inotify.h], , , [[ ]])
 # Mingw does not ship with multimon.h
 AC_CHECK_HEADERS([multimon.h io.h direct.h share.h], [], [], [[#include <windows.h>]])
 # iconv
@@ -79,7 +85,7 @@ if test "x$ac_cv_header_execinfo_h" = xyes; then
 fi
 
 AC_ARG_ENABLE([debug],
-  [AC_HELP_STRING([--enable-debug], [debugging options [default=no]])],
+  [AS_HELP_STRING([--enable-debug],[debugging options [default=no]])],
   , [enable_debug=no])
 if test $enable_debug = yes; then
   AC_DEFINE([_DEBUG], 1, [compile with debug options])
@@ -88,37 +94,56 @@ else
 fi
 
 AC_ARG_ENABLE([debugrec],
-  [AC_HELP_STRING([--enable-debugrec], [write additional debug control to records [default=no]])],
+  [AS_HELP_STRING([--enable-debugrec],[write additional debug control to records [default=no]])],
     , [enable_debugrec=no])
 if test $enable_debugrec = yes; then
   AC_DEFINE([DEBUGREC], 1, [Activate DebugRecs])
 fi
 
 AC_ARG_ENABLE([console],
-  [AC_HELP_STRING([--enable-console],[compile as pure console application [default=no]])],
+  [AS_HELP_STRING([--enable-console],[compile as pure console application [default=no]])],
   , [enable_console=no])
 
 AC_ARG_ENABLE([sound],
-  [AC_HELP_STRING([--enable-sound],[compile with sound support [default=yes]])],
+  [AS_HELP_STRING([--enable-sound],[compile with sound support [default=yes]])],
   , [if test $enable_console = yes; then enable_sound=no; else if test $win32 = true; then enable_sound=no; else enable_sound=yes; fi; fi])
 
 # GTK+
-GTK_REQUIRED="glib-2.0 >= 2.4 gtk+-2.0 >= 2.4"
+GTK2_REQUIRED="glib-2.0 >= 2.8 gtk+-2.0 >= 2.8"
+GTK3_REQUIRED="glib-2.0 >= 2.27.5 gtk+-3.0 >= 2.99.0"
+PKG_PROG_PKG_CONFIG
+AC_MSG_CHECKING([which gtk+ version to compile against])
 AC_ARG_WITH([gtk],
-  [AC_HELP_STRING([--with-gtk], [Use gtk for the developer mode [default=auto]])],
-  , [AS_IF([test $enable_console = no],[PKG_CHECK_EXISTS([$GTK_REQUIRED], [with_gtk=yes], [with_gtk=no])],[with_gtk=no])])
-AS_IF([test $with_gtk = yes],[
+  [AS_HELP_STRING([--with-gtk=2.0|3.0],[which gtk+ version to compile against [default: auto]])],
+  [case "$with_gtk" in
+     2.0|3.0) ;;
+     no) ;;
+     *) AC_MSG_ERROR([invalid gtk version specified]) ;;
+   esac],
+  [AS_IF([test $enable_console = no],
+    [PKG_CHECK_EXISTS([$GTK3_REQUIRED],
+      [with_gtk=3.0],
+      [PKG_CHECK_EXISTS([$GTK2_REQUIRED],
+        [with_gtk=2.0],
+        [with_gtk=no])])],
+    [with_gtk=no])])
+AC_MSG_RESULT([$with_gtk])
+AS_IF([test $with_gtk != no],[
+  case "$with_gtk" in
+  2.0) GTK_REQUIRED="$GTK2_REQUIRED"
+       ;;
+  3.0) GTK_REQUIRED="$GTK3_REQUIRED"
+       ;;
+  esac
   PKG_CHECK_MODULES(GTK, [$GTK_REQUIRED])
   AC_DEFINE([WITH_GLIB], 1, [Glib])
   AC_DEFINE([WITH_DEVELOPER_MODE], 1, [Developer mode])
-  DEVELOPER_MODE=true
 ])
-AM_CONDITIONAL(DEVELOPER_MODE, [test $with_gtk = yes])
-
+AM_CONDITIONAL(DEVELOPER_MODE, [test $with_gtk != no])
 
 # OpenAL
 AC_ARG_WITH([openal],
-  [AC_HELP_STRING([--with-openal],[compile with openal support [default=no]])],
+  [AS_HELP_STRING([--with-openal],[compile with openal support [default=no]])],
   , [with_openal=no])
 if test $with_openal = yes; then
   PKG_CHECK_MODULES(OPENAL, [vorbis vorbisfile openal])
@@ -151,7 +176,7 @@ if test $with_sdl = yes; then
       [$SDL_LIBS])
   fi
   AC_ARG_ENABLE(sdlmainloop,
-    [AC_HELP_STRING([--enable-sdlmainloop],[use SDL instead of X11 or Win32 [default=no]])],
+    [AS_HELP_STRING([--enable-sdlmainloop],[use SDL instead of X11 or Win32 [default=no]])],
     , [if test $osx = true; then enable_sdlmainloop=yes; else enable_sdlmainloop=no; fi ])
 else
   enable_sdlmainloop=no
@@ -164,7 +189,7 @@ AM_CONDITIONAL(SDL_MAIN_LOOP, [test $enable_sdlmainloop = yes])
 
 if test $enable_sound = yes; then
   AC_ARG_ENABLE([mp3],
-    [AC_HELP_STRING([--enable-mp3],[enable mp3 support [default=no]])],
+    [AS_HELP_STRING([--enable-mp3],[enable mp3 support [default=no]])],
     , [enable_mp3=no])
   if test $enable_mp3 = yes; then
     AC_DEFINE([USE_MP3], 1, [MP3 music])
@@ -246,7 +271,7 @@ fi
 
 # OpenGL
 AC_ARG_WITH([gl],
-  [AC_HELP_STRING([--with-gl],[compile with opengl support [default=yes]])],
+  [AS_HELP_STRING([--with-gl],[compile with opengl support [default=yes]])],
   , [if test $enable_console = yes; then with_gl=no; else with_gl=yes; fi])
 if test $with_gl = yes; then
   if test $osx = true; then
@@ -274,7 +299,7 @@ fi
 
 # DirectX
 AC_ARG_WITH([directx],
-  [AC_HELP_STRING([--with-directx],[compile with directx support [default=no]])],
+  [AS_HELP_STRING([--with-directx],[compile with directx support [default=no]])],
   , [with_directx="no"])
 if test "$with_directx" = yes; then
   AC_CHECK_LIB(d3d9, main, [CLONK_LIBS="-ld3d9 $CLONK_LIBS"],
@@ -283,7 +308,7 @@ if test "$with_directx" = yes; then
 fi
 
 AC_ARG_WITH([automatic-update],
-  [AC_HELP_STRING([--with-automatic-update],[enable support for automatic engine updates [default=yes]])],
+  [AS_HELP_STRING([--with-automatic-update],[enable support for automatic engine updates [default=yes]])],
   , [with_automatic_update="yes"])
 if test "$with_automatic_update" = "yes"; then
   AC_DEFINE([WITH_AUTOMATIC_UPDATE], 1, [Enable automatic update system])
@@ -295,23 +320,23 @@ if test $win32 = false; then
   AC_SUBST(PTHREAD_LIBS)
   AC_SUBST(PTHREAD_CFLAGS)
 
-  # inotify syscall workaround
-  AC_CHECK_DECL(SYS_inotify_init,
-  	AC_DEFINE([HAVE_SYSCALL_INOTIFY], 1, [inotify reachable using syscall]),,
-  	[#include <sys/syscall.h>])
-
   # FMod is used for windows only
   AM_CONDITIONAL(USE_FMOD, false)
 else
   # Windows
-  for WIN32LIB in gdi32 comdlg32 winmm ws2_32 vfw32
+  for WIN32LIB in gdi32 comdlg32 winmm ws2_32
   do
     AC_CHECK_LIB([$WIN32LIB], main, [CLONK_LIBS="-l$WIN32LIB $CLONK_LIBS"], [AC_MSG_ERROR([$WIN32LIB not found.])])
   done
 
+  AC_CHECK_LIB([vfw32], main, [
+    CLONK_LIBS="-lvfw32 $CLONK_LIBS"
+    AC_DEFINE([HAVE_VFW32], 1, [ ])
+    ], [])
+
   # FMod (Library comes with standard)
   if test "$enable_sound" = yes; then
-    AC_DEFINE([USE_FMOD], 1, [Wether FMOD shall be used])
+    AC_DEFINE([USE_FMOD], 1, [Whether FMOD shall be used])
   fi
   AM_CONDITIONAL(USE_FMOD, test "$enable_sound" = yes)
 

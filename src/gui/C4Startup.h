@@ -2,7 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2005-2007  Sven Eberhardt
- * Copyright (c) 2008  Günther Brammer
+ * Copyright (c) 2008, 2011  Günther Brammer
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -26,13 +26,14 @@
 #define C4CFN_StartupBackgroundMain    "StartupMainMenuBG"
 
 // special colors for startup designs
-const int32_t C4StartupFontClr         = 0xff000000,
+const int32_t
+	C4StartupFontClr         = 0xff000000,
     C4StartupFontClrDisabled = 0xff7f7f7f,
-                               C4StartupEditBGColor     = 0x00000000,
-                                                          C4StartupEditBorderColor = 0xffa4947a,
-                                                                                     C4StartupBtnFontClr      = 0xff202020,
-                                                                                                                C4StartupBtnBorderColor1 = 0xffccc3b4,
-                                                                                                                                           C4StartupBtnBorderColor2 = 0xff94846a;
+	C4StartupEditBGColor     = 0x00000000,
+	C4StartupEditBorderColor = 0xffa4947a,
+	C4StartupBtnFontClr      = 0xff202020,
+	C4StartupBtnBorderColor1 = 0xffccc3b4,
+	C4StartupBtnBorderColor2 = 0xff94846a;
 
 // graphics needed only by startup
 class C4StartupGraphics
@@ -88,6 +89,8 @@ class C4StartupDlg : public C4GUI::FullscreenDialog
 {
 public:
 	C4StartupDlg(const char *szTitle) : C4GUI::FullscreenDialog(szTitle, NULL) {}
+
+	virtual bool SetSubscreen(const char *szToScreen) { return false; } // go to specified subdialog, e.g. a specific property sheet in the options dlg
 };
 
 class C4Startup
@@ -102,20 +105,18 @@ public:
 	enum DialogID { SDID_Main=0, SDID_ScenSel, SDID_ScenSelNetwork, SDID_NetJoin, SDID_Options, SDID_About, SDID_PlrSel, SDID_Back };
 
 private:
-	bool fInStartup, fAborted, fLastDlgWasBack;
+	bool fInStartup, fLastDlgWasBack;
 	static C4Startup *pInstance; // singleton instance
 	static DialogID eLastDlgID;
+	static StdCopyStrBuf sSubDialog; // subdialog to go into (e.g.: property sheet in options dialog)
 	static bool fFirstRun;
 
 	C4StartupDlg *pLastDlg, *pCurrDlg; // startup dlg that is currently shown, and dialog that was last shown
 
 protected:
-	// break modal loop and...
-	void Start(); // ...start game
-	void Exit();  // ...quit to system
-
-	bool DoStartup(); // run main dlg
-	class C4StartupDlg *SwitchDialog(DialogID eToDlg, bool fFade=true); // do transition to another dialog
+	void DoStartup(); // create main dlg
+	void DontStartup(); // close main dlg
+	class C4StartupDlg *SwitchDialog(DialogID eToDlg, bool fFade=true, const char *szSubDialog=NULL); // do transition to another dialog
 
 	friend class C4StartupMainDlg;
 	friend class C4StartupNetDlg;
@@ -127,7 +128,8 @@ protected:
 public:
 	static C4Startup *EnsureLoaded(); // create and load startup data if not done yet
 	static void Unload(); // make sure startup data is destroyed
-	static bool Execute(); // run startup - return false if game is to be closed
+	static void InitStartup();
+	static void CloseStartup();
 	static bool SetStartScreen(const char *szScreen); // set screen that is shown first by case insensitive identifier
 
 	static C4Startup *Get() { assert(pInstance); return pInstance; }

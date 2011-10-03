@@ -27,14 +27,10 @@
 
 C4Network2HTTPClient HTTPClient;
 
-C4GUI::Label *pStatusLabel;
-C4GUI::ProgressBar *pProgressBar;
-
-
 C4DownloadDlg::C4DownloadDlg(const char *szDLType) : C4GUI::Dialog(C4GUI_ProgressDlgWdt, 100, FormatString(LoadResStr("IDS_CTL_DL_TITLE"), szDLType).getData(), false), szError(NULL)
 {
 #ifdef HAVE_WINSOCK
-	bool fWinSock = AcquireWinSock();
+	fWinSock = AcquireWinSock();
 #endif
 	// add all elements - will be reposisioned when text is displayed
 	AddElement(pIcon = new C4GUI::Icon(C4Rect(), C4GUI::Ico_NetWait));
@@ -185,11 +181,7 @@ bool C4DownloadDlg::DownloadFile(const char *szDLType, C4GUI::Screen *pScreen, c
 	C4DownloadDlg *pDlg = new C4DownloadDlg(szDLType);
 	if (!pDlg->ShowModal(pScreen, szURL, szSaveAsFilename))
 	{
-		// an error occurred. Did the GUI get deleted?
-		if (!C4GUI::IsGUIValid())
-			// then the dlg got deleted as well, and we should get out ASAP
-			return false;
-		// otherwise, show an appropriate error
+		// show an appropriate error
 		const char *szError = pDlg->GetError();
 		if (!szError || !*szError) szError = LoadResStr("IDS_PRC_UNKOWNERROR");
 		StdStrBuf sError;

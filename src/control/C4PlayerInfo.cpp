@@ -1,13 +1,14 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2004-2008  Sven Eberhardt
+ * Copyright (c) 1998-2000, 2007  Matthes Bender
+ * Copyright (c) 2004-2008, 2010  Sven Eberhardt
  * Copyright (c) 2005-2007  Peter Wortmann
  * Copyright (c) 2006  Florian Groß
- * Copyright (c) 2006  Günther Brammer
- * Copyright (c) 2007  Matthes Bender
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2007  Julian Raschke
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2004-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -76,11 +77,9 @@ bool C4PlayerInfo::LoadFromLocalFile(const char *szFilename)
 	assert(!Game.C4S.Head.Replay);
 	// clear previous
 	Clear();
-	// find (possibly overridden) filename
-	szFilename = Config.AtDataReadPath(szFilename);
 	// open player file group
 	C4Group Grp;
-	if (!Grp.Open(szFilename)) return false;
+	if (!Reloc.Open(Grp, szFilename)) return false;
 
 	// read core
 	C4PlayerInfoCore C4P;
@@ -116,7 +115,7 @@ bool C4PlayerInfo::SetAsScriptPlayer(const char *szName, uint32_t dwColor, uint3
 	Clear();
 	// set parameters
 	eType = C4PT_Script;
-	dwColor = dwOriginalColor = 0xff000000 | (dwColor & 0xffffff); // ignore alpha
+	this->dwColor = dwOriginalColor = 0xff000000 | (dwColor & 0xffffff); // ignore alpha
 	dwAlternateColor = 0;
 	this->sName.CopyValidated(szName);
 	idExtraData = idExtra;
@@ -1216,7 +1215,7 @@ bool C4PlayerInfoList::Load(C4Group &hGroup, const char *szFromFile, C4LangStrin
 	Clear();
 	// load file contents
 	StdStrBuf Buf;
-	if (!hGroup.LoadEntryString(szFromFile, Buf))
+	if (!hGroup.LoadEntryString(szFromFile, &Buf))
 		// no file is OK; means no player infos
 		return true;
 	// replace strings
@@ -1248,70 +1247,6 @@ bool C4PlayerInfoList::Save(C4Group &hGroup, const char *szToFile)
 	catch (StdCompiler::Exception *)
 		{ return false; }
 	// done, success
-	return true;
-}
-
-bool C4PlayerInfoList::LoadFromGameText(const char *pSource)
-{
-	C4ClientPlayerInfos *pkPlrInfo = NULL;
-	// copied stuff from C4Game::LoadPlayerFilenames...
-	// hacking some data out of the game text. Luckily, the format is different nowadays.
-	const char *szPos;
-	char szLinebuf[30+_MAX_PATH+1];
-	if ((szPos = SSearch(pSource,"[PlayerFiles]")))
-		while (true)
-		{
-			szPos = SAdvanceSpace(szPos);
-			SCopyUntil(szPos,szLinebuf,0x0D,30+_MAX_PATH);
-			szPos += SLen(szLinebuf);
-			if (SEqual2(szLinebuf,"Player") && (SCharPos('=',szLinebuf)>-1))
-			{
-				const char *szPlayerFilename = szLinebuf+SCharPos('=',szLinebuf)+1;
-				// szPlayerFilename points to the filename of a player
-				C4PlayerInfo *pNewInfo = new C4PlayerInfo();
-				// compose filename within scenario file
-				char szPlrInSzenName[_MAX_PATH*2];
-				SCopy(Game.ScenarioFilename, szPlrInSzenName);
-				AppendBackslash(szPlrInSzenName);
-				SAppend(szPlayerFilename, szPlrInSzenName);
-				// load info from there
-				if (!pNewInfo->LoadFromLocalFile(szPlrInSzenName))
-				{
-					LogF(LoadResStr("IDS_ERR_LOAD_PLRINFO"), szPlayerFilename);
-					delete pNewInfo;
-				}
-				else
-				{
-					// loading success
-					// ensure holding packet is generated
-					if (!pkPlrInfo) pkPlrInfo = new C4ClientPlayerInfos();
-					// determine player number
-					int iJoinedNumber = C4P_Number_None;
-					// store "Player1"
-					StdStrBuf sPlrIndex; sPlrIndex.Copy(szLinebuf, SCharPos('=',szLinebuf));
-					// search for section "[Player1]" in game text
-					StdStrBuf sPlrSect; sPlrSect.Format("[%s]", sPlrIndex.getData());
-					const char *szPlrSect = SSearch(pSource, sPlrSect.getData());
-					// get "Index=%d" from that section
-					if (szPlrSect && (szPlrSect=SSearch(szPlrSect, "Index="))) sscanf(szPlrSect, "%d", &iJoinedNumber);
-					// this info is already joined
-					pNewInfo->SetJoined(iJoinedNumber);
-					// add loaded info to list
-					pkPlrInfo->AddInfo(pNewInfo);
-				}
-			}
-			else
-				break;
-		}
-	// anything loaded?
-	if (!pkPlrInfo) return false;
-	int32_t iJoinedPlrCount = pkPlrInfo->GetPlayerCount();
-	if (!iJoinedPlrCount) { delete pkPlrInfo; return false; }
-	// Workaround: Because MaxPlayers may not be loaded yet, make sure it's large enough to allow all currently joined players
-	if (Game.Parameters.MaxPlayers < iJoinedPlrCount) Game.Parameters.MaxPlayers = iJoinedPlrCount;
-	// add it
-	AddInfo(pkPlrInfo);
-	// success
 	return true;
 }
 
@@ -1515,7 +1450,7 @@ bool C4PlayerInfoList::RecreatePlayerFiles()
 					if (Game.C4S.Head.Replay)
 					{
 						// replay of resumed savegame: RecreatePlayers saves used player files into the record group in this manner
-						sFilenameInRecord.Format("Recreate-%d.c4p", pInfo->GetID());
+						sFilenameInRecord.Format("Recreate-%d.ocp", pInfo->GetID());
 						szCurrPlrFile = sFilenameInRecord.getData();
 					}
 					else
@@ -1568,7 +1503,7 @@ bool C4PlayerInfoList::RecreatePlayerFiles()
 	return true;
 }
 
-bool C4PlayerInfoList::RecreatePlayers()
+bool C4PlayerInfoList::RecreatePlayers(C4ValueNumbers * numbers)
 {
 	// check all player infos
 	for (int32_t i=0; i<iClientCount; ++i)
@@ -1642,11 +1577,11 @@ bool C4PlayerInfoList::RecreatePlayers()
 				if (::Control.isRecord() && szFilename)
 				{
 					StdStrBuf sFilenameInRecord;
-					sFilenameInRecord.Format("Recreate-%d.c4p", pInfo->GetID());
+					sFilenameInRecord.Format("Recreate-%d.ocp", pInfo->GetID());
 					::Control.RecAddFile(szFilename, sFilenameInRecord.getData());
 				}
 				// recreate join directly
-				::Players.Join(szFilename, false, idAtClient, szAtClientName, pInfo);
+				::Players.Join(szFilename, false, idAtClient, szAtClientName, pInfo, numbers);
 				// delete temporary files immediately
 				if (pInfo->IsTempFile()) pInfo->DeleteTempFile();
 			}
@@ -1655,11 +1590,10 @@ bool C4PlayerInfoList::RecreatePlayers()
 	return true;
 }
 
-bool C4PlayerInfoList::RemoveUnassociatedPlayers(C4PlayerInfoList &rSavegamePlayers)
+void C4PlayerInfoList::RemoveUnassociatedPlayers(C4PlayerInfoList &rSavegamePlayers)
 {
 	// check all joined infos
 	C4ClientPlayerInfos *pClient; int iClient=0;
-	bool fSuccess = true;
 	while ((pClient = rSavegamePlayers.GetIndexedInfo(iClient++)))
 	{
 		C4PlayerInfo *pInfo; int iInfo = 0;
@@ -1672,13 +1606,10 @@ bool C4PlayerInfoList::RemoveUnassociatedPlayers(C4PlayerInfoList &rSavegamePlay
 				{
 					LogF(LoadResStr("IDS_PRC_REMOVEPLR"), pInfo->GetName());
 				}
-				else
-					fSuccess = false;
 			}
 			pInfo->SetRemoved();
 		}
 	}
-	return true;
 }
 
 bool C4PlayerInfoList::SetAsRestoreInfos(C4PlayerInfoList &rFromPlayers, bool fSaveUserPlrs, bool fSaveScriptPlrs, bool fSetUserPlrRefToLocalGroup, bool fSetScriptPlrRefToLocalGroup)
@@ -1737,7 +1668,7 @@ bool C4PlayerInfoList::SetAsRestoreInfos(C4PlayerInfoList &rFromPlayers, bool fS
 					if (fSetScriptPlrRefToLocalGroup)
 					{
 						// just compose a unique filename for script player
-						pInfo->SetFilename(FormatString("ScriptPlr-%d.c4p", (int)pInfo->GetID()).getData());
+						pInfo->SetFilename(FormatString("ScriptPlr-%d.ocp", (int)pInfo->GetID()).getData());
 					}
 				}
 			}

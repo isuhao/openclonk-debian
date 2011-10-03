@@ -7,10 +7,10 @@
     <title>GetBreath</title>
     <category>Objects</category>
     <subcat>Living Beings</subcat>
-    <version>4.6.5.0 CP</version>
+    <version>5.1 OC</version>
     <syntax><rtype>int</rtype></syntax>
-    <desc>Returns the current breath value of an object in percent. 100% represent the maximum physical value of 100,000. Also see DefCore section [Physical].</desc>
-    <related><funclink>GetPhysical</funclink></related>
+    <desc>Returns the current breath value of an object, this is the number of frames an object can still hold its breath.</desc>
+    <related><funclink>DoBreath</funclink></related>
   </func>
   <author>jwk</author><date>2002-06</date>
 </funcs>

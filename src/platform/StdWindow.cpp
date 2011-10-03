@@ -1,11 +1,13 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2007  Sven Eberhardt
+ * Copyright (c) 2001-2002, 2005-2007  Sven Eberhardt
+ * Copyright (c) 2005-2006, 2008-2011  Günther Brammer
  * Copyright (c) 2005, 2007, 2009  Peter Wortmann
- * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
- * Copyright (c) 2006  Armin Burgmeier
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2006, 2010  Armin Burgmeier
+ * Copyright (c) 2009-2011  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -23,14 +25,19 @@
 /* A wrapper class to OS dependent event and window interfaces, WIN32 version */
 
 #include "C4Include.h"
+#include <StdWindow.h>
+
+#include <StdApp.h>
 #include <StdRegistry.h>
+#include <C4Config.h>
+#include <C4Rect.h>
 #ifdef USE_GL
 #include <StdGL.h>
 #endif
 #ifdef USE_DIRECTX
 #include <StdD3D.h>
 #endif
-#include <StdWindow.h>
+#include <C4windowswrapper.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <io.h>
@@ -50,6 +57,9 @@
 #include "resource.h"
 #include "C4Version.h"
 
+#include <shellapi.h>
+#include <fcntl.h>
+
 #define C4FullScreenClassName L"C4FullScreen"
 LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -60,7 +70,7 @@ CStdWindow::~CStdWindow ()
 {
 }
 
-BOOL CStdWindow::RegisterWindowClass(HINSTANCE hInst)
+bool CStdWindow::RegisterWindowClass(HINSTANCE hInst)
 {
 	WNDCLASSEXW WndClass = {0};
 	WndClass.cbSize        = sizeof(WNDCLASSEX);
@@ -71,13 +81,10 @@ BOOL CStdWindow::RegisterWindowClass(HINSTANCE hInst)
 	WndClass.lpszClassName = C4FullScreenClassName;
 	WndClass.hIcon         = LoadIcon (hInst, MAKEINTRESOURCE (IDI_00_C4X) );
 	WndClass.hIconSm       = LoadIcon (hInst, MAKEINTRESOURCE (IDI_00_C4X) );
-	return RegisterClassExW(&WndClass);
+	return !!RegisterClassExW(&WndClass);
 }
 
-#define ADDL2(s) L##s
-#define ADDL(s) ADDL2(s)
-
-CStdWindow * CStdWindow::Init(CStdApp * pApp)
+CStdWindow * CStdWindow::Init(CStdWindow::WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, bool HideCursor)
 {
 	Active = true;
 
@@ -90,8 +97,17 @@ CStdWindow * CStdWindow::Init(CStdApp * pApp)
 	            C4FullScreenClassName,
 	            ADDL(C4ENGINENAME),
 	            WS_OVERLAPPEDWINDOW,
-	            CW_USEDEFAULT,CW_USEDEFAULT,0,0,
+	            CW_USEDEFAULT,CW_USEDEFAULT, Config.Graphics.ResX, Config.Graphics.ResY,
 	            NULL,NULL,pApp->hInstance,NULL);
+	if(!hWindow) return NULL;
+
+	RECT rc;
+	GetClientRect(hWindow, &rc);
+	hRenderWindow = CreateWindowExW(0, L"STATIC", NULL, WS_CHILD,
+	                                0, 0, rc.right - rc.left, rc.bottom - rc.top,
+	                                hWindow, NULL, pApp->hInstance, NULL);
+	if(!hRenderWindow) { DestroyWindow(hWindow); return NULL; }
+	ShowWindow(hRenderWindow, SW_SHOW);
 
 #ifndef USE_CONSOLE
 	// Show & focus
@@ -99,13 +115,38 @@ CStdWindow * CStdWindow::Init(CStdApp * pApp)
 	SetFocus(hWindow);
 #endif
 
+	SetTitle(Title);
 	return this;
+}
+
+bool CStdWindow::ReInit(CStdApp* pApp)
+{
+	// We don't need to change anything with the window for any
+	// configuration option changes on Windows.
+	
+	// However, re-create the render window so that another pixel format can
+	// be chosen for it. The pixel format is chosen in CStdGLCtx::Init.
+
+	RECT rc;
+	GetClientRect(hWindow, &rc);
+	HWND hNewRenderWindow = CreateWindowExW(0, L"STATIC", NULL, WS_CHILD,
+	                                        0, 0, rc.right - rc.left, rc.bottom - rc.top,
+	                                        hWindow, NULL, pApp->hInstance, NULL);
+	if(!hNewRenderWindow) return false;
+
+	ShowWindow(hNewRenderWindow, SW_SHOW);
+	DestroyWindow(hRenderWindow);
+	hRenderWindow = hNewRenderWindow;
+
+	return true;
 }
 
 void CStdWindow::Clear()
 {
 	// Destroy window
-	if (hWindow) DestroyWindow(hWindow);
+	if (hRenderWindow) DestroyWindow(hRenderWindow);
+	if (hWindow && hWindow != hRenderWindow) DestroyWindow(hWindow);
+	hRenderWindow = NULL;
 	hWindow = NULL;
 }
 
@@ -123,12 +164,17 @@ bool CStdWindow::RestorePosition(const char *szWindowName, const char *szSubKey,
 
 void CStdWindow::SetTitle(const char *szToTitle)
 {
-	if (hWindow) SetWindowText(hWindow, szToTitle ? szToTitle : "");
+	if (hWindow) SetWindowTextW(hWindow, szToTitle ? GetWideChar(szToTitle) : L"");
 }
 
-bool CStdWindow::GetSize(RECT * pRect)
+bool CStdWindow::GetSize(C4Rect * pRect)
 {
-	if (!(hWindow && GetClientRect(hWindow,pRect))) return false;
+	RECT r;
+	if (!(hWindow && GetClientRect(hWindow,&r))) return false;
+	pRect->x = r.left;
+	pRect->y = r.top;
+	pRect->Wdt = r.right - r.left;
+	pRect->Hgt = r.bottom - r.top;
 	return true;
 }
 
@@ -142,6 +188,10 @@ void CStdWindow::SetSize(unsigned int cx, unsigned int cy)
 		cx = rect.right - rect.left;
 		cy = rect.bottom - rect.top;
 		::SetWindowPos(hWindow, NULL, 0, 0, cx, cy, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOREDRAW | SWP_NOZORDER);
+
+		// Also resize child window
+		GetClientRect(hWindow, &rect);
+		::SetWindowPos(hRenderWindow, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOREDRAW | SWP_NOZORDER);
 	}
 }
 
@@ -152,64 +202,16 @@ void CStdWindow::FlashWindow()
 		::FlashWindow(hWindow, FLASHW_ALL | FLASHW_TIMERNOFG);
 }
 
-/* CStdTimerProc */
-
-int CStdMultimediaTimerProc::iTimePeriod = 0;
-
-CStdMultimediaTimerProc::CStdMultimediaTimerProc(uint32_t iDelay) :
-		uCriticalTimerDelay(28),
-		idCriticalTimer(0),
-		uCriticalTimerResolution(5),
-		Event(true)
+void CStdWindow::EnumerateMultiSamples(std::vector<int>& samples) const
 {
+#ifdef USE_GL
+	if(pGL && pGL->pMainCtx)
+		samples = pGL->pMainCtx->EnumerateMultiSamples();
+#endif
 
-	if (!iTimePeriod)
-	{
-		// Get resolution caps
-		TIMECAPS tc;
-		timeGetDevCaps(&tc, sizeof(tc));
-		// Establish minimum resolution
-		uCriticalTimerResolution = BoundBy(uCriticalTimerResolution, tc.wPeriodMin, tc.wPeriodMax);
-		timeBeginPeriod(uCriticalTimerResolution);
-	}
-	iTimePeriod++;
-
-	SetDelay(iDelay);
-
-}
-
-CStdMultimediaTimerProc::~CStdMultimediaTimerProc()
-{
-	if (idCriticalTimer)
-	{
-		timeKillEvent(idCriticalTimer);
-		idCriticalTimer = 0;
-
-		iTimePeriod--;
-		if (!iTimePeriod)
-			timeEndPeriod(uCriticalTimerResolution);
-	}
-}
-
-void CStdMultimediaTimerProc::SetDelay(uint32_t iDelay)
-{
-
-	// Kill old timer (of any)
-	if (idCriticalTimer)
-		timeKillEvent(idCriticalTimer);
-
-	// Set critical timer
-	idCriticalTimer=timeSetEvent(
-	                  uCriticalTimerDelay,uCriticalTimerResolution,
-	                  (LPTIMECALLBACK) Event.GetEvent(),0,TIME_PERIODIC | TIME_CALLBACK_EVENT_SET);
-
-}
-
-bool CStdMultimediaTimerProc::CheckAndReset()
-{
-	if (!Check()) return false;
-	Event.Reset();
-	return true;
+#ifdef USE_DIRECTX
+	// TODO: Enumerate multi samples
+#endif
 }
 
 /* CStdMessageProc */
@@ -227,7 +229,7 @@ bool CStdMessageProc::Execute(int iTimeout, pollfd *)
 			return false;
 		}
 		// Dialog message transfer
-		if (!pApp->DialogMessageHandling(&msg))
+		if (!pApp->pWindow || !pApp->pWindow->Win32DialogMessageHandling(&msg))
 		{
 			TranslateMessage(&msg); DispatchMessage(&msg);
 		}
@@ -238,8 +240,8 @@ bool CStdMessageProc::Execute(int iTimeout, pollfd *)
 /* CStdApp */
 
 CStdApp::CStdApp() :
-		Active(false), fQuitMsgReceived(false), hInstance(NULL),
-		fDspModeSet(false)
+		Active(false), pWindow(NULL), fQuitMsgReceived(false),
+		hInstance(NULL), fDspModeSet(false)
 {
 	ZeroMemory(&pfd, sizeof(pfd)); pfd.nSize = sizeof(pfd);
 	ZeroMemory(&dspMode, sizeof(dspMode)); dspMode.dmSize =  sizeof(dspMode);
@@ -287,7 +289,7 @@ bool CStdApp::FlushMessages()
 
 int GLMonitorInfoEnumCount;
 
-BOOL CALLBACK GLMonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+static BOOL CALLBACK GLMonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
 {
 	// get to indexed monitor
 	if (GLMonitorInfoEnumCount--) return true;
@@ -301,13 +303,13 @@ BOOL CALLBACK GLMonitorInfoEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lp
 bool CStdApp::GetIndexedDisplayMode(int32_t iIndex, int32_t *piXRes, int32_t *piYRes, int32_t *piBitDepth, int32_t *piRefreshRate, uint32_t iMonitor)
 {
 	// prepare search struct
-	DEVMODE dmode;
+	DEVMODEW dmode;
 	ZeroMemory(&dmode, sizeof(dmode)); dmode.dmSize = sizeof(dmode);
 	StdStrBuf Mon;
 	if (iMonitor)
 		Mon.Format("\\\\.\\Display%d", iMonitor+1);
 	// check if indexed mode exists
-	if (!EnumDisplaySettings(Mon.getData(), iIndex, &dmode)) return false;
+	if (!EnumDisplaySettingsW(Mon.GetWideChar(), iIndex, &dmode)) return false;
 	// mode exists; return it
 	if (piXRes) *piXRes = dmode.dmPelsWidth;
 	if (piYRes) *piYRes = dmode.dmPelsHeight;
@@ -335,7 +337,7 @@ bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int 
 	SetWindowLong(pWindow->hWindow, GWL_EXSTYLE,
 	              GetWindowLong(pWindow->hWindow, GWL_EXSTYLE) | WS_EX_APPWINDOW);
 	bool fFound=false;
-	DEVMODE dmode;
+	DEVMODEW dmode;
 	// if a monitor is given, search on that instead
 	// get monitor infos
 	GLMonitorInfoEnumCount = iMonitor;
@@ -359,19 +361,15 @@ bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int 
 	ZeroMemory(&dmode, sizeof(dmode)); dmode.dmSize = sizeof(dmode);
 	
 	// Get current display settings
-	if (!EnumDisplaySettings(Mon.getData(), ENUM_CURRENT_SETTINGS, &dmode))
+	if (!EnumDisplaySettingsW(Mon.GetWideChar(), ENUM_CURRENT_SETTINGS, &dmode))
 		return false;
-	if (!iRefreshRate)
-	{
-		// Default to current
-		iRefreshRate = dmode.dmDisplayFrequency;
-	}
 	int orientation = dmode.dmDisplayOrientation;
 	// enumerate modes
 	int i=0;
-	while (EnumDisplaySettings(Mon.getData(), i++, &dmode))
+	while (EnumDisplaySettingsW(Mon.GetWideChar(), i++, &dmode))
 		// compare enumerated mode with requested settings
-		if (dmode.dmPelsWidth==iXRes && dmode.dmPelsHeight==iYRes && dmode.dmBitsPerPel==iColorDepth && dmode.dmDisplayOrientation==orientation && dmode.dmDisplayFrequency==iRefreshRate)
+		if (dmode.dmPelsWidth==iXRes && dmode.dmPelsHeight==iYRes && dmode.dmBitsPerPel==iColorDepth && dmode.dmDisplayOrientation==orientation
+			&& (iRefreshRate == 0 || dmode.dmDisplayFrequency == iRefreshRate))
 		{
 			fFound=true;
 			dspMode=dmode;
@@ -387,8 +385,10 @@ bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int 
 	}
 	else
 	{
-			dspMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
-		if (ChangeDisplaySettingsEx(iMonitor ? Mon.getData() : NULL, &dspMode, NULL, CDS_FULLSCREEN, NULL) != DISP_CHANGE_SUCCESSFUL)
+		dspMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
+		if (iRefreshRate != 0)
+			dspMode.dmFields |= DM_DISPLAYFREQUENCY;
+		if (ChangeDisplaySettingsExW(iMonitor ? Mon.GetWideChar() : NULL, &dspMode, NULL, CDS_FULLSCREEN, NULL) != DISP_CHANGE_SUCCESSFUL)
 			{
 				return false;
 			}
@@ -406,7 +406,7 @@ bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int 
 
 void CStdApp::MessageDialog(const char * message)
 {
-	MessageBox(0, message, C4ENGINECAPTION, MB_ICONERROR);
+	MessageBoxW(0, GetWideChar(message), ADDL(C4ENGINECAPTION), MB_ICONERROR);
 }
 
 // Clipboard functions
@@ -415,7 +415,7 @@ bool CStdApp::Copy(const StdStrBuf & text, bool fClipboard)
 	if (!fClipboard) return false;
 	bool fSuccess = true;
 	// gain clipboard ownership
-	if (!OpenClipboard(GetWindowHandle())) return false;
+	if (!OpenClipboard(pWindow ? pWindow->hWindow : NULL)) return false;
 	// must empty the global clipboard, so the application clipboard equals the Windows clipboard
 	EmptyClipboard();
 	int size = MultiByteToWideChar(CP_UTF8, 0, text.getData(), text.getSize(), 0, 0);
@@ -457,4 +457,37 @@ bool CStdApp::IsClipboardFull(bool fClipboard)
 
 void CStdApp::ClearClipboard(bool fClipboard)
 {
+}
+
+void CStdWindow::RequestUpdate()
+{
+	// just invoke directly
+	PerformUpdate();
+}
+
+bool OpenURL(const char *szURL)
+{
+	return (intptr_t)ShellExecuteW(NULL, L"open", GetWideChar(szURL), NULL, NULL, SW_SHOW) > 32;
+}
+
+bool EraseItemSafe(const char *szFilename)
+{
+	char Filename[_MAX_PATH+1];
+	SCopy(szFilename, Filename, _MAX_PATH);
+	Filename[SLen(Filename)+1]=0;
+	SHFILEOPSTRUCTW shs;
+	shs.hwnd=0;
+	shs.wFunc=FO_DELETE;
+	shs.pFrom=GetWideChar(Filename);
+	shs.pTo=NULL;
+	shs.fFlags=FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
+	shs.fAnyOperationsAborted=false;
+	shs.hNameMappings=0;
+	shs.lpszProgressTitle=NULL;
+	return !SHFileOperationW(&shs);
+}
+
+bool IsGermanSystem()
+{
+	return PRIMARYLANGID(GetUserDefaultLangID()) == LANG_GERMAN;
 }

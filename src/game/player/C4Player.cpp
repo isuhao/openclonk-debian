@@ -2,11 +2,13 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2008  Matthes Bender
- * Copyright (c) 2001-2008  Sven Eberhardt
+ * Copyright (c) 2001-2010  Sven Eberhardt
  * Copyright (c) 2002-2008  Peter Wortmann
- * Copyright (c) 2004  Armin Burgmeier
- * Copyright (c) 2005-2009  Günther Brammer
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2004, 2010  Armin Burgmeier
+ * Copyright (c) 2005-2011  Günther Brammer
+ * Copyright (c) 2009  Tobias Zwick
+ * Copyright (c) 2009-2010  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -27,6 +29,7 @@
 #include <C4Player.h>
 
 #include <C4Application.h>
+#include <C4DefList.h>
 #include <C4Object.h>
 #include <C4ObjectInfo.h>
 #include <C4Command.h>
@@ -193,8 +196,6 @@ void C4Player::Execute()
 	UpdateView();
 	ExecuteControl();
 	Menu.Execute();
-	if (Cursor)
-		Cursor->AutoContextMenu(-1);
 
 	// decay of dead viewtargets
 	C4ObjectLink *pLnkNext = FoWViewObjs.First, *pLnk;
@@ -225,7 +226,7 @@ void C4Player::Execute()
 }
 
 bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientName,
-                    const char *szFilename, bool fScenarioInit, class C4PlayerInfo *pInfo)
+                    const char *szFilename, bool fScenarioInit, class C4PlayerInfo *pInfo, C4ValueNumbers * numbers)
 {
 	// safety
 	if (!pInfo)
@@ -236,10 +237,6 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 	}
 	// Status init
 	Status=PS_Normal;
-	if (szFilename)
-		SCopy(Config.AtDataReadPath(szFilename),Filename);
-	else
-		*Filename='\0';
 	Number = iNumber;
 	ID = pInfo->GetID();
 	Team = pInfo->GetTeam();
@@ -248,14 +245,10 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 	// At client
 	AtClient=iAtClient; SCopy(szAtClientName,AtClientName,C4MaxTitle);
 
-	if (Filename)
+	if (szFilename)
 	{
 		// Load core & crew info list
-		// do not load portraits for remote players
-		// this will prevent portraits from being shown for "remotely controlled"-Clonks of other players
-		bool fLoadPortraits = (AtClient==C4ClientIDUnknown) || SEqualNoCase(AtClientName, Game.Clients.getLocalName());
-		// fLoadPortraits = true
-		if (!Load(Filename, !fScenarioInit, fLoadPortraits)) return false;
+		if (!Load(szFilename, !fScenarioInit)) return false;
 	}
 	else
 	{
@@ -305,6 +298,7 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 		}
 
 		// Init control method before scenario init, because script callbacks may need to know it!
+		ClearControl();
 		InitControl();
 
 		// defaultdisabled controls
@@ -329,7 +323,7 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 		{
 			// player preinit: In case a team needs to be chosen first, no InitializePlayer-broadcast is done
 			// this callback shall give scripters a chance to do stuff like starting an intro or enabling FoW, which might need to be done
-			Game.Script.GRBroadcast(PSF_PreInitializePlayer, &C4AulParSet(C4VInt(Number)));
+			::GameScript.GRBroadcast(PSF_PreInitializePlayer, &C4AulParSet(C4VInt(Number)));
 			// direct init
 			if (Status != PS_TeamSelection) if (!ScenarioInit()) return false;
 		}
@@ -339,8 +333,9 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 	else
 	{
 		assert(pInfo->IsJoined());
+		assert(numbers);
 		// (compile using DefaultRuntimeData) - also check if compilation returned sane results, i.e. ID assigned
-		if (!LoadRuntimeData(Game.ScenarioFile) || !ID)
+		if (!LoadRuntimeData(Game.ScenarioFile, numbers) || !ID)
 		{
 			// for script players in non-savegames, this is OK - it means they get restored using default values
 			// this happens when the users saves a scenario using the "Save scenario"-option while a script player
@@ -531,20 +526,12 @@ void C4Player::PlaceReadyCrew(int32_t tx1, int32_t tx2, int32_t ty, C4Object *Fi
 
 }
 
-C4Object *CreateLine(C4ID linetype, int32_t owner, C4Object *fobj, C4Object *tobj);
-
-bool CreatePowerConnection(C4Object *fbase, C4Object *tbase)
-{
-	if (CreateLine(C4ID::PowerLine,fbase->Owner,fbase,tbase)) return true;
-	return false;
-}
-
 void C4Player::PlaceReadyBase(int32_t &tx, int32_t &ty, C4Object **pFirstBase)
 {
 	int32_t cnt,cnt2,ctx,cty;
 	C4Def *def;
 	C4ID cid;
-	C4Object *cbase,*fpower=NULL;
+	C4Object *cbase;
 	// Create ready base structures
 	for (cnt=0; (cid=Game.C4S.PlrStart[PlrStartIndex].ReadyBase.GetID(cnt)); cnt++)
 	{
@@ -553,27 +540,15 @@ void C4Player::PlaceReadyBase(int32_t &tx, int32_t &ty, C4Object **pFirstBase)
 			{
 				ctx=tx; cty=ty;
 				if (Game.C4S.PlrStart[PlrStartIndex].EnforcePosition
-				    || FindConSiteSpot(ctx,cty,def->Shape.Wdt,def->Shape.Hgt,def->Category,20))
+				    || FindConSiteSpot(ctx,cty,def->Shape.Wdt,def->Shape.Hgt,def->GetPlane(),20))
 					if ((cbase=Game.CreateObjectConstruction(C4Id2Def(cid),NULL,Number,ctx,cty,FullCon,true)))
 					{
 						// FirstBase
 						if (!(*pFirstBase)) if ((cbase->Def->Entrance.Wdt>0) && (cbase->Def->Entrance.Hgt>0))
 								{ *pFirstBase=cbase; tx=(*pFirstBase)->GetX(); ty=(*pFirstBase)->GetY(); }
-						// First power plant
-						if (cbase->Def->LineConnect & C4D_Power_Generator)
-							if (!fpower) fpower=cbase;
 					}
 			}
 	}
-
-	// Power connections
-	C4ObjectLink *clnk; C4Object *cobj;
-	if (Game.Rules & C4RULE_StructuresNeedEnergy)
-		if (fpower)
-			for (clnk=::Objects.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
-				if (cobj->Owner==Number)
-					if (cobj->Def->LineConnect & C4D_Power_Consumer)
-						CreatePowerConnection(fpower,cobj);
 }
 
 void C4Player::PlaceReadyVehic(int32_t tx1, int32_t tx2, int32_t ty, C4Object *FirstBase)
@@ -625,11 +600,6 @@ void C4Player::PlaceReadyMaterial(int32_t tx1, int32_t tx2, int32_t ty, C4Object
 	}
 }
 
-DWORD RandomPlayerColor() // generate a random player color
-{
-	return 0xff<<24 | RGB(Min(SafeRandom(302), 256), Min(SafeRandom(302), 256), Min(SafeRandom(302), 256));
-}
-
 bool C4Player::ScenarioInit()
 {
 	int32_t ptx,pty;
@@ -638,12 +608,6 @@ bool C4Player::ScenarioInit()
 	PlrStartIndex = Number % C4S_MaxPlayer;
 	C4Team *pTeam; int32_t i;
 	if (Team && (pTeam = Game.Teams.GetTeamByID(Team))) if ((i=pTeam->GetPlrStartIndex())) PlrStartIndex=i-1;
-
-	// Set color
-	int32_t iColor=BoundBy<int32_t>(PrefColor,0,C4MaxColor-1);
-	while (::Players.ColorTaken(iColor))
-		{ ++iColor%=C4MaxColor; if (iColor==PrefColor) break; }
-	Color=iColor;
 
 	C4PlayerInfo *pInfo = GetInfo();
 	if (!pInfo) { assert(false); LogF("Internal error: ScenarioInit for ghost player %s!", GetName()); return false; }
@@ -663,9 +627,6 @@ bool C4Player::ScenarioInit()
 	HomeBaseProduction.ConsolidateValids(::Definitions);
 	Knowledge=Game.C4S.PlrStart[PlrStartIndex].BuildKnowledge;
 	Knowledge.ConsolidateValids(::Definitions);
-	Magic=Game.C4S.PlrStart[PlrStartIndex].Magic;
-	Magic.ConsolidateValids(::Definitions);
-	Magic.SortByValue(::Definitions);
 
 	// Starting position
 	ptx = Game.C4S.PlrStart[PlrStartIndex].Position[0];
@@ -701,7 +662,7 @@ bool C4Player::ScenarioInit()
 		// Use nearest above-ground...
 		FindSolidGround(ptx,pty,30);
 		// Might have hit a small lake, or similar: Seach a real site spot from here
-		FindConSiteSpot(ptx, pty, 30,50,C4D_Structure, 400);
+		FindConSiteSpot(ptx, pty, 30,50,C4Plane_Structure, 400);
 	}
 
 	// Place Readies
@@ -722,12 +683,12 @@ bool C4Player::ScenarioInit()
 	}
 
 	// Scenario script initialization
-	Game.Script.GRBroadcast(PSF_InitializePlayer, &C4AulParSet(C4VInt(Number),
+	::GameScript.GRBroadcast(PSF_InitializePlayer, &C4AulParSet(C4VInt(Number),
 	                        C4VInt(ptx),
 	                        C4VInt(pty),
 	                        C4VObj(FirstBase),
 	                        C4VInt(Team),
-	                        C4VID(GetInfo()->GetScriptPlayerExtraID())));
+	                        C4VPropList(C4Id2Def(GetInfo()->GetScriptPlayerExtraID()))));
 	return true;
 }
 
@@ -790,7 +751,7 @@ bool C4Player::SetWealth(int32_t iVal)
 
 	Wealth=BoundBy<int32_t>(iVal,0,10000);
 
-	Game.Script.GRBroadcast(PSF_OnWealthChanged,&C4AulParSet(C4VInt(Number)));
+	::GameScript.GRBroadcast(PSF_OnWealthChanged,&C4AulParSet(C4VInt(Number)));
 
 	return true;
 }
@@ -1007,18 +968,20 @@ void C4Player::Default()
 	ViewLock = false;
 }
 
-bool C4Player::Load(const char *szFilename, bool fSavegame, bool fLoadPortraits)
+bool C4Player::Load(const char *szFilename, bool fSavegame)
 {
 	C4Group hGroup;
 	// Open group
-	if (!hGroup.Open(szFilename)) return false;
+	if (!Reloc.Open(hGroup, szFilename)) return false;
+	// Remember filename
+	SCopy(hGroup.GetFullName().getData(), Filename, _MAX_PATH);
 	// Load core
 	if (!C4PlayerInfoCore::Load(hGroup))
 		{ hGroup.Close(); return false; }
 	// Load BigIcon
 	if (hGroup.FindEntry(C4CFN_BigIcon)) BigIcon.Load(hGroup, C4CFN_BigIcon);
 	// Load crew info list
-	CrewInfoList.Load(hGroup, fLoadPortraits);
+	CrewInfoList.Load(hGroup);
 	// Close group
 	hGroup.Close();
 	// Success
@@ -1034,8 +997,6 @@ bool C4Player::Strip(const char *szFilename, bool fAggressive)
 	// Which type of stripping?
 	if (!fAggressive)
 	{
-		// remove portrais
-		Grp.Delete(C4CFN_Portraits, true);
 		// remove bigicon, if the file size is too large
 		size_t iBigIconSize=0;
 		if (Grp.FindEntry(C4CFN_BigIcon, NULL, &iBigIconSize))
@@ -1048,7 +1009,7 @@ bool C4Player::Strip(const char *szFilename, bool fAggressive)
 		// Load info core and crew info list
 		C4PlayerInfoCore PlrInfoCore;
 		C4ObjectInfoList CrewInfoList;
-		if (!PlrInfoCore.Load(Grp) || !CrewInfoList.Load(Grp, false))
+		if (!PlrInfoCore.Load(Grp) || !CrewInfoList.Load(Grp))
 			return false;
 		// Strip crew info list (remove object infos that are invalid for this scenario)
 		CrewInfoList.Strip(::Definitions);
@@ -1195,7 +1156,7 @@ void C4Player::ObjectCommand2Obj(C4Object *cObj, int32_t iCommand, C4Object *pTa
 	else if (iMode & C4P_Command_Set) cObj->SetCommand(iCommand,pTarget,iX,iY,pTarget2,true,iData);
 }
 
-void C4Player::CompileFunc(StdCompiler *pComp, bool fExact)
+void C4Player::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 {
 	assert(ID);
 
@@ -1207,7 +1168,6 @@ void C4Player::CompileFunc(StdCompiler *pComp, bool fExact)
 	pComp->Value(mkNamingAdapt(Eliminated,          "Eliminated",           0));
 	pComp->Value(mkNamingAdapt(Surrendered,         "Surrendered",          0));
 	pComp->Value(mkNamingAdapt(Evaluated,            "Evaluated",            false));
-	pComp->Value(mkNamingAdapt(Color,               "Color",                -1));
 	pComp->Value(mkNamingAdapt(ColorDw,             "ColorDw",              0u));
 	pComp->Value(mkNamingAdapt(Position,            "Position",             0));
 	pComp->Value(mkNamingAdapt(ViewMode,            "ViewMode",             C4PVM_Cursor));
@@ -1239,8 +1199,7 @@ void C4Player::CompileFunc(StdCompiler *pComp, bool fExact)
 	pComp->Value(mkNamingAdapt(HomeBaseMaterial,    "HomeBaseMaterial"      ));
 	pComp->Value(mkNamingAdapt(HomeBaseProduction,  "HomeBaseProduction"    ));
 	pComp->Value(mkNamingAdapt(Knowledge,           "Knowledge"             ));
-	pComp->Value(mkNamingAdapt(Magic,               "Magic"                 ));
-	pComp->Value(mkNamingAdapt(Crew,                "Crew"                  ));
+	pComp->Value(mkNamingAdapt(mkParAdapt(Crew, numbers), "Crew"            ));
 	pComp->Value(mkNamingAdapt(CrewInfoList.iNumCreated, "CrewCreated",     0));
 	pComp->Value(mkNamingPtrAdapt( pMsgBoardQuery,  "MsgBoardQueries"        ));
 
@@ -1248,18 +1207,18 @@ void C4Player::CompileFunc(StdCompiler *pComp, bool fExact)
 	pComp->Value(Control);
 }
 
-bool C4Player::LoadRuntimeData(C4Group &hGroup)
+bool C4Player::LoadRuntimeData(C4Group &hGroup, C4ValueNumbers * numbers)
 {
 	const char *pSource;
 	// Use loaded game text component
 	if (!(pSource = Game.GameText.GetData())) return false;
-	// safety: Do nothing if playeer section is not even present (could kill initialized values)
+	// safety: Do nothing if player section is not even present (could kill initialized values)
 	if (!SSearch(pSource, FormatString("[Player%i]", ID).getData())) return false;
 	// Compile (Search player section - runtime data is stored by unique player ID)
 	// Always compile exact. Exact data will not be present for savegame load, so it does not matter
 	assert(ID);
 	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(
-	      mkNamingAdapt(mkParAdapt(*this, true), FormatString("Player%i", ID).getData()),
+	      mkNamingAdapt(mkParAdapt(*this, numbers), FormatString("Player%i", ID).getData()),
 	      StdStrBuf(pSource),
 	      Game.GameText.GetFilePath()))
 		return false;
@@ -1339,7 +1298,6 @@ void C4Player::DefaultRuntimeData()
 	Surrendered=0;
 	AtClient=C4ClientIDUnknown;
 	SCopy("Local",AtClientName);
-	Color=-1;
 	ControlSet = NULL;
 	ControlSetName.Clear();
 	MouseControl=false;
@@ -1363,7 +1321,6 @@ void C4Player::DefaultRuntimeData()
 	HomeBaseMaterial.Default();
 	HomeBaseProduction.Default();
 	Knowledge.Default();
-	Magic.Default();
 	FlashCom=0;
 }
 
@@ -1387,21 +1344,10 @@ void C4Player::DoTeamSelection(int32_t idTeam)
 	::Control.DoInput(CID_Script, new C4ControlScript(FormatString("InitScenarioPlayer(%d,%d)", (int)Number, (int)idTeam).getData()), CDT_Queue);
 }
 
-void C4Player::EnumeratePointers()
-{
-	// Cursor
-	Cursor.EnumeratePointers();
-	// ViewCursor
-	ViewCursor.EnumeratePointers();
-	// messageboard-queries
-	for (C4MessageBoardQuery *pCheck = pMsgBoardQuery; pCheck; pCheck = pCheck->pNext)
-		pCheck->CallbackObj.EnumeratePointers();
-}
-
 void C4Player::DenumeratePointers()
 {
 	// Crew
-	Crew.DenumerateRead();
+	Crew.DenumeratePointers();
 	// Cursor
 	Cursor.DenumeratePointers();
 	// ViewCursor
@@ -1485,8 +1431,6 @@ void C4Player::ClearControl()
 
 void C4Player::InitControl()
 {
-	// clear any previous
-	ClearControl();
 	// Check local control
 	if (AtClient == ::Control.ClientID())
 		if (!GetInfo() || GetInfo()->GetType() == C4PT_User)
@@ -1497,13 +1441,13 @@ void C4Player::InitControl()
 	{
 		// Preferred control
 		ControlSetName = PrefControl;
-		ControlSet = Game.PlayerControlAssignmentSets.GetSetByName(ControlSetName.getData());
+		ControlSet = Game.PlayerControlUserAssignmentSets.GetSetByName(ControlSetName.getData());
 		// control set unassigned/not known? fallback to some default then (=first defined control set)
-		if (!ControlSet) ControlSet = Game.PlayerControlAssignmentSets.GetDefaultSet();
+		if (!ControlSet) ControlSet = Game.PlayerControlUserAssignmentSets.GetDefaultSet();
 		// gamepad control safety (assuming the default control set is not using gamepad)
 		if (ControlSet && ControlSet->HasGamepad() && !Config.General.GamepadEnabled)
 		{
-			ControlSet = Game.PlayerControlAssignmentSets.GetDefaultSet();
+			ControlSet = Game.PlayerControlUserAssignmentSets.GetDefaultSet();
 		}
 		// Choose next while control taken
 		// TODO
@@ -1818,8 +1762,6 @@ void C4Player::CountControl(ControlType eType, int32_t iID, int32_t iCntAdd)
 
 void C4Player::ExecMsgBoardQueries()
 {
-	// query now possible?
-	if (!C4GUI::IsGUIValid()) return;
 	// already active?
 	if (::MessageInput.IsTypeIn()) return;
 	// find an un-evaluated query
@@ -1970,27 +1912,32 @@ void C4Player::SetZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool dir
 {
 	AdjustZoomParameter(&ZoomWdt, range_wdt, no_increase, no_decrease);
 	AdjustZoomParameter(&ZoomHgt, range_hgt, no_increase, no_decrease);
-	ZoomToViewport(direct, no_decrease, no_increase); // inc/dec swapped for zoom, because it's inversely proportional to range
+	ZoomToViewports(direct, no_decrease, no_increase); // inc/dec swapped for zoom, because it's inversely proportional to range
 }
 
 void C4Player::SetMinZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool no_increase, bool no_decrease)
 {
 	AdjustZoomParameter(&ZoomLimitMinWdt, range_wdt, no_increase, no_decrease);
 	AdjustZoomParameter(&ZoomLimitMinHgt, range_hgt, no_increase, no_decrease);
-	ZoomLimitsToViewport();
+	ZoomLimitsToViewports();
 }
 
 void C4Player::SetMaxZoomByViewRange(int32_t range_wdt, int32_t range_hgt, bool no_increase, bool no_decrease)
 {
 	AdjustZoomParameter(&ZoomLimitMaxWdt, range_wdt, no_increase, no_decrease);
 	AdjustZoomParameter(&ZoomLimitMaxHgt, range_hgt, no_increase, no_decrease);
-	ZoomLimitsToViewport();
+	ZoomLimitsToViewports();
 }
 
-void C4Player::ZoomToViewport(bool direct, bool no_increase, bool no_decrease)
+void C4Player::ZoomToViewports(bool direct, bool no_increase, bool no_decrease)
 {
-	C4Viewport *vp = ::Viewports.GetViewport(Number);
-	if (!vp) return;
+	C4Viewport *vp = NULL;
+	while((vp = ::Viewports.GetViewport(Number, vp)) != NULL)
+		ZoomToViewport(vp, direct, no_increase, no_decrease);
+}
+
+void C4Player::ZoomToViewport(C4Viewport* vp, bool direct, bool no_increase, bool no_decrease)
+{
 	float new_zoom = vp->GetZoomByViewRange((ZoomWdt || ZoomHgt) ? ZoomWdt : C4VP_DefViewRangeX,ZoomHgt);
 	float old_zoom = vp->GetZoomTarget();
 	if (new_zoom > old_zoom && no_increase) return;
@@ -1998,10 +1945,15 @@ void C4Player::ZoomToViewport(bool direct, bool no_increase, bool no_decrease)
 	vp->SetZoom(new_zoom, direct);
 }
 
-void C4Player::ZoomLimitsToViewport()
+void C4Player::ZoomLimitsToViewports()
 {
-	C4Viewport *vp = ::Viewports.GetViewport(Number);
-	if (!vp) return;
+	C4Viewport *vp = NULL;
+	while((vp = ::Viewports.GetViewport(Number, vp)) != NULL)
+		ZoomLimitsToViewport(vp);
+}
+
+void C4Player::ZoomLimitsToViewport(C4Viewport* vp)
+{
 	float zoom_max = vp->GetZoomByViewRange((ZoomLimitMinWdt || ZoomLimitMinHgt) ? ZoomLimitMinWdt : C4VP_DefMinViewRangeX,ZoomLimitMinHgt);
 	float zoom_min = vp->GetZoomByViewRange((ZoomLimitMaxWdt || ZoomLimitMaxHgt) ? ZoomLimitMaxWdt : C4VP_DefMaxViewRangeX,ZoomLimitMaxHgt);
 	vp->SetZoomLimits(zoom_min, zoom_max);

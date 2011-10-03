@@ -3,6 +3,8 @@
  *
  * Copyright (c) 2002, 2006  Sven Eberhardt
  * Copyright (c) 2004-2007  Günther Brammer
+ * Copyright (c) 2010  Martin Plicht
+ * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -22,6 +24,9 @@
 #if !defined(INC_StdGL) && defined(USE_GL)
 #define INC_StdGL
 
+#ifdef _WIN32
+#include <C4windowswrapper.h>
+#endif
 #include <GL/glew.h>
 
 #if defined(__APPLE__)
@@ -41,10 +46,16 @@ public:
 	~CStdGLCtx() { Clear(); }; // dtor
 
 	void Clear();               // clear objects
+
 #ifdef _WIN32
-	bool Init(CStdWindow * pWindow, CStdApp *pApp, HWND hWindow=NULL);
+	bool Init(CStdWindow * pWindow, CStdApp *pApp, HWND hWindow = NULL);
+	std::vector<int> EnumerateMultiSamples() const;
 #else
 	bool Init(CStdWindow * pWindow, CStdApp *pApp);
+#endif
+
+#ifdef USE_COCOA
+	/*NSOpenGLContext*/void* GetNativeCtx();
 #endif
 
 	bool Select(bool verbose = false);              // select this context
@@ -60,10 +71,12 @@ protected:
 	HGLRC hrc;                  // rendering context
 	HWND hWindow; // used if pWindow==NULL
 	HDC hDC;                    // device context handle
+	static bool InitGlew(HINSTANCE hInst);
 #elif defined(USE_X11)
 	/*GLXContext*/void * ctx;
+#elif defined(USE_COCOA)
+	/*NSOpenGLContext*/void* ctx;
 #endif
-	unsigned int cx,cy;                 // context window size
 
 	friend class CStdGL;
 	friend class CSurface;
@@ -145,6 +158,7 @@ protected:
 	friend class CStdGLCtx;
 	friend class C4StartupOptionsDlg;
 	friend class C4FullScreen;
+	friend class CStdWindow;
 };
 
 // Global access pointer

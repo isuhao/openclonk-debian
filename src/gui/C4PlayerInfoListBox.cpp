@@ -1,10 +1,15 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2008  Sven Eberhardt
+ * Copyright (c) 2003-2005, 2007-2008  Sven Eberhardt
+ * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2006  Florian Groß
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2009  David Dormagen
+ * Copyright (c) 2009-2010  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2010  Carl-Philip Hänsch
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2008-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -33,6 +38,7 @@
 #include <C4MouseControl.h>
 #include <C4Network2.h>
 #include <C4GameControl.h>
+#include <C4RoundResults.h>
 
 DWORD GenerateRandomPlayerColor(int32_t iTry); // in C4PlayerInfoConflicts.cpp
 
@@ -282,7 +288,7 @@ void C4PlayerInfoListBox::PlayerListItem::UpdateIcon(C4PlayerInfo *pInfo, C4Play
 		if (!fIconSet)
 		{
 			// no custom icon: create default by player color
-			pIcon->GetMFacet().Create(C4GUI_IconWdt,C4GUI_IconHgt);
+			pIcon->GetMFacet().Create(64,64); // the bigicon is bigger than the normal 40x40 icon
 			::GraphicsResource.fctPlayerClr.DrawClr(pIcon->GetMFacet(), true, dwPlayerClr);
 		}
 		fIconSet = true;
@@ -1241,8 +1247,6 @@ void C4PlayerInfoListBox::SetClientSoundIcon(int32_t iForClientID)
 
 C4PlayerInfoListBox::ListItem *C4PlayerInfoListBox::GetPlayerListItem(ListItem::ID::IDType eType, int32_t id)
 {
-	// safety
-	if (!C4GUI::IsGUIValid()) return NULL;
 	ListItem::ID idSearch(eType, id);
 	// search through listbox
 	for (C4GUI::Element *pEItem = GetFirst(); pEItem; pEItem = pEItem->GetNext())
@@ -1283,9 +1287,6 @@ static bool fPlayerListUpdating=false;
 
 void C4PlayerInfoListBox::Update()
 {
-	// safety
-	if (!C4GUI::IsGUIValid()) return;
-
 	if (fPlayerListUpdating) return;
 	fPlayerListUpdating = true;
 

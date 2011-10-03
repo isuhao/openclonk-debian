@@ -1,8 +1,11 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2006, 2008-2009  Günther Brammer
+ * Copyright (c) 2005-2006, 2008-2009, 2011  Günther Brammer
+ * Copyright (c) 2005  Peter Wortmann
+ * Copyright (c) 2006  Armin Burgmeier
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -22,6 +25,7 @@
 #include <C4Include.h>
 #ifdef USE_CONSOLE
 #include <StdWindow.h>
+#include <StdDDraw2.h>
 #include <C4Application.h>
 
 #ifdef HAVE_LIBREADLINE
@@ -220,10 +224,11 @@ bool CStdApp::FlushMessages()
 void CStdWindow::Clear() {}
 CStdWindow::CStdWindow() {}
 CStdWindow::~CStdWindow() {}
+void CStdWindow::EnumerateMultiSamples(std::vector<int, std::allocator<int> >&) const  {}
 void CStdWindow::FlashWindow() {}
-CStdWindow * CStdWindow::Init(CStdApp*) {return this;}
-CStdWindow * CStdWindow::Init(CStdApp*, char const*, CStdWindow*, bool) {return this;}
-bool CStdWindow::GetSize(RECT*) {return 0;}
+bool CStdWindow::GetSize(C4Rect*) {return 0;}
+CStdWindow* CStdWindow::Init(CStdWindow::WindowKind, CStdApp*, char const*, CStdWindow*, bool) {return this;}
+bool CStdWindow::ReInit(CStdApp*) {return 0;}
 bool CStdWindow::RestorePosition(char const*, char const*, bool) {return 0;}
 void CStdWindow::SetSize(unsigned int, unsigned int) {}
 void CStdWindow::SetTitle(char const*) {}

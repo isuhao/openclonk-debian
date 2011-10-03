@@ -4,6 +4,8 @@
  * Copyright (c) 2004-2007  Sven Eberhardt
  * Copyright (c) 2005  Peter Wortmann
  * Copyright (c) 2008  Matthes Bender
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -72,7 +74,7 @@ namespace C4GUI
 		if (fFocus)
 		{
 			lpDDraw->SetBlitMode(C4GFXBLIT_ADDITIVE);
-			::GraphicsResource.fctButtonHighlight.DrawX(cgo.Surface, (fLarge ? x : x - iTxtWdt/2)+5, y+3, (fLarge ? iMaxWdt : iTxtWdt)-10, iTxtHgt-6);
+			::GraphicsResource.fctButtonHighlightRound.DrawX(cgo.Surface, (fLarge ? x : x - iTxtWdt/2)+5, y+3, (fLarge ? iMaxWdt : iTxtWdt)-10, iTxtHgt-6);
 			lpDDraw->ResetBlitMode();
 		}
 		if (!(pfctClip && pfctIcon))
@@ -361,7 +363,7 @@ namespace C4GUI
 	void Tabular::DoCaptionScroll(int32_t iDir)
 	{
 		// store time of scrolling change
-		tLastScrollTime = timeGetTime();
+		tLastScrollTime = GetTime();
 		// change scrolling within max range
 		int32_t iAvailableTabSpace = rcBounds.Wdt;
 		int32_t iScrollPinSize = GetTopSize();
@@ -374,7 +376,7 @@ namespace C4GUI
 		if (!fDrawSelf) return;
 		bool fGfx = HasGfx();
 		// execute scrolling
-		if ((fScrollingLeftDown || fScrollingRightDown) && timeGetTime()-tLastScrollTime >= C4GUI_TabCaptionScrollTime)
+		if ((fScrollingLeftDown || fScrollingRightDown) && GetTime()-tLastScrollTime >= C4GUI_TabCaptionScrollTime)
 			DoCaptionScroll(fScrollingRightDown - fScrollingLeftDown);
 		// border
 		if (!fGfx) Draw3DFrame(cgo, false, 1, 0xaf, eTabPos!=tbTop, GetTopSize(), eTabPos!=tbLeft, GetLeftSize());

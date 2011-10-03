@@ -5,7 +5,7 @@
  * Copyright (c) 2001  Michael Käser
  * Copyright (c) 2002-2004  Peter Wortmann
  * Copyright (c) 2004  Armin Burgmeier
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -48,7 +48,7 @@ bool C4MusicFile::RemTempFile()
 {
 	if (!SongExtracted) return true;
 	// delete it
-	remove(Config.AtTempPath(C4CFN_TempMusic2));
+	EraseFile(Config.AtTempPath(C4CFN_TempMusic2));
 	SongExtracted = false;
 	return true;
 }

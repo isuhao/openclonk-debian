@@ -2,8 +2,8 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2004-2008  Peter Wortmann
- * Copyright (c) 2005-2008  Sven Eberhardt
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2005-2010  Sven Eberhardt
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -429,8 +429,8 @@ void C4GameControl::DbgRec(C4RecordChunkType eType, const uint8_t *pData, size_t
 	// record data
 	if (pRecord)
 	{
-		//C4PktDebugRec dr(eType, );
-		pRecord->Rec(Game.FrameCounter, StdBuf(pData, iSize), eType);
+		C4PktDebugRec dr(eType, StdBuf(pData, iSize));
+		pRecord->Rec(Game.FrameCounter, DecompileToBuf<StdCompilerBinWrite>(dr), eType);
 	}
 	// check against playback
 	if (pPlayback)
@@ -536,7 +536,7 @@ void C4GameControl::PrepareInput()
 	if (Application.pGamePadControl) Application.pGamePadControl->DoAxisInput();
 	// per-player input
 	C4Player *plr; int32_t i=0;
-	while (plr = ::Players.GetLocalByIndex(i++))
+	while ((plr = ::Players.GetLocalByIndex(i++)))
 		plr->Control.PrepareInput();
 }
 

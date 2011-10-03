@@ -2,9 +2,12 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2003-2004, 2007-2008  Matthes Bender
- * Copyright (c) 2004-2005, 2007  Günther Brammer
+ * Copyright (c) 2004-2005, 2007, 2009  Günther Brammer
  * Copyright (c) 2007  Julian Raschke
  * Copyright (c) 2007  Peter Wortmann
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Sven Eberhardt
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -321,7 +324,7 @@ bool C4ConfigShareware::LoadRegistration()
 	}
 
 	// Then look in ExePath
-	for (DirectoryIterator i(General.ExePath); *i; ++i)
+	for (DirectoryIterator i(General.ExePath.getData()); *i; ++i)
 		if (WildcardMatch("*.c4k", *i))
 		{
 			if (LoadRegistration(*i))
@@ -353,7 +356,6 @@ bool C4ConfigShareware::LoadRegistration(const char *keyFile)
 	// Load registration key
 	char* delim = 0;
 	int regKeyLen = 0;
-	int dataLen = 0;
 	FILE* fh = fopen(keyFile, "rb");
 	if (!fh)
 		return HandleError("Cannot open key file.");
@@ -362,7 +364,6 @@ bool C4ConfigShareware::LoadRegistration(const char *keyFile)
 	delim = strstr(RegData, "\r\n\r\n");
 	if (!delim)
 		return HandleError("Invalid key data (no delimiter).");
-	dataLen = delim - RegData;
 
 	// Load public key from memory
 	EVP_PKEY* pubKey = loadPublicKey(Cert_Reg_XOR_Base64, true, true, XOR_Cert_Reg);
@@ -480,7 +481,7 @@ const char* C4ConfigShareware::GetRegistrationData(const char *strField)
 	size_t iValueLen = 256;
 	const char *pFieldEnd = strstr(pKeyField, "\x0d");
 	if (pFieldEnd) iValueLen = pFieldEnd - pKeyField;
-	iValueLen = Min(iValueLen, CFG_MaxString);
+	iValueLen = Min<size_t>(iValueLen, CFG_MaxString);
 	strncpy(strReturnValue, pKeyField, iValueLen); strReturnValue[iValueLen] = 0;
 	return strReturnValue;
 }

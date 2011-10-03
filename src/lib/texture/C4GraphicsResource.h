@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2004-2005, 2007  Sven Eberhardt
- * Copyright (c) 2008  Günther Brammer
+ * Copyright (c) 2008, 2010  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -18,7 +18,7 @@
  * See clonk_trademark_license.txt for full license.
  */
 
-/* Loads all standard graphics from Graphics.c4g */
+/* Loads all standard graphics from Graphics.ocg */
 
 #ifndef INC_C4GraphicsResource
 #define INC_C4GraphicsResource
@@ -65,7 +65,6 @@ public:
 	C4FacetID fctLogo;
 	C4FacetID fctConstruction;
 	C4FacetID fctEnergy;
-	C4FacetID fctMagic;
 	C4FacetID fctArrow;
 	C4FacetID fctExit;
 	C4FacetID fctHand;
@@ -84,6 +83,7 @@ public:
 
 	C4GUI::DynBarFacet barCaption, barButton, barButtonD;
 	C4FacetID fctButtonHighlight;
+	C4FacetID fctButtonHighlightRound;
 	C4FacetID fctIcons, fctIconsEx;
 	C4FacetID fctSubmenu;
 	C4FacetID fctCheckbox;
@@ -114,7 +114,7 @@ public:
 
 	bool IsInitialized() { return fInitialized; } // return whether any gfx are loaded (so dlgs can be shown)
 
-	bool RegisterGlobalGraphics(); // register global Graphics.c4g into own group set
+	bool RegisterGlobalGraphics(); // register global Graphics.ocg into own group set
 	bool RegisterMainGroups();     // register new groups of Game.GroupSet into own group set
 	void CloseFiles();             // free group set
 

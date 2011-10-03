@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2002, 2004-2005  Sven Eberhardt
  * Copyright (c) 2004, 2006, 2008  Günther Brammer
- * Copyright (c) 2005  Tobias Zwick
+ * Copyright (c) 2005, 2010  Tobias Zwick
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -63,7 +63,7 @@ class C4ParticleDefCore
 {
 public:
 	StdStrBuf Name;                   // name
-	C4TargetRect GfxFace;             // target rect for graphics; used because stup
+	C4Rect GfxFace;                   // rect for graphics
 	int32_t MaxCount;                 // maximum number of particles that may coexist of this type
 	int32_t MinLifetime, MaxLifetime; // used by exec proc; number of frames this particle can exist
 	int32_t YOff;                     // Y-Offset for Std-particles

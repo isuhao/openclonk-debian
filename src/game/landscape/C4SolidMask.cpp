@@ -3,7 +3,9 @@
  *
  * Copyright (c) 2003, 2005, 2008  Sven Eberhardt
  * Copyright (c) 2007  Peter Wortmann
- * Copyright (c) 2007-2009  Günther Brammer
+ * Copyright (c) 2007-2010  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -189,7 +191,7 @@ void C4SolidMask::Put(bool fCauseInstability, C4TargetRect *pClipRect, bool fRes
 			for (int i = 0; i < iAttachingObjectsCount; ++i)
 			{
 				C4Object *pObj = ppAttachingObjects[i];
-				if (pObj->IsMoveableBySolidMask())
+				if (pObj->IsMoveableBySolidMask(pForObject->GetPlane()))
 					if (!pObj->Shape.ContactCheck(pObj->GetX()+dx, pObj->GetY()+dy))
 						if (pObj->iLastAttachMovementFrame != Game.FrameCounter)
 						{
@@ -287,7 +289,7 @@ void C4SolidMask::Remove(bool fBackupAttachment)
 		C4LSector *pSct; C4Object *pObj;
 		for (C4ObjectList *pLst=SolidArea.FirstObjectShapes(&pSct); pLst; pLst=SolidArea.NextObjectShapes(pLst, &pSct))
 			for (C4ObjectLink *clnk=pLst->First; clnk; clnk=clnk->Next)
-				if ((pObj = clnk->Obj) && pObj != pForObject && pObj->IsMoveableBySolidMask() && !pObj->Shape.CheckContact(pObj->GetX(),pObj->GetY()))
+				if ((pObj = clnk->Obj) && pObj != pForObject && pObj->IsMoveableBySolidMask(pForObject->GetPlane()) && !pObj->Shape.CheckContact(pObj->GetX(),pObj->GetY()))
 				{
 					// check for any contact to own SolidMask - attach-directions, bottom - "stuck" (CNAT_Center) is ignored, because that causes problems with things being stuck in basements :(
 					int iVtx = 0;
@@ -409,18 +411,19 @@ C4SolidMask::C4SolidMask(C4Object *pForObject) : pForObject(pForObject)
 	if (!(pSolidMask = new BYTE [iNeededBufSize])) return;
 	SURFACE sfcBitmap = pForObject->GetGraphics()->GetBitmap();
 	if (!sfcBitmap->Lock()) return;
-	int xcnt, ycnt;
-	for (ycnt=0; ycnt<pForObject->SolidMask.Hgt; ycnt++)
-		for (xcnt=0; xcnt<pForObject->SolidMask.Wdt; xcnt++)
+	for (int ycnt=0; ycnt<pForObject->SolidMask.Hgt; ycnt++)
+		for (int xcnt=0; xcnt<pForObject->SolidMask.Wdt; xcnt++)
 		{
-			// Solid mask target x/y is relative to def bitmap top-left, not object center.
-			pSolidMask[xcnt+ycnt*pForObject->SolidMask.Wdt] = sfcBitmap->IsPixTransparent(pForObject->SolidMask.x+xcnt,pForObject->SolidMask.y+ycnt) ? 0x00 : 0xff;
+			// Solid mask target x/y is relative to def bitmap top-left, not object center
+			int dx = sfcBitmap->Scale*(pForObject->SolidMask.x+xcnt);
+			int dy = sfcBitmap->Scale*(pForObject->SolidMask.y+ycnt);
+			pSolidMask[xcnt+ycnt*pForObject->SolidMask.Wdt] = sfcBitmap->IsPixTransparent(dx,dy) ? 0x00 : 0xff;
 		}
 	// create mat buff to store the material replaced by the solid mask
 	// the upper left corner is here the [objpos]+rot([shapexy]+[targetxy]+[realWH]/2)-maxWH/2
 	MatBuffPitch = (int) sqrt(double(pForObject->SolidMask.Wdt * pForObject->SolidMask.Wdt + pForObject->SolidMask.Hgt * pForObject->SolidMask.Hgt))+1;
 	if (!(pSolidMaskMatBuff= new BYTE [MatBuffPitch * MatBuffPitch] )) return;
-	ZeroMemory(pSolidMaskMatBuff, MatBuffPitch * MatBuffPitch);
+	memset(pSolidMaskMatBuff, 0, MatBuffPitch * MatBuffPitch);
 	sfcBitmap->Unlock();
 }
 

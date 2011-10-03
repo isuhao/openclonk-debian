@@ -3,7 +3,7 @@
  *
  * Copyright (c) 1998-2000, 2007  Matthes Bender
  * Copyright (c) 2001, 2004-2005, 2008  Sven Eberhardt
- * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2005-2006, 2010  Günther Brammer
  * Copyright (c) 2007, 2009  Peter Wortmann
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -28,8 +28,7 @@
 #include <C4SoundSystem.h>
 #include <C4Components.h>
 #include <C4InteractiveThread.h>
-#include <C4Network2IRC.h>
-#include <StdWindow.h>
+#include <StdApp.h>
 
 class CStdDDraw;
 class C4ApplicationGameTimer;
@@ -44,7 +43,7 @@ public:
 	~C4Application();
 	// Flag for restarting the engine at the end
 	bool restartAtEnd;
-	// main System.c4g in working folder
+	// main System.ocg in working folder
 	C4Group SystemGroup;
 	C4MusicSystem MusicSystem;
 	C4SoundSystem SoundSystem;
@@ -52,13 +51,13 @@ public:
 	// Thread for interactive processes (automatically starts as needed)
 	C4InteractiveThread InteractiveThread;
 	// IRC client for global chat
-	C4Network2IRCClient IRCClient;
+	C4Network2IRCClient &IRCClient;
 	void Clear();
 	void ClearCommandLine();
 	// Tick timing
 	void GameTick();
 	void Draw();
-	// System.c4g helper funcs
+	// System.ocg helper funcs
 	bool OpenSystemGroup() { return SystemGroup.IsOpen() || SystemGroup.Open(C4CFN_System); }
 	void CloseSystemGroup() { SystemGroup.Close(); }
 	void SetGameTickDelay(int iDelay);
@@ -67,7 +66,8 @@ public:
 	void NextTick();
 
 	virtual void Quit();
-	void QuitGame(); // quit game only, but restart application if in fullscreen startup menu mode
+	void OpenGame(const char * scenario = 0); // start game in the next main loop round
+	void QuitGame(); // quit game, and application if in fullscreen without startup
 	void Activate(); // activate app to gain full focus in OS
 	void SetNextMission(const char *szMissionFilename);
 	virtual void OnCommand(const char *szCmd);
@@ -83,18 +83,17 @@ public:
 	// set by ParseCommandLine, for manually invoking an update check by command line or url
 	int CheckForUpdates;	
 protected:
-	enum State { C4AS_None, C4AS_PreInit, C4AS_Startup, C4AS_StartGame, C4AS_Game, C4AS_Quit } AppState;
+	enum State { C4AS_None, C4AS_PreInit, C4AS_Startup, C4AS_StartGame, C4AS_Game, C4AS_AfterGame, C4AS_Quit } AppState;
 	C4ApplicationGameTimer *pGameTimer;
 
 	virtual bool DoInit(int argc, char * argv[]);
 	void ParseCommandLine(int argc, char * argv[]);
-	bool OpenGame();
 	bool PreInit();
 	static bool ProcessCallback(const char *szMessage, int iProcess);
 	void ApplyResolutionConstraints();
 
-	// set by ParseCommandLine, if neither scenario nor direct join adress has been specified
-	int UseStartupDialog;
+	// set by ParseCommandLine, if neither editor, scenario nor direct join adress has been specified
+	int QuitAfterGame;
 	// set by ParseCommandLine, for installing registration keys
 	StdStrBuf IncomingKeyfile;
 private:
@@ -117,6 +116,7 @@ public:
 	void SetGameTickDelay(uint32_t iDelay);
 
 	virtual bool Execute(int iTimeout, pollfd *);
+	virtual bool IsLowPriority();
 };
 
 class C4ApplicationSec1Timer : protected CStdTimerProc

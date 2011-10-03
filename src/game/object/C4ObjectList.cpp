@@ -3,9 +3,11 @@
  *
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001-2006, 2008  Sven Eberhardt
- * Copyright (c) 2004-2006  Peter Wortmann
- * Copyright (c) 2006-2008  Günther Brammer
+ * Copyright (c) 2001, 2004-2006  Peter Wortmann
+ * Copyright (c) 2006-2011  Günther Brammer
  * Copyright (c) 2009  Armin Burgmeier
+ * Copyright (c) 2010  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,6 +27,7 @@
 #include <C4Include.h>
 #include <C4ObjectList.h>
 
+#include <C4DefList.h>
 #include <C4Object.h>
 #include <C4Application.h>
 #include <C4Region.h>
@@ -152,21 +155,21 @@ bool C4ObjectList::Add(C4Object *nObj, SortType eSort, C4ObjectList *pLstSorted)
 	{
 		cLnk = NULL; cPrev = Last;
 
-		// Sort override or line? Leave default as is.
-		bool fUnsorted = nObj->Unsorted || nObj->Def->Line;
+		// Sort override? Leave default as is.
+		bool fUnsorted = nObj->Unsorted;
 		if (!fUnsorted)
 		{
 
-			// Find successor by matching category / id
-			// Sort by matching category/id is necessary for inventory shifting.
+			// Find successor by matching Plane / id
+			// Sort by matching Plane/id is necessary for inventory shifting.
 			// It is not done for static back to allow multiobject outside structure.
 			// Unsorted objects are ignored in comparison.
 			if (!(nObj->Category & C4D_StaticBack))
 				for (cPrev=NULL,cLnk=First; cLnk; cLnk=cLnk->Next)
 					if (cLnk->Obj->Status && !cLnk->Obj->Unsorted)
 					{
-						if ( (cLnk->Obj->Category & C4D_SortLimit)==(nObj->Category & C4D_SortLimit) )
-							if ( cLnk->Obj->id == nObj->id )
+						if (cLnk->Obj->GetPlane() == nObj->GetPlane())
+							if (cLnk->Obj->id == nObj->id)
 								break;
 						cPrev=cLnk;
 					}
@@ -176,7 +179,7 @@ bool C4ObjectList::Add(C4Object *nObj, SortType eSort, C4ObjectList *pLstSorted)
 				for (cPrev=NULL, cLnk=First; cLnk; cLnk=cLnk->Next)
 					if (cLnk->Obj->Status && !cLnk->Obj->Unsorted)
 					{
-						if ((cLnk->Obj->Category & C4D_SortLimit)<=(nObj->Category & C4D_SortLimit))
+						if (cLnk->Obj->GetPlane() <= nObj->GetPlane())
 							break;
 						cPrev=cLnk;
 					}
@@ -328,15 +331,13 @@ C4ObjectLink* C4ObjectList::GetLink(C4Object *pObj)
 	return NULL;
 }
 
-int C4ObjectList::ObjectCount(C4ID id, int32_t dwCategory) const
+int C4ObjectList::ObjectCount(C4ID id) const
 {
 	C4ObjectLink *cLnk;
 	int iCount=0;
 	for (cLnk=First; cLnk; cLnk=cLnk->Next)
-		if (cLnk->Obj->Status)
-			if ( (id==C4ID::None) || (cLnk->Obj->Def->id==id) )
-				if ( (dwCategory==C4D_All) || (cLnk->Obj->Category & dwCategory) )
-					iCount++;
+		if (cLnk->Obj->Status && (id==C4ID::None || cLnk->Obj->Def->id==id))
+			iCount++;
 	return iCount;
 }
 
@@ -417,15 +418,30 @@ int C4ObjectList::ClearPointers(C4Object *pObj)
 	return rval;
 }
 
-void C4ObjectList::DrawAll(C4TargetFacet &cgo, int iPlayer)
+void C4ObjectList::Draw(C4TargetFacet &cgo, int iPlayer, int MinPlane, int MaxPlane)
 {
-	C4ObjectLink *clnk;
+	C4ObjectLink * clnk, * first;
+	for (first=Last; first; first=first->Prev)
+		if (first->Obj->GetPlane() >= MinPlane)
+			break;
 	// Draw objects (base)
-	for (clnk=Last; clnk; clnk=clnk->Prev)
+	for (clnk=first; clnk; clnk=clnk->Prev)
+	{
+		if (first->Obj->GetPlane() > MaxPlane)
+			break;
+		if (clnk->Obj->Category & C4D_Foreground)
+			continue;
 		clnk->Obj->Draw(cgo, iPlayer);
+	}
 	// Draw objects (top face)
-	for (clnk=Last; clnk; clnk=clnk->Prev)
+	for (clnk=first; clnk; clnk=clnk->Prev)
+	{
+		if (first->Obj->GetPlane() > MaxPlane)
+			break;
+		if (clnk->Obj->Category & C4D_Foreground)
+			continue;
 		clnk->Obj->DrawTopFace(cgo, iPlayer);
+	}
 }
 
 void C4ObjectList::DrawIfCategory(C4TargetFacet &cgo, int iPlayer, uint32_t dwCat, bool fInvert)
@@ -439,28 +455,6 @@ void C4ObjectList::DrawIfCategory(C4TargetFacet &cgo, int iPlayer, uint32_t dwCa
 	for (clnk=Last; clnk; clnk=clnk->Prev)
 		if (!(clnk->Obj->Category & dwCat) == fInvert)
 			clnk->Obj->DrawTopFace(cgo, iPlayer);
-}
-
-void C4ObjectList::Draw(C4TargetFacet &cgo, int iPlayer)
-{
-	C4ObjectLink *clnk;
-	// Draw objects (base)
-	for (clnk=Last; clnk; clnk=clnk->Prev)
-		if (!(clnk->Obj->Category & C4D_BackgroundOrForeground))
-			clnk->Obj->Draw(cgo, iPlayer);
-	// Draw objects (top face)
-	for (clnk=Last; clnk; clnk=clnk->Prev)
-		if (!(clnk->Obj->Category & C4D_BackgroundOrForeground))
-			clnk->Obj->DrawTopFace(cgo, iPlayer);
-}
-
-void C4ObjectList::Enumerate()
-{
-	C4ObjectLink *cLnk;
-	// Enumerate object pointers
-	for (cLnk=First; cLnk; cLnk=cLnk->Next)
-		if (cLnk->Obj->Status)
-			cLnk->Obj->EnumeratePointers();
 }
 
 bool C4ObjectList::IsContained(C4Object *pObj)
@@ -477,7 +471,7 @@ bool C4ObjectList::IsClear() const
 	return (ObjectCount()==0);
 }
 
-bool C4ObjectList::DenumerateRead()
+bool C4ObjectList::DenumeratePointers()
 {
 	if (!pEnumerated) return false;
 	// Denumerate all object pointers
@@ -502,88 +496,81 @@ bool C4ObjectList::Write(char *szTarget)
 	return true;
 }
 
-void C4ObjectList::Denumerate()
+void C4ObjectList::Denumerate(C4ValueNumbers * numbers)
 {
 	C4ObjectLink *cLnk;
 	for (cLnk=First; cLnk; cLnk=cLnk->Next)
 		if (cLnk->Obj->Status)
-			cLnk->Obj->DenumeratePointers();
+			cLnk->Obj->Denumerate(numbers);
 }
 
-void C4ObjectList::CompileFunc(StdCompiler *pComp, bool fSaveRefs, bool fSkipPlayerObjects)
+void C4ObjectList::CompileFunc(StdCompiler *pComp, bool fSkipPlayerObjects, C4ValueNumbers * numbers)
 {
-	if (fSaveRefs)
+	// "Object" section count
+	int32_t iObjCnt = ObjectCount();
+	pComp->Value(mkNamingCountAdapt(iObjCnt, "Object"));
+	if (pComp->isDecompiler())
 	{
-		// this mode not supported
-		assert(!fSkipPlayerObjects);
-		// (Re)create list
-		delete pEnumerated; pEnumerated = new std::list<int32_t>();
-		// Decompiling: Build list
-		if (!pComp->isCompiler())
-			for (C4ObjectLink *pPos = First; pPos; pPos = pPos->Next)
-				if (pPos->Obj->Status)
-					pEnumerated->push_back(pPos->Obj->Number);
-		// Compile list
-		pComp->Value(mkSTLContainerAdapt(*pEnumerated, StdCompiler::SEP_SEP2));
-		// Decompiling: Delete list
-		if (!pComp->isCompiler())
-			{ delete pEnumerated; pEnumerated = NULL; }
-		// Compiling: Nothing to do - list will e denumerated later
+		// skipping player objects would screw object counting in non-naming compilers
+		assert(!fSkipPlayerObjects || pComp->hasNaming());
+		// Decompile all objects in reverse order
+		for (C4ObjectLink *pPos = Last; pPos; pPos = pPos->Prev)
+			if (pPos->Obj->Status)
+				if (!fSkipPlayerObjects || !pPos->Obj->IsUserPlayerObject())
+					pComp->Value(mkNamingAdapt(mkParAdapt(*pPos->Obj, numbers), "Object"));
 	}
 	else
 	{
-		if (pComp->isDecompiler())
+		// FIXME: Check that no PlayerObjects are loaded when fSkipPlayerObjects is true
+		// i.e. that loading and saving was done with the same flag.
+		// Remove previous data
+		Clear();
+		// Load objects, add them to the list.
+		for (int i = 0; i < iObjCnt; i++)
 		{
-			// skipping player objects would screw object counting in non-naming compilers
-			assert(!fSkipPlayerObjects || pComp->hasNaming());
-			// Put object count
-			int32_t iObjCnt = ObjectCount();
-			pComp->Value(mkNamingCountAdapt(iObjCnt, "Object"));
-			// Decompile all objects in reverse order
-			for (C4ObjectLink *pPos = Last; pPos; pPos = pPos->Prev)
-				if (pPos->Obj->Status)
-					if (!fSkipPlayerObjects || !pPos->Obj->IsUserPlayerObject())
-						pComp->Value(mkNamingAdapt(*pPos->Obj, "Object"));
-		}
-		else
-		{
-			// this mode not supported
-			assert(!fSkipPlayerObjects);
-			// Remove previous data
-			Clear();
-			// Get "Object" section count
-			int32_t iObjCnt;
-			pComp->Value(mkNamingCountAdapt(iObjCnt, "Object"));
-			// Load objects, add them to the list.
-			for (int i = 0; i < iObjCnt; i++)
+			C4Object *pObj = NULL;
+			try
 			{
-				C4Object *pObj = NULL;
-				try
-				{
-					pComp->Value(mkNamingAdapt(mkPtrAdaptNoNull(pObj), "Object"));
-					Add(pObj, stReverse);
-				}
-				catch (StdCompiler::Exception *pExc)
-				{
-					// Failsafe object loading: If an error occurs during object loading, just skip that object and load the next one
-					if (!pExc->Pos.getLength())
-						LogF("ERROR: Object loading: %s", pExc->Msg.getData());
-					else
-						LogF("ERROR: Object loading(%s): %s", pExc->Pos.getData(), pExc->Msg.getData());
-					delete pExc;
-				}
+				pComp->Value(mkNamingAdapt(mkParAdapt(mkPtrAdaptNoNull(pObj), numbers), "Object"));
+				Add(pObj, stReverse);
+			}
+			catch (StdCompiler::Exception *pExc)
+			{
+				// Failsafe object loading: If an error occurs during object loading, just skip that object and load the next one
+				if (!pExc->Pos.getLength())
+					LogF("ERROR: Object loading: %s", pExc->Msg.getData());
+				else
+					LogF("ERROR: Object loading(%s): %s", pExc->Pos.getData(), pExc->Msg.getData());
+				delete pExc;
 			}
 		}
 	}
 }
 
-StdStrBuf C4ObjectList::GetNameList(C4DefList &rDefs, DWORD dwCategory)
+void C4ObjectList::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
+{
+	// (Re)create list
+	delete pEnumerated; pEnumerated = new std::list<int32_t>();
+	// Decompiling: Build list
+	if (!pComp->isCompiler())
+		for (C4ObjectLink *pPos = First; pPos; pPos = pPos->Next)
+			if (pPos->Obj->Status)
+				pEnumerated->push_back(pPos->Obj->Number);
+	// Compile list
+	pComp->Value(mkSTLContainerAdapt(*pEnumerated, StdCompiler::SEP_SEP2));
+	// Decompiling: Delete list
+	if (!pComp->isCompiler())
+		{ delete pEnumerated; pEnumerated = NULL; }
+	// Compiling: Nothing to do - list will be denumerated later
+}
+
+StdStrBuf C4ObjectList::GetNameList(C4DefList &rDefs)
 {
 	int cpos,idcount;
 	C4ID c_id;
 	C4Def *cdef;
 	StdStrBuf Buf;
-	for (cpos=0; (c_id=GetListID(dwCategory,cpos)); cpos++)
+	for (cpos=0; (c_id=GetListID(C4D_All,cpos)); cpos++)
 		if ((cdef=rDefs.ID2Def(c_id)))
 		{
 			idcount=ObjectCount(c_id);
@@ -591,6 +578,29 @@ StdStrBuf C4ObjectList::GetNameList(C4DefList &rDefs, DWORD dwCategory)
 			Buf.AppendFormat("%dx %s",idcount,cdef->GetName());
 		}
 	return Buf;
+}
+
+StdStrBuf C4ObjectList::GetDataString()
+{
+	StdStrBuf Output;
+
+	// Compose info text by selected object(s)
+	switch (ObjectCount())
+	{
+		// No selection
+	case 0:
+		Output = LoadResStr("IDS_CNS_NOOBJECT");
+		break;
+		// One selected object
+	case 1:
+		Output.Take(GetObject()->GetDataString());
+		break;
+	// Multiple selected objects
+	default:
+		Output.Format(LoadResStr("IDS_CNS_MULTIPLEOBJECTS"),ObjectCount());
+		break;
+	}
+	return Output;
 }
 
 bool C4ObjectList::ValidateOwners()
@@ -620,26 +630,6 @@ void C4ObjectList::ClearInfo(C4ObjectInfo *pInfo)
 	for (cLnk=First; cLnk; cLnk=cLnk->Next)
 		if (cLnk->Obj->Status)
 			cLnk->Obj->ClearInfo(pInfo);
-}
-
-void C4ObjectList::DrawList(C4Facet &cgo, int iSelection, DWORD dwCategory)
-{
-	int iSections = cgo.GetSectionCount();
-	int iObjects = ObjectCount(C4ID::None,dwCategory);
-	int iFirstVisible = BoundBy(iSelection-iSections/2,0,Max(iObjects-iSections,0));
-	C4Facet cgo2;
-	int iObj=0,iSec=0;
-	C4ObjectLink *cLnk; C4Object *cObj;
-	for (cLnk=First; cLnk && (cObj=cLnk->Obj); cLnk=cLnk->Next)
-		if (cObj->Status && (cObj->Category && dwCategory))
-		{
-			if (Inside(iObj,iFirstVisible,iFirstVisible+iSections-1))
-			{
-				cgo2 = cgo.GetSection(iSec++);
-				cObj->DrawPicture(cgo2,(iObj==iSelection));
-			}
-			iObj++;
-		}
 }
 
 void C4ObjectList::Sort()
@@ -767,52 +757,6 @@ void C4ObjectList::Default()
 	pEnumerated=NULL;
 }
 
-bool C4ObjectList::OrderObjectBefore(C4Object *pObj1, C4Object *pObj2)
-{
-	// safety
-	if (pObj1->Status != C4OS_NORMAL || pObj2->Status != C4OS_NORMAL) return false;
-	// get links (and check whether the objects are part of this list!)
-	C4ObjectLink *pLnk1=GetLink(pObj1); if (!pLnk1) return false;
-	C4ObjectLink *pLnk2=GetLink(pObj2); if (!pLnk2) return false;
-	// check if requirements are already fulfilled
-	C4ObjectLink *pLnk=pLnk1;
-	while ((pLnk=pLnk->Next)) if (pLnk==pLnk2) break;
-	if (pLnk) return true;
-	// if not, reorder pLnk1 directly before pLnk2
-	// unlink from current position
-	// no need to check pLnk1->Prev here, because pLnk1 cannot be first in the list
-	// (at least pLnk2 must lie before it!)
-	if ((pLnk1->Prev->Next=pLnk1->Next)) pLnk1->Next->Prev=pLnk1->Prev; else Last=pLnk1->Prev;
-	// relink into new one
-	if ((pLnk1->Prev=pLnk2->Prev)) pLnk2->Prev->Next=pLnk1; else First=pLnk1;
-	pLnk1->Next=pLnk2; pLnk2->Prev=pLnk1;
-	// done, success
-	return true;
-}
-
-bool C4ObjectList::OrderObjectAfter(C4Object *pObj1, C4Object *pObj2)
-{
-	// safety
-	if (pObj1->Status != C4OS_NORMAL || pObj2->Status != C4OS_NORMAL) return false;
-	// get links (and check whether the objects are part of this list!)
-	C4ObjectLink *pLnk1=GetLink(pObj1); if (!pLnk1) return false;
-	C4ObjectLink *pLnk2=GetLink(pObj2); if (!pLnk2) return false;
-	// check if requirements are already fulfilled
-	C4ObjectLink *pLnk=pLnk1;
-	while ((pLnk=pLnk->Prev)) if (pLnk==pLnk2) break;
-	if (pLnk) return true;
-	// if not, reorder pLnk1 directly after pLnk2
-	// unlink from current position
-	// no need to check pLnk1->Next here, because pLnk1 cannot be last in the list
-	// (at least pLnk2 must lie after it!)
-	if ((pLnk1->Next->Prev=pLnk1->Prev)) pLnk1->Prev->Next=pLnk1->Next; else First=pLnk1->Next;
-	// relink into new one
-	if ((pLnk1->Next=pLnk2->Next)) pLnk2->Next->Prev=pLnk1; else Last=pLnk1;
-	pLnk1->Prev=pLnk2; pLnk2->Next=pLnk1;
-	// done, success
-	return true;
-}
-
 bool C4ObjectList::ShiftContents(C4Object *pNewFirst)
 {
 	// get link of new first (this ensures list is not empty)
@@ -906,10 +850,11 @@ void C4ObjectList::UpdateScriptPointers()
 struct C4ObjectListDumpHelper
 {
 	C4ObjectList *pLst;
+	C4ValueNumbers * numbers;
 
-	void CompileFunc(StdCompiler *pComp) { pComp->Value(mkNamingAdapt(*pLst, "Objects")); }
+	void CompileFunc(StdCompiler *pComp) { pComp->Value(mkNamingAdapt(mkParAdapt(*pLst, numbers), "Objects")); }
 
-	C4ObjectListDumpHelper(C4ObjectList *pLst) : pLst(pLst) {}
+	C4ObjectListDumpHelper(C4ObjectList *pLst, C4ValueNumbers * numbers) : pLst(pLst), numbers(numbers) {}
 	ALLOW_TEMP_TO_REF(C4ObjectListDumpHelper)
 };
 
@@ -921,8 +866,9 @@ bool C4ObjectList::CheckSort(C4ObjectList *pList)
 		if (!cLnk2)
 		{
 			Log("CheckSort failure");
-			LogSilent(DecompileToBuf<StdCompilerINIWrite>(mkNamingAdapt(C4ObjectListDumpHelper(this), "SectorList")).getData());
-			LogSilent(DecompileToBuf<StdCompilerINIWrite>(mkNamingAdapt(C4ObjectListDumpHelper(pList), "MainList")).getData());
+			C4ValueNumbers numbers;
+			LogSilent(DecompileToBuf<StdCompilerINIWrite>(mkNamingAdapt(C4ObjectListDumpHelper(this, &numbers), "SectorList")).getData());
+			LogSilent(DecompileToBuf<StdCompilerINIWrite>(mkNamingAdapt(C4ObjectListDumpHelper(pList, &numbers), "MainList")).getData());
 			return false;
 		}
 		else
@@ -944,7 +890,7 @@ void C4ObjectList::CheckCategorySort()
 	for (cLnk=First; cLnk && cLnk->Next; cLnk=cLnk->Next)
 		if (!cLnk->Obj->Unsorted && cLnk->Obj->Status)
 		{
-			if (cPrev) assert( (cPrev->Obj->Category & C4D_SortLimit) >= (cLnk->Obj->Category & C4D_SortLimit));
+			if (cPrev) assert(cPrev->Obj->GetPlane() >= cLnk->Obj->GetPlane());
 			cPrev = cLnk;
 		}
 }

@@ -3,9 +3,11 @@
  *
  * Copyright (c) 1998-2000, 2008  Matthes Bender
  * Copyright (c) 2001-2003, 2005, 2008  Sven Eberhardt
- * Copyright (c) 2005-2007  Günther Brammer
+ * Copyright (c) 2005-2007, 2010-2011  Günther Brammer
  * Copyright (c) 2006-2007  Julian Raschke
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2009-2010  Martin Plicht
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -104,9 +106,8 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		if(!WideCharToMultiByte(CP_UTF8, 0L, reinterpret_cast<LPCWSTR>(&wParam), 1, c, 4, 0, 0))
 			return 0;
 		// GUI: forward
-		if (::pGUI)
-			if (::pGUI->CharIn(c))
-				return 0;
+		if (::pGUI->CharIn(c))
+			return 0;
 		return false;
 	}
 	case WM_USER_LOG:
@@ -148,6 +149,8 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		case SIZE_RESTORED:
 		case SIZE_MAXIMIZED:
 			::Application.OnResolutionChanged(LOWORD(lParam), HIWORD(lParam));
+			if(Application.pWindow) // this might be called from CStdWindow::Init in which case Application.pWindow is not yet set
+				::SetWindowPos(Application.pWindow->hRenderWindow, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOREDRAW | SWP_NOZORDER);
 			break;
 		}
 		break;
@@ -185,7 +188,7 @@ void C4FullScreen::HandleMessage (XEvent &e)
 		switch (e.xbutton.button)
 		{
 		case Button1:
-			if (timeGetTime() - last_left_click < 400)
+			if (GetTime() - last_left_click < 400)
 			{
 				C4GUI::MouseMove(C4MC_Button_LeftDouble,
 				                           e.xbutton.x, e.xbutton.y, e.xbutton.state, NULL);
@@ -195,7 +198,7 @@ void C4FullScreen::HandleMessage (XEvent &e)
 			{
 				C4GUI::MouseMove(C4MC_Button_LeftDown,
 				                           e.xbutton.x, e.xbutton.y, e.xbutton.state, NULL);
-				last_left_click = timeGetTime();
+				last_left_click = GetTime();
 			}
 			break;
 		case Button2:
@@ -203,7 +206,7 @@ void C4FullScreen::HandleMessage (XEvent &e)
 			                           e.xbutton.x, e.xbutton.y, e.xbutton.state, NULL);
 			break;
 		case Button3:
-			if (timeGetTime() - last_right_click < 400)
+			if (GetTime() - last_right_click < 400)
 			{
 				C4GUI::MouseMove(C4MC_Button_RightDouble,
 				                           e.xbutton.x, e.xbutton.y, e.xbutton.state, NULL);
@@ -213,7 +216,7 @@ void C4FullScreen::HandleMessage (XEvent &e)
 			{
 				C4GUI::MouseMove(C4MC_Button_RightDown,
 				                           e.xbutton.x, e.xbutton.y, e.xbutton.state, NULL);
-				last_right_click = timeGetTime();
+				last_right_click = GetTime();
 			}
 			break;
 		case Button4:
@@ -278,14 +281,14 @@ namespace
 		{
 		case SDL_BUTTON_LEFT:
 			if (e.state == SDL_PRESSED)
-				if (timeGetTime() - lastLeftClick < 400 && abs(lastX-e.x) <= clickDist && abs(lastY-e.y) <= clickDist)
+				if (GetTime() - lastLeftClick < 400 && abs(lastX-e.x) <= clickDist && abs(lastY-e.y) <= clickDist)
 				{
 					lastLeftClick = 0;
 					button = C4MC_Button_LeftDouble;
 				}
 				else
 				{
-					lastLeftClick = timeGetTime();
+					lastLeftClick = GetTime();
 					button = C4MC_Button_LeftDown;
 				}
 			else
@@ -293,14 +296,14 @@ namespace
 			break;
 		case SDL_BUTTON_RIGHT:
 			if (e.state == SDL_PRESSED)
-				if (timeGetTime() - lastRightClick < 400)
+				if (GetTime() - lastRightClick < 400)
 				{
 					lastRightClick = 0;
 					button = C4MC_Button_RightDouble;
 				}
 				else
 				{
-					lastRightClick = timeGetTime();
+					lastRightClick = GetTime();
 					button = C4MC_Button_RightDown;
 				}
 			else
@@ -361,7 +364,7 @@ void C4FullScreen::HandleMessage (SDL_Event &e)
 		char c[2];
 		c[0] = e.key.keysym.unicode;
 		c[1] = 0;
-		if (::pGUI && !isSpecialKey(e.key.keysym.unicode))
+		if (!isSpecialKey(e.key.keysym.unicode))
 			::pGUI->CharIn(c);
 		Game.DoKeyboardInput(e.key.keysym.sym, KEYEV_Down,
 		                     e.key.keysym.mod & (KMOD_LALT | KMOD_RALT),
@@ -411,6 +414,12 @@ C4FullScreen::~C4FullScreen()
 	if (pSurface) delete pSurface;
 }
 
+
+CStdWindow * C4FullScreen::Init(CStdApp * pApp)
+{
+	return Init(CStdWindow::W_Fullscreen, pApp, C4ENGINENAME);
+}
+
 void C4FullScreen::Close()
 {
 	if (Game.IsRunning)
@@ -431,7 +440,7 @@ void C4FullScreen::Execute()
 	// Execute menu
 	if (pMenu) pMenu->Execute();
 	// Draw
-	::GraphicsSystem.Execute();
+	RequestUpdate();
 }
 
 bool C4FullScreen::ViewportCheck()
@@ -494,8 +503,6 @@ bool C4FullScreen::ViewportCheck()
 
 bool C4FullScreen::ShowAbortDlg()
 {
-	// no gui?
-	if (!::pGUI) return false;
 	// abort dialog already shown
 	if (C4AbortGameDialog::IsShown()) return false;
 	// not while game over dialog is open
@@ -523,6 +530,11 @@ void C4FullScreen::CloseMenu()
 		delete pMenu;
 		pMenu = NULL;
 	}
+}
+
+void C4FullScreen::PerformUpdate()
+{
+	GraphicsSystem.Execute();
 }
 
 bool C4FullScreen::MenuKeyControl(BYTE byCom)

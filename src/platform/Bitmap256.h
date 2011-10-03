@@ -4,6 +4,7 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2002  Sven Eberhardt
  * Copyright (c) 2005, 2008  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -24,7 +25,7 @@
 #define BITMAP256_H_INC
 
 #ifdef _WIN32
-#include <windows.h>
+#include <C4windowswrapper.h>
 #else
 #pragma pack(push,2)
 typedef struct tagBITMAPFILEHEADER

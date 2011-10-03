@@ -2,10 +2,11 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2008  Matthes Bender
- * Copyright (c) 2004-2006  Sven Eberhardt
  * Copyright (c) 2004-2008  Peter Wortmann
- * Copyright (c) 2005-2007  Günther Brammer
+ * Copyright (c) 2004-2006  Sven Eberhardt
+ * Copyright (c) 2005-2007, 2009  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010-2011  Julius Michaelis
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -37,6 +38,10 @@
 #include <C4Components.h>
 #include <StdWindow.h>
 
+#ifdef HAVE_SYS_FILE_H
+#include <sys/file.h>
+#endif
+
 #if defined(HAVE_SHARE_H) || defined(_WIN32)
 #include <share.h>
 #endif
@@ -53,10 +58,13 @@ bool OpenLog()
 	sLogFileName = C4CFN_Log; int iLog = 2;
 #ifdef _WIN32
 	while (!(C4LogFile = _fsopen(Config.AtUserDataPath(sLogFileName.getData()), "wt", _SH_DENYWR)))
+#elif HAVE_SYS_FILE_H
+	while (!(C4LogFile = fopen(Config.AtUserDataPath(sLogFileName.getData()), "wb")) || flock(fileno(C4LogFile),LOCK_EX|LOCK_NB))
 #else
 	while (!(C4LogFile = fopen(Config.AtUserDataPath(sLogFileName.getData()), "wb")))
 #endif
 	{
+		if(C4LogFile) fclose(C4LogFile); // Already locked by another instance?
 		// If the file does not yet exist, the directory is r/o
 		// don't go on then, or we have an infinite loop
 		if (access(Config.AtUserDataPath(sLogFileName.getData()), 0))
@@ -130,12 +138,22 @@ bool LogSilent(const char *szMessage, bool fConsole)
 			fflush(C4LogFile);
 		}
 
+		// Save into record log file, if available
+		if(Control.GetRecord())
+		{
+			Control.GetRecord()->GetLogFile()->Write(Line.getData(), Line.getLength());
+			#ifdef IMMEDIATEREC
+				Control.GetRecord()->GetLogFile()->Flush();
+			#endif
+		}
+
+
 		// Write to console
 		if (fConsole)
 		{
 #if defined(_DEBUG) && defined(_WIN32)
 			// debug: output to VC console
-			OutputDebugString(Line.getData());
+			OutputDebugString(Line.GetWideChar());
 #endif
 			fputs(Line.getData(),stdout);
 			fflush(stdout);
@@ -163,14 +181,14 @@ bool Log(const char *szMessage)
 
 #ifndef NOAULDEBUG
 	// Pass on to debugger
-	if (C4AulDebug *pDebug = ::ScriptEngine.GetDebugger())
+	if (C4AulDebug *pDebug = C4AulDebug::GetDebugger())
 		pDebug->OnLog(szMessage);
 #endif
 	// Pass on to console
 	Console.Out(szMessage);
 	// pass on to lobby
 	C4GameLobby::MainDlg *pLobby = ::Network.GetLobby();
-	if (pLobby && ::pGUI) pLobby->OnLog(szMessage);
+	if (pLobby) pLobby->OnLog(szMessage);
 
 	// Add message to log buffer
 	bool fNotifyMsgBoard = false;
@@ -258,10 +276,10 @@ bool GetLogSection(size_t iStart, size_t iLength, StdStrBuf &rsOut)
 {
 	if (!iLength) { rsOut.Clear(); return true; }
 	// read section from log file
-	CStdFile LogFileRead;
-	char *szBuf, *szBufOrig; size_t iSize; // size exclusing terminator
-	if (!LogFileRead.Load(sLogFileName.getData(), (BYTE **)&szBuf, (int *) &iSize, 1)) return false;
-	szBufOrig = szBuf;
+	StdStrBuf BufOrig;
+	if (!BufOrig.LoadFromFile(sLogFileName.getData())) return false;
+	char *szBuf = BufOrig.getMData();
+	size_t iSize = BufOrig.getSize(); // size excluding terminator
 	// reduce to desired buffer section
 	if (iStart > iSize) iStart = iSize;
 	if (iStart + iLength > iSize) iLength = iSize - iStart;
@@ -289,8 +307,6 @@ bool GetLogSection(size_t iStart, size_t iLength, StdStrBuf &rsOut)
 	}
 	// done; create string buffer from data
 	rsOut.Copy(szBuf, szPosWrite - szBuf);
-	// old buf no longer used
-	delete [] szBufOrig;
 	// done, success
 	return true;
 }

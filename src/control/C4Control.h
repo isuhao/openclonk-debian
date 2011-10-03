@@ -2,8 +2,9 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000  Matthes Bender
- * Copyright (c) 2001-2002, 2005  Sven Eberhardt
+ * Copyright (c) 2001-2002, 2005, 2009  Sven Eberhardt
  * Copyright (c) 2004-2007  Peter Wortmann
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -110,7 +111,6 @@ enum C4CtrlValueType
 	C4CVT_MaxPlayer = 2,
 	C4CVT_TeamDistribution = 3,
 	C4CVT_TeamColors = 4,
-	C4CVT_FairCrew = 5
 };
 
 class C4ControlSet : public C4ControlPacket // sync, lobby
@@ -223,7 +223,6 @@ public:
 protected:
 	int32_t Frame;
 	int32_t ControlTick;
-	int32_t Random3;
 	int32_t RandomCount;
 	int32_t AllCrewPosX;
 	int32_t PXSCount;

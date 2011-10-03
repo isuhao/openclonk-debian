@@ -2,10 +2,11 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2002, 2004-2007  Sven Eberhardt
- * Copyright (c) 2004-2008  Günther Brammer
+ * Copyright (c) 2004-2011  Günther Brammer
  * Copyright (c) 2007  Peter Wortmann
  * Copyright (c) 2008  Matthes Bender
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -23,16 +24,17 @@
 /* Direct3D implementation of NewGfx */
 
 #include "C4Include.h"
-
 #include <StdD3D.h>
 #include <StdD3DShader.h>
+
+#include <StdApp.h>
 #include <StdMarkup.h>
 #include <StdWindow.h>
 #include <C4Config.h>
 
 #ifdef USE_DIRECTX
 
-#include <windows.h>
+#include <C4windowswrapper.h>
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
@@ -69,7 +71,7 @@ void CStdD3D::Default()
 void CStdD3D::Clear()
 {
 	NoPrimaryClipper();
-	if (pTexMgr) pTexMgr->IntUnlock();
+	//if (pTexMgr) pTexMgr->IntUnlock(); // cannot do this here or we can't preserve textures across GL reinitialization as required when changing multisampling
 	if (lpDevice)
 	{
 		EndScene();
@@ -87,15 +89,30 @@ void CStdD3D::Clear()
 
 /* Direct3D initialization */
 
-bool CStdD3D::PageFlip(RECT *pSrcRt, RECT *pDstRt, CStdWindow * pWindow)
+bool CStdD3D::PageFlip(C4Rect *pSrcRt, C4Rect *pDstRt, CStdWindow * pWindow)
 {
+	RECT SrcRt, DstRt;
+	if (pSrcRt)
+	{
+		SrcRt.left = pSrcRt->x;
+		SrcRt.top = pSrcRt->y;
+		SrcRt.right = pSrcRt->x + pSrcRt->Wdt;
+		SrcRt.bottom = pSrcRt->y + pSrcRt->Hgt;
+	}
+	if (pDstRt)
+	{
+		DstRt.left = pDstRt->x;
+		DstRt.top = pDstRt->y;
+		DstRt.right = pDstRt->x + pDstRt->Wdt;
+		DstRt.bottom = pDstRt->y + pDstRt->Hgt;
+	}
 	// call from gfx thread only!
 	if (!pApp || !pApp->AssertMainThread()) return false;
 	// safety
 	if (!lpDevice) return false;
 	// end the scene and present it
 	EndScene();
-	if (lpDevice->Present(pSrcRt, pDstRt, pWindow ? pWindow->hWindow : 0, NULL) == D3DERR_DEVICELOST)
+	if (lpDevice->Present(pSrcRt ? &SrcRt : 0, pDstRt ? &DstRt : 0, pWindow ? pWindow->hWindow : 0, NULL) == D3DERR_DEVICELOST)
 	{
 		if (lpDevice->TestCooperativeLevel() == D3DERR_DEVICELOST) return false;
 		if (!RestoreDeviceObjects()) return false;

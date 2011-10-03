@@ -1,11 +1,13 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2004-2008  Sven Eberhardt
+ * Copyright (c) 1998-2000, 2007  Matthes Bender
+ * Copyright (c) 2003-2008, 2010-2011  Sven Eberhardt
  * Copyright (c) 2005, 2007, 2009  Peter Wortmann
- * Copyright (c) 2005-2006, 2008  Günther Brammer
- * Copyright (c) 2007  Matthes Bender
+ * Copyright (c) 2005-2006, 2008-2010  Günther Brammer
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Martin Plicht
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,6 +27,7 @@
 #include <C4Include.h>
 #include <C4Gui.h>
 
+#include <C4DefList.h>
 #include <C4FullScreen.h>
 #include <C4LoaderScreen.h>
 #include <C4Application.h>
@@ -41,6 +44,7 @@
 #ifdef _WIN32
 #include "resource.h"
 #endif
+
 #ifdef USE_X11
 #define None Die_XLib_Die
 #include <X11/Xlib.h>
@@ -190,7 +194,7 @@ namespace C4GUI
 // DialogWindow
 
 #ifdef _WIN32
-	CStdWindow * DialogWindow::Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, const C4Rect &rcBounds, const char *szID)
+	CStdWindow * DialogWindow::Init(CStdWindow::WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, const C4Rect &rcBounds, const char *szID)
 	{
 		Active = true;
 		// calculate required size
@@ -202,14 +206,15 @@ namespace C4GUI
 		if (!::AdjustWindowRectEx(&rtSize, ConsoleDlgWindowStyle, false, 0)) return false;
 		// create it!
 		if (!Title || !*Title) Title = "???";
-		hWindow = ::CreateWindowEx  (
+		hWindow = ::CreateWindowExW  (
 		            0,
-		            ConsoleDlgClassName, Title,
+		            ConsoleDlgClassName, GetWideChar(Title),
 		            ConsoleDlgWindowStyle,
 		            CW_USEDEFAULT,CW_USEDEFAULT,rtSize.right-rtSize.left,rtSize.bottom-rtSize.top,
 		            pParent->hWindow,NULL,pApp->GetInstance(),NULL);
 		if (hWindow)
 		{
+			hRenderWindow = hWindow;
 			// update pos
 			if (szID && *szID)
 				RestoreWindowPosition(hWindow, FormatString("ConsoleGUI_%s", szID).getData(), Config.GetSubkeyPath("Console"), false);
@@ -224,7 +229,7 @@ namespace C4GUI
 	LRESULT APIENTRY DialogWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	{
 		// Determine dialog
-		Dialog *pDlg = ::pGUI ? ::pGUI->GetDialog(hwnd) : NULL;
+		Dialog *pDlg = ::pGUI->GetDialog(hwnd);
 		if (!pDlg) return DefWindowProc(hwnd, uMsg, wParam, lParam);
 
 		// Process message
@@ -295,7 +300,7 @@ namespace C4GUI
 	bool Dialog::RegisterWindowClass(HINSTANCE hInst)
 	{
 		// register landscape viewport class
-		WNDCLASSEX WndClass;
+		WNDCLASSEXW WndClass;
 		WndClass.cbSize=sizeof(WNDCLASSEX);
 		WndClass.style         = CS_DBLCLKS | CS_BYTEALIGNCLIENT;
 		WndClass.lpfnWndProc   = DialogWinProc;
@@ -308,21 +313,24 @@ namespace C4GUI
 		WndClass.lpszClassName = ConsoleDlgClassName;
 		WndClass.hIcon         = LoadIcon (hInst, MAKEINTRESOURCE (IDI_00_C4X) );
 		WndClass.hIconSm       = LoadIcon (hInst, MAKEINTRESOURCE (IDI_00_C4X) );
-		return !!RegisterClassEx(&WndClass);
+		return !!RegisterClassExW(&WndClass);
 	}
 #else
-	CStdWindow * DialogWindow::Init(CStdApp * pApp, const char * Title, CStdWindow * pParent, const C4Rect &rcBounds, const char *szID)
+	CStdWindow * DialogWindow::Init(CStdWindow::WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, const C4Rect &rcBounds, const char *szID)
 	{
-		if (CStdWindow::Init(pApp, Title, pParent, false))
+		CStdWindow *result;
+		if (CStdWindow::Init(windowKind, pApp, Title, pParent, false))
 		{
 			// update pos
 			if (szID && *szID)
 				RestorePosition(FormatString("ConsoleGUI_%s", szID).getData(), Config.GetSubkeyPath("Console"), false);
 			else
 				SetSize(rcBounds.Wdt, rcBounds.Hgt);
-			return this;
+			result = this;
 		}
-		return NULL;
+		else
+			result = NULL;
+		return result;
 	}
 #ifdef USE_X11
 	void DialogWindow::HandleMessage (XEvent &e)
@@ -331,7 +339,7 @@ namespace C4GUI
 		CStdWindow::HandleMessage(e);
 
 		// Determine dialog
-		Dialog *pDlg = ::pGUI ? ::pGUI->GetDialog(this) : NULL;
+		Dialog *pDlg = ::pGUI->GetDialog(this);
 		if (!pDlg) return;
 
 		switch (e.type)
@@ -356,7 +364,7 @@ namespace C4GUI
 			switch (e.xbutton.button)
 			{
 			case Button1:
-				if (timeGetTime() - last_left_click < 400)
+				if (GetTime() - last_left_click < 400)
 				{
 					::pGUI->MouseInput(C4MC_Button_LeftDouble,
 					                   e.xbutton.x, e.xbutton.y, e.xbutton.state, pDlg, NULL);
@@ -366,7 +374,7 @@ namespace C4GUI
 				{
 					::pGUI->MouseInput(C4MC_Button_LeftDown,
 					                   e.xbutton.x, e.xbutton.y, e.xbutton.state, pDlg, NULL);
-					last_left_click = timeGetTime();
+					last_left_click = GetTime();
 				}
 				break;
 			case Button2:
@@ -374,7 +382,7 @@ namespace C4GUI
 				                   e.xbutton.x, e.xbutton.y, e.xbutton.state, pDlg, NULL);
 				break;
 			case Button3:
-				if (timeGetTime() - last_right_click < 400)
+				if (GetTime() - last_right_click < 400)
 				{
 					::pGUI->MouseInput(C4MC_Button_RightDouble,
 					                   e.xbutton.x, e.xbutton.y, e.xbutton.state, pDlg, NULL);
@@ -384,7 +392,7 @@ namespace C4GUI
 				{
 					::pGUI->MouseInput(C4MC_Button_RightDown,
 					                   e.xbutton.x, e.xbutton.y, e.xbutton.state, pDlg, NULL);
-					last_right_click = timeGetTime();
+					last_right_click = GetTime();
 				}
 				break;
 			case Button4:
@@ -427,6 +435,26 @@ namespace C4GUI
 #endif
 #endif // _WIN32
 
+	void DialogWindow::PerformUpdate()
+	{
+		if (!pDialog)
+			return; // safety
+		C4Rect r;
+		GetSize(&r);
+		if (pSurface)
+		{
+			pSurface->Wdt = r.Wdt;
+			pSurface->Hgt = r.Hgt;
+#ifdef USE_GL
+			pGL->PrepareRendering(pSurface);
+			glClear(GL_COLOR_BUFFER_BIT);
+#endif
+		}
+		C4TargetFacet cgo;
+		cgo.Set(NULL, 0, 0, r.Wdt, r.Hgt, 0, 0);
+		pDialog->Draw(cgo);
+	}
+
 	void DialogWindow::Close()
 	{
 		// FIXME: Close the dialog of this window
@@ -440,7 +468,7 @@ namespace C4GUI
 		if (pWindow) return true;
 		// create it!
 		pWindow = new DialogWindow();
-		if (!pWindow->Init(&Application, TitleString.getData(), &Console, rcBounds, GetID()))
+		if (!pWindow->Init(CStdWindow::W_GuiWindow, &Application, TitleString.getData(), &Console, rcBounds, GetID()))
 		{
 			delete pWindow;
 			pWindow = NULL;
@@ -448,6 +476,7 @@ namespace C4GUI
 		}
 		// create rendering context
 		pWindow->pSurface = new CSurface(&Application, pWindow);
+		pWindow->pDialog = this;
 		return true;
 	}
 
@@ -601,15 +630,17 @@ namespace C4GUI
 		// update assigned window
 		if (pWindow)
 		{
+#ifdef _WIN32
 			RECT rtSize;
 			rtSize.left = 0;
 			rtSize.top = 0;
 			rtSize.right = rcBounds.Wdt;
 			rtSize.bottom = rcBounds.Hgt;
-#ifdef _WIN32
 			if (::AdjustWindowRectEx(&rtSize, ConsoleDlgWindowStyle, false, 0))
-#endif // _WIN32
 				pWindow->SetSize(rtSize.right-rtSize.left,rtSize.bottom-rtSize.top);
+#else
+			pWindow->SetSize(rcBounds.Wdt,rcBounds.Hgt);
+#endif // _WIN32
 		}
 	}
 
@@ -684,9 +715,9 @@ namespace C4GUI
 		// blit output to own window
 		if (pWindow)
 		{
-			RECT rtSrc,rtDst;
-			rtSrc.left=rcBounds.x; rtSrc.top=rcBounds.y;  rtSrc.right=rcBounds.x+rcBounds.Wdt; rtSrc.bottom=rcBounds.y+rcBounds.Hgt;
-			rtDst.left=0; rtDst.top=0;    rtDst.right=rcBounds.Wdt; rtDst.bottom=rcBounds.Hgt;
+			C4Rect rtSrc,rtDst;
+			rtSrc.x=rcBounds.x; rtSrc.y=rcBounds.y;  rtSrc.Wdt=rcBounds.Wdt; rtSrc.Hgt=rcBounds.Hgt;
+			rtDst.x=0; rtDst.y=0;    rtDst.Wdt=rcBounds.Wdt; rtDst.Hgt=rcBounds.Hgt;
 			pWindow->pSurface->PageFlip(&rtSrc, &rtDst);
 		}
 	}
@@ -853,11 +884,9 @@ namespace C4GUI
 				// dialog idle proc
 				OnIdle();
 				// handle messages - this may block until the next timer
-				if (!Application.ScheduleProcs() || !IsGUIValid())
+				if (!Application.ScheduleProcs())
 					return false; // game GUI and lobby will deleted in Game::Clear()
 			}
-			// Idle proc may have done something nasty
-			if (!IsGUIValid()) return false;
 		}
 		// return whether dlg was OK
 		return fOK;
@@ -869,7 +898,7 @@ namespace C4GUI
 		if (!Application.ScheduleProcs(0))
 			return false;
 		// check status
-		if (!IsGUIValid() || !fShow) return false;
+		if (!fShow) return false;
 		return true;
 	}
 
@@ -878,7 +907,7 @@ namespace C4GUI
 		// execute
 		if (Execute()) return true;
 		// delete self if closed
-		if (IsGUIValid()) delete this;
+		delete this;
 		return false;
 	}
 
@@ -900,7 +929,7 @@ namespace C4GUI
 	bool Dialog::FadeIn(Screen *pOnScreen)
 	{
 		// default screen
-		if (!pOnScreen) if (!(pOnScreen = Screen::GetScreenS())) return false;
+		if (!pOnScreen) pOnScreen = Screen::GetScreenS();
 		// fade in there
 		pOnScreen->ShowDialog(this, true);
 		iFade = 0;
@@ -1149,6 +1178,15 @@ namespace C4GUI
 				//rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!btnFocus) btnFocus = pBtnNo;
 			}
+			// Reset
+			if (dwButtons & btnReset)
+			{
+				Button *pBtnReset = new ResetButton(rcBtn);
+				AddElement(pBtnReset); //pBtnAbort->SetToolTip("[!]Reset to default");
+				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
+				if (!btnFocus) btnFocus = pBtnReset;
+
+			}
 		}
 		if (btnFocus) SetFocus(btnFocus, false);
 		// resize to actually needed size
@@ -1250,9 +1288,7 @@ namespace C4GUI
 		// create progress dlg
 		ProgressDialog *pDlg = new ProgressDialog(szMessage, szCaption, iMaxProgress, iInitialProgress, icoIcon);
 		// show it
-		if (!pDlg->Show(this, true)) { delete pDlg; return false; }
-		// do not return invalid pointer if GUI got deleted (whil eshowing the progress bar Dlg; maybe some stupid stuff in OnShow)
-		if (!IsGUIValid()) return NULL;
+		if (!pDlg->Show(this, true)) { delete pDlg; return NULL; }
 		// return dlg pointer
 		return pDlg;
 	}
@@ -1271,8 +1307,6 @@ namespace C4GUI
 		if (!pDlg->Show(this, true)) { delete pDlg; return false; }
 		// wait until it is closed
 		bool fResult = pDlg->DoModal();
-		// free dlg if this class is still valid (may have been deleted in game clear)
-		if (!IsGUIValid()) return false;
 		if (fDestruct) delete pDlg;
 		// return result
 		return fResult;

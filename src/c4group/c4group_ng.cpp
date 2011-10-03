@@ -1,8 +1,12 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2007, 2009  Günther Brammer
- * Copyright (c) 2007  Matthes Bender
+ * Copyright (c) 2002, 2011  Sven Eberhardt
+ * Copyright (c) 2004, 2007  Matthes Bender
+ * Copyright (c) 2005-2007, 2009-2011  Günther Brammer
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -43,6 +47,9 @@
 #include <C4Update.h>
 #include <C4ConfigShareware.h>
 #include <StdRegistry.h>
+#ifdef _WIN32
+#include <C4windowswrapper.h>
+#endif
 
 int globalArgC;
 char **globalArgV;
@@ -117,98 +124,6 @@ bool ProcessGroup(const char *FilenamePar)
 					// Handle commands
 					switch (argv[iArg][1])
 					{
-						// Add
-					case 'a':
-						if ((iArg + 1 >= argc) || (argv[iArg + 1][0] == '-'))
-							fprintf(stderr, "Missing argument for add command\n");
-						else
-						{
-							if ((argv[iArg][2] == 's') || (argv[iArg][2] && (argv[iArg][3] == 's')))
-							{
-								if ((iArg + 2 >= argc) || (argv[iArg + 2][0] == '-'))
-								{
-									fprintf(stderr, "Missing argument for add as command\n");
-								}
-								else
-								{
-									hGroup.Add(argv[iArg + 1], argv[iArg + 2]);
-									iArg += 2;
-								}
-							}
-							else
-							{
-								while (iArg + 1 < argc && argv[iArg + 1][0] != '-')
-								{
-									++iArg;
-#ifdef _WIN32
-									// manually expand wildcards
-									hGroup.Add(argv[iArg]);
-#else
-									hGroup.Add(argv[iArg], GetFilename(argv[iArg]));
-#endif
-								}
-							}
-						}
-						break;
-						// Move
-					case 'm':
-						if ((iArg + 1 >= argc) || (argv[iArg + 1][0] == '-'))
-						{
-							fprintf(stderr, "Missing argument for move command\n");
-						}
-						else
-						{
-							while (iArg + 1 < argc && argv[iArg + 1][0] != '-')
-							{
-								++iArg;
-#ifdef _WIN32
-								// manually expand wildcards
-								hGroup.Move(argv[iArg]);
-#else
-								hGroup.Move(argv[iArg], argv[iArg]);
-#endif
-							}
-						}
-						break;
-						// Extract
-					case 'e':
-						if ((iArg + 1 >= argc) || (argv[iArg + 1][0] == '-'))
-						{
-							fprintf(stderr, "Missing argument for extract command\n");
-						}
-						else
-						{
-							if ((argv[iArg][2] == 't') || (argv[iArg][2] && (argv[iArg][3] == 's')))
-							{
-								if ((iArg + 2 >= argc) || (argv[iArg + 2][0] == '-'))
-								{
-									fprintf(stderr, "Missing argument for extract as command\n");
-								}
-								else
-								{
-									hGroup.Extract(argv[iArg + 1], argv[iArg + 2]);
-									iArg += 2;
-								}
-							}
-							else
-							{
-								hGroup.Extract(argv[iArg + 1]);
-								iArg++;
-							}
-						}
-						break;
-						// Delete
-					case 'd':
-						if ((iArg + 1 >= argc) || (argv[iArg + 1][0] == '-'))
-						{
-							fprintf(stderr, "Missing argument for delete command\n");
-						}
-						else
-						{
-							hGroup.Delete(argv[iArg + 1], fRecursive);
-							iArg++;
-						}
-						break;
 						// Sort
 					case 's':
 						// First sort parameter overrides default Clonk sort list
@@ -225,19 +140,6 @@ bool ProcessGroup(const char *FilenamePar)
 							iArg++;
 						}
 						break;
-						// Rename
-					case 'r':
-						if ((iArg + 2 >= argc) || (argv[iArg + 1][0] == '-')
-						    || (argv[iArg + 2][0] == '-'))
-						{
-							fprintf(stderr, "Missing argument(s) for rename command\n");
-						}
-						else
-						{
-							hGroup.Rename(argv[iArg + 1], argv[iArg + 2]);
-							iArg += 2;
-						}
-						break;
 						// View
 					case 'l':
 						hGroup.SetStdOutput(true);
@@ -251,10 +153,6 @@ bool ProcessGroup(const char *FilenamePar)
 							iArg++;
 						}
 						hGroup.SetStdOutput(!fQuiet);
-						break;
-						// Make original
-					case 'o':
-						hGroup.MakeOriginal(true);
 						break;
 						// Pack
 					case 'p':
@@ -271,6 +169,34 @@ bool ProcessGroup(const char *FilenamePar)
 						}
 						// Reopen
 						else if (!hGroup.Open(szFilename))
+						{
+							fprintf(stderr, "Reopen failed: %s\n", hGroup.GetError());
+						}
+						break;
+						// Pack To
+					case 't':
+						if ((iArg + 1 >= argc))
+						{
+							fprintf(stderr, "Pack failed: too few arguments\n");
+							break;
+						}
+						++iArg;
+						Log("Packing...");
+						// Close
+						if (!hGroup.Close())
+						{
+							fprintf(stderr, "Closing failed: %s\n", hGroup.GetError());
+						}
+						// Pack
+						else if (!C4Group_PackDirectoryTo(szFilename, argv[iArg]))
+						{
+							fprintf(stderr, "Pack failed\n");
+							break;
+						}
+						free(szFilename);
+						szFilename = strdup(argv[iArg]);
+						// Reopen
+						if (!hGroup.Open(szFilename))
 						{
 							fprintf(stderr, "Reopen failed: %s\n", hGroup.GetError());
 						}
@@ -313,10 +239,6 @@ bool ProcessGroup(const char *FilenamePar)
 							fprintf(stderr, "Reopen failed: %s\n", hGroup.GetError());
 						}
 						break;
-						// Print maker
-					case 'k':
-						printf("%s\n", hGroup.GetMaker());
-						break;
 						// Generate update
 					case 'g':
 						if ((iArg + 3 >= argc) || (argv[iArg + 1][0] == '-')
@@ -351,7 +273,6 @@ bool ProcessGroup(const char *FilenamePar)
 					case 'y':
 						{
 							Log("Applying update...");
-							bool success = false;
 							unsigned long pid = 0;
 							bool have_pid = false;
 
@@ -373,11 +294,9 @@ bool ProcessGroup(const char *FilenamePar)
 							if(have_pid) ++iArg;
 						}
 						break;
-#ifdef _DEBUG
 					case 'z':
 						hGroup.PrintInternals();
 						break;
-#endif
 						// Undefined
 					default:
 						fprintf(stderr, "Unknown command: %s\n", argv[iArg]);
@@ -421,23 +340,23 @@ bool ProcessGroup(const char *FilenamePar)
 int RegisterShellExtensions()
 {
 #ifdef _WIN32
-	char strModule[2048];
-	char strCommand[2048];
+	wchar_t strModule[2048+1];
+	wchar_t strCommand[2048+1];
 	char strClass[128];
 	int i;
-	GetModuleFileName(NULL, strModule, 2048);
+	GetModuleFileNameW(NULL, strModule, 2048);
 	// Groups
 	const char *strClasses =
 	  "Clonk4.Definition;Clonk4.Folder;Clonk4.Group;Clonk4.Player;Clonk4.Scenario;Clonk4.Update;Clonk4.Weblink";
 	for (i = 0; SCopySegment(strClasses, i, strClass); i++)
 	{
 		// Unpack
-		sprintf(strCommand, "\"%s\" \"%%1\" \"-u\"", strModule);
-		if (!SetRegShell(strClass, "MakeFolder", "C4Group Unpack", strCommand))
+		swprintf(strCommand, 2048, L"\"%s\" \"%%1\" \"-u\"", strModule);
+		if (!SetRegShell(GetWideChar(strClass), L"MakeFolder", L"C4Group Unpack", strCommand))
 			return 0;
 		// Explode
-		sprintf(strCommand, "\"%s\" \"%%1\" \"-x\"", strModule);
-		if (!SetRegShell(strClass, "ExplodeFolder", "C4Group Explode", strCommand))
+		swprintf(strCommand, 2048, L"\"%s\" \"%%1\" \"-x\"", strModule);
+		if (!SetRegShell(GetWideChar(strClass), L"ExplodeFolder", L"C4Group Explode", strCommand))
 			return 0;
 	}
 	// Directories
@@ -445,8 +364,8 @@ int RegisterShellExtensions()
 	for (i = 0; SCopySegment(strClasses2, i, strClass); i++)
 	{
 		// Pack
-		sprintf(strCommand, "\"%s\" \"%%1\" \"-p\"", strModule);
-		if (!SetRegShell(strClass, "MakeGroupFile", "C4Group Pack", strCommand))
+		swprintf(strCommand, 2048, L"\"%s\" \"%%1\" \"-p\"", strModule);
+		if (!SetRegShell(GetWideChar(strClass), L"MakeGroupFile", L"C4Group Pack", strCommand))
 			return 0;
 	}
 	// Done
@@ -457,10 +376,8 @@ int RegisterShellExtensions()
 int UnregisterShellExtensions()
 {
 #ifdef _WIN32
-	char strModule[2048];
 	char strClass[128];
 	int i;
-	GetModuleFileName(NULL, strModule, 2048);
 	// Groups
 	const char *strClasses =
 	  "Clonk4.Definition;Clonk4.Folder;Clonk4.Group;Clonk4.Player;Clonk4.Scenario;Clonk4.Update;Clonk4.Weblink";
@@ -539,15 +456,13 @@ int main(int argc, char *argv[])
 		++iFirstCommand;
 
 	// Program info
-	LogF("RedWolf Design C4Group %s", C4VERSION);
+	LogF("OpenClonk C4Group %s", C4VERSION);
 
 	// Registration check
 	/*  Config.Init();
 	  Config.Load(false);*/
 
 	// Init C4Group
-	/*  C4Group_SetMaker(Config.General.Name);
-	  C4Group_SetTempPath(Config.General.TempPath);*/
 	C4Group_SetSortList(C4CFN_FLS);
 
 	// Store command line parameters
@@ -587,29 +502,24 @@ int main(int argc, char *argv[])
 #endif
 	}
 	// Too few parameters: output help (if we didn't register stuff)
-	else if (!fRegisterShell && !fUnregisterShell)
-	{
+	else if (!fRegisterShell && !fUnregisterShell) {
 		printf("\n");
 		printf("Usage:    c4group [options] group(s) command(s)\n\n");
-		printf("Commands: -a[s] Add [as]  -m Move  -e[t] Extract [to]\n");
-		printf("          -l List  -d Delete  -r Rename  -s Sort\n");
-		printf("          -p Pack  -u Unpack  -x Explode\n");
-		printf("          -k Print maker\n");
-		printf("          -g [source] [target] [title] Make update\n");
+		printf("Commands: -l List\n");
+		printf("          -x Explode\n");
+		printf("          -u Unpack\n");
+		printf("          -p Pack\n");
+		printf("          -t [filename] Pack To\n");
 		printf("          -y [ppid] Apply update (waiting for ppid to terminate first)\n");
+		printf("          -g [source] [target] [title] Make update\n");
+		printf("          -s Sort\n");
 		printf("\n");
 		printf("Options:  -v Verbose -r Recursive\n");
 		printf("          -i Register shell -u Unregister shell\n");
 		printf("          -x:<command> Execute shell command when done\n");
 		printf("\n");
-		printf("Examples: c4group pack.c4g -a myfile.dat -l \"*.dat\"\n");
-		printf("          c4group pack.c4g -as myfile.dat myfile.bin\n");
-		printf("          c4group -v pack.c4g -et \"*.dat\" \\data\\mydatfiles\\\n");
-		printf("          c4group pack.c4g -et myfile.dat myfile.bak\n");
-		printf("          c4group pack.c4g -s \"*.bin|*.dat\"\n");
-		printf("          c4group pack.c4g -x\n");
-		printf("          c4group pack.c4g -k\n");
-		printf("          c4group update.c4u -g ver1.c4f ver2.c4f New_Version\n");
+		printf("Examples: c4group pack.ocg -x\n");
+		printf("          c4group update.ocu -g ver1.ocf ver2.ocf New_Version\n");
 		printf("          c4group -i\n");
 	}
 
@@ -619,13 +529,13 @@ int main(int argc, char *argv[])
 		printf("Executing: %s\n", strExecuteAtEnd);
 #ifdef _WIN32
 
-		STARTUPINFO startInfo;
+		STARTUPINFOW startInfo;
 		ZeroMem(&startInfo, sizeof(startInfo));
 		startInfo.cb = sizeof(startInfo);
 
 		PROCESS_INFORMATION procInfo;
 
-		CreateProcess(strExecuteAtEnd, NULL, NULL, NULL, false, 0, NULL, NULL, &startInfo, &procInfo);
+		CreateProcessW(GetWideChar(strExecuteAtEnd), NULL, NULL, NULL, false, 0, NULL, NULL, &startInfo, &procInfo);
 #else
 		switch (fork())
 		{

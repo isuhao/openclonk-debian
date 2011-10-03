@@ -1,8 +1,10 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2007  Sven Eberhardt
  * Copyright (c) 2007  Matthes Bender
+ * Copyright (c) 2007  Sven Eberhardt
+ * Copyright (c) 2010  Nicolas Hake
+ * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -100,15 +102,6 @@ void C4StartupAboutDlg::MouseInput(C4GUI::CMouse &rMouse, int32_t iButton, int32
 	else*/
 	// otherwise, inherited for tooltips
 	C4StartupDlg::MouseInput(rMouse, iButton, iX, iY, dwKeyParam);
-}
-
-void C4StartupAboutDlg::OnRegisterBtn(C4GUI::Control *btn)
-{
-	// open hardcoded registration URL
-	// URL needs lowercase language code, two-character code only
-	StdStrBuf sLangCode; sLangCode.Format("%.2s", Config.General.Language);
-	sLangCode.ToLowerCase();
-	OpenURL(FormatString("http://www.clonk.de/register.php?lng=%s&product=cr", sLangCode.getData()).getData());
 }
 
 #ifdef WITH_AUTOMATIC_UPDATE

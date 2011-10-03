@@ -184,7 +184,7 @@ void C4StartupMainDlg::UpdateParticipants()
 		strPlayerFile.append(szPlayer);
 		if (!szPlayer || !*szPlayer) continue;
 		if (!FileExists(strPlayerFile.c_str())) continue;
-		if (!SEqualNoCase(GetExtension(szPlayer), "c4p")) continue; // additional sanity check to clear strange exe-path-only entries in player list?
+		if (!SEqualNoCase(GetExtension(szPlayer), "ocp")) continue; // additional sanity check to clear strange exe-path-only entries in player list?
 		SAddModule(Config.General.Participants, szPlayer);
 	}
 	// Draw selected players - we are currently displaying the players stored in Config.General.Participants.
@@ -206,7 +206,7 @@ void C4StartupMainDlg::OnClosed(bool fOK)
 {
 	// if dlg got aborted (by user), quit startup
 	// if it got closed with OK, the user pressed one of the buttons and dialog switching has been done already
-	if (!fOK) C4Startup::Get()->Exit();
+	if (!fOK) Application.Quit();
 }
 
 void C4StartupMainDlg::OnStartBtn(C4GUI::Control *btn)
@@ -244,13 +244,13 @@ void C4StartupMainDlg::OnNetJoin(const StdStrBuf &rsHostAddress)
 	if (!rsHostAddress || !*rsHostAddress.getData()) return;
 	// set default startup parameters
 	*Game.ScenarioFilename=0;
-	SCopy("Objects.c4d", Game.DefinitionFilenames);
+	SCopy("Objects.ocd", Game.DefinitionFilenames);
 	Game.NetworkActive = true;
 	Game.fLobby = true;
 	Game.fObserve = false;
 	SCopy(rsHostAddress.getData(), Game.DirectJoinAddress, sizeof(Game.DirectJoinAddress)-1);
 	// start with this set!
-	C4Startup::Get()->Start();
+	Application.OpenGame();
 }
 
 void C4StartupMainDlg::OnOptionsBtn(C4GUI::Control *btn)
@@ -268,7 +268,7 @@ void C4StartupMainDlg::OnAboutBtn(C4GUI::Control *btn)
 void C4StartupMainDlg::OnExitBtn(C4GUI::Control *btn)
 {
 	// callback: exit button pressed
-	C4Startup::Get()->Exit();
+	Application.Quit();
 }
 
 void C4StartupMainDlg::OnTODO(C4GUI::Control *btn)

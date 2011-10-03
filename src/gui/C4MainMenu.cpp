@@ -1,9 +1,12 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2008  Sven Eberhardt
- * Copyright (c) 2008  Matthes Bender
- * Copyright (c) 2008  Günther Brammer
+ * Copyright (c) 1998-2000, 2003, 2007-2008  Matthes Bender
+ * Copyright (c) 2001  Michael Käser
+ * Copyright (c) 2003, 2007-2008  Sven Eberhardt
+ * Copyright (c) 2004, 2008-2009  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Nicolas Hake
  * Copyright (c) 2008-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -22,6 +25,7 @@
 #include <C4Include.h>
 #include <C4MainMenu.h>
 
+#include <C4DefList.h>
 #include <C4FullScreen.h>
 #include <C4Viewport.h>
 #include <C4Player.h>
@@ -75,7 +79,7 @@ bool C4MainMenu::ActivateNewPlayer(int32_t iPlayer)
 		GfxR->fctPlayerClr.Surface->SetClr(0xff);
 	InitRefSym(GfxR->fctPlayerClr, LoadResStr("IDS_MENU_NOPLRFILES"), iPlayer);
 	for (DirectoryIterator iter(Config.General.UserDataPath); *iter; ++iter)
-		if (WildcardMatch("*.c4p", *iter))
+		if (WildcardMatch("*.ocp", *iter))
 		{
 			char szFilename[_MAX_PATH+1], szCommand[_MAX_PATH+30+1];
 			SCopy(*iter, szFilename, _MAX_PATH);
@@ -87,31 +91,13 @@ bool C4MainMenu::ActivateNewPlayer(int32_t iPlayer)
 			// Load player info
 			C4PlayerInfoCore C4P;
 			if (!C4P.Load(hGroup)) { hGroup.Close(); continue; }
-			// Load custom portrait
-			C4FacetSurface fctPortrait;
-			//if (Config.Graphics.ShowPortraits)
-			//  if (!fctPortrait.Load(hGroup, C4CFN_BigIcon, C4FCT_Full, C4FCT_Full, false, true))
-			//    if (!fctPortrait.Load(hGroup, C4CFN_Portrait, C4FCT_Full, C4FCT_Full, false, true))
-			//      fctPortrait.Load(hGroup, C4CFN_Portrait_Old, C4FCT_Full, C4FCT_Full, false, true);
 			// Close group
 			hGroup.Close();
 			// Add player item
 			sprintf(szCommand, "JoinPlayer:%s", szFilename);
 			StdStrBuf sItemText;
 			sItemText.Format(LoadResStr("IDS_MENU_NEWPLAYER"), C4P.PrefName);
-			// No custom portrait: use default player image
-			if (!fctPortrait.Surface)
-			{
-				fctPortrait.Create(C4SymbolSize, C4SymbolSize);
-				GfxR->fctPlayerClr.DrawClr(fctPortrait, true, 0xff);
-			}
-			// Create color overlay for portrait
-			C4FacetSurface fctPortraitClr;
-			fctPortraitClr.CreateClrByOwner(fctPortrait.Surface);
-			// Create menu symbol from colored portrait
 			C4FacetSurface fctSymbol;
-			fctSymbol.Create(C4SymbolSize, C4SymbolSize);
-			fctPortraitClr.DrawClr(fctSymbol, true, C4P.PrefColorDw);
 			// Add menu item
 			Add(sItemText.getData(), fctSymbol, szCommand);
 			// Reset symbol facet (menu holds on to the surface)
@@ -429,7 +415,7 @@ bool C4MainMenu::ActivateSavegame(int32_t iPlayer)
 	RemoveExtension(DirPath);
 	if (LooksLikeInteger(DirPath))
 	{
-		// ScenTitle.c4f\%d.c4s-names (old-style savegames)
+		// ScenTitle.ocf\%d.ocs-names (old-style savegames)
 		// get owning folder
 		if (Game.pParentGroup)
 		{
@@ -460,10 +446,10 @@ bool C4MainMenu::ActivateSavegame(int32_t iPlayer)
 	}
 
 	// New Style 2007:
-	// * scenarios are saved into ScenName.c4f/ScenName123.c4s to keep umlauts out of filenames
+	// * scenarios are saved into ScenName.ocf/ScenName123.ocs to keep umlauts out of filenames
 	// * language titles are stored in folders as title component
 	StdStrBuf strFilename, strTitle;
-	strFilename.Format("%s.c4f%c%s%%d.c4s", ScenName, DirectorySeparator, ScenName);
+	strFilename.Format("%s.ocf%c%s%%d.ocs", ScenName, DirectorySeparator, ScenName);
 	strTitle = Game.ScenarioTitle;
 
 	// Create menu items
@@ -475,7 +461,7 @@ bool C4MainMenu::ActivateSavegame(int32_t iPlayer)
 		// Compose commmand
 		strCommand.Format("Save:Game:%s:%s", strFilenameIndexed.getData(), strTitle.getData()); // Notice: the language title might contain ':' and thus confuse the segment list - but C4Menu::MenuCommand will try to handle this...
 		// Check free slot
-		strSavePath.Format("%s%c%s", Config.AtUserDataPath(Config.General.SaveGameFolder.getData()), DirectorySeparator, strFilenameIndexed.getData());
+		strSavePath.Format("%s%c%s", Config.AtUserDataPath(C4CFN_Savegames), DirectorySeparator, strFilenameIndexed.getData());
 		bool fFree = !C4Group_IsGroup(strSavePath.getData());
 		// Item caption
 		strCaption = LoadResStr("IDS_MENU_CPSAVEGAME");
@@ -630,11 +616,10 @@ bool C4MainMenu::ActivateMain(int32_t iPlayer)
 		AddRefSym(LoadResStr("IDS_MENU_CPNEWPLAYER"),GfxR->fctPlayerClr.GetPhase(),"ActivateMenu:NewPlayer",C4MN_Item_NoCount,NULL,LoadResStr("IDS_MENU_CPNEWPLAYERINFO"));
 	}
 	// Save game (player menu only - should we allow saving games with no players in it?)
-	/*
 	if (pPlr && (!::Network.isEnabled() || ::Network.isHost()))
 	{
 		AddRefSym(LoadResStr("IDS_MENU_CPSAVEGAME"),GfxR->fctMenu.GetPhase(0),"ActivateMenu:Save:Game",C4MN_Item_NoCount,NULL,LoadResStr("IDS_MENU_CPSAVEGAMEINFO"));
-	}*/
+	}
 	// Options
 	AddRefSym(LoadResStr("IDS_MNU_OPTIONS"), GfxR->fctOptions.GetPhase(0), "ActivateMenu:Options",C4MN_Item_NoCount, NULL, LoadResStr("IDS_MNU_OPTIONSINFO"));
 	// Disconnect
@@ -706,11 +691,8 @@ bool C4MainMenu::MenuCommand(const char *szCommand, bool fIsCloseCommand)
 		// not in league or replay mode
 		if (Game.Parameters.isLeague() || Game.C4S.Head.Replay) return false;
 		// join player
-		if (::Network.isEnabled())
-			// 2do: not for observers and such?
-			::Network.Players.JoinLocalPlayer(szCommand+11, true);
-		else
-			::Players.CtrlJoinLocalNoNetwork(szCommand+11, Game.Clients.getLocalID(), Game.Clients.getLocalName());
+		// 2do: not for observers and such?
+		Players.JoinNew(szCommand+11);
 		return true;
 	}
 	// SetHostility
@@ -831,7 +813,6 @@ bool C4MainMenu::MenuCommand(const char *szCommand, bool fIsCloseCommand)
 	{
 		if (!ValidPlr(Player)) return false; // observers may not look at goal/rule info, because it requires queue activation
 		Close(true);
-		// TODO!
 		C4Object *pObj; C4ID idItem(szCommand+12);
 		if ((pObj = ::Objects.Find(idItem)))
 			::Control.DoInput(CID_Script, new C4ControlScript(FormatString("Activate(%d)", Player).getData(), pObj->Number), CDT_Queue);

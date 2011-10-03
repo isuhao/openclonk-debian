@@ -1,10 +1,11 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
+ * Copyright (c) 1998-2000, 2003, 2008  Matthes Bender
  * Copyright (c) 2002, 2004-2008  Sven Eberhardt
- * Copyright (c) 2003, 2008  Matthes Bender
+ * Copyright (c) 2005, 2007-2011  Günther Brammer
  * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2005, 2007-2008  Günther Brammer
+ * Copyright (c) 2009-2010  Armin Burgmeier
  * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -22,19 +23,22 @@
 // a wrapper class to DirectDraw surfaces
 
 #include "C4Include.h"
+#include <StdSurface2.h>
+
 #include <StdFile.h>
 #include <CStdFile.h>
+#include "StdApp.h"
 #include <StdGL.h>
 #include <StdWindow.h>
 #include <StdRegistry.h>
 #include <StdResStr.h>
-#include <StdConfig.h>
 #include <StdSurface2.h>
 #include <StdFacet.h>
 #include <StdDDraw2.h>
 #include <StdD3D.h>
 #include <Bitmap256.h>
 #include <StdPNG.h>
+#include <C4Config.h>
 
 
 #ifdef HAVE_IO_H
@@ -258,7 +262,7 @@ bool CSurface::CreateTextures(int MaxTextureSize)
 	iTexY=(Hgt-1)/iTexSize +1;
 	// get mem for texture array
 	ppTex = new CTexRef * [iTexX*iTexY];
-	ZeroMemory(ppTex, iTexX*iTexY*sizeof(CTexRef *));
+	memset(ppTex, 0, iTexX*iTexY*sizeof(CTexRef *));
 	// cvan't be render target if it's not a single surface
 	if (!IsSingleSurface()) fIsRenderTarget = false;
 	// create textures
@@ -320,6 +324,7 @@ bool CSurface::CreateTextures(int MaxTextureSize)
 
 #ifdef _DEBUG
 	static int dbg_counter = 0;
+	if (dbg_idx) delete dbg_idx;
 	dbg_idx = new int;
 	*dbg_idx = dbg_counter++;
 #endif
@@ -368,10 +373,10 @@ bool ClrByOwner(DWORD &dwClr) // new style, based on Microsoft Knowledge Base Ar
 	WORD R,G,B;
 	BYTE cMax,cMin;
 	WORD  Rdelta,Gdelta,Bdelta;
-	// get RGB (from BGR...?)
-	R = GetBValue(dwClr);
-	G = GetGValue(dwClr);
-	B = GetRValue(dwClr);
+	// get RGB
+	R = GetRedValue(dwClr);
+	G = GetGreenValue(dwClr);
+	B = GetBlueValue(dwClr);
 	// calculate lightness
 	cMax = Max<int>(Max<int>(R,G),B);
 	cMin = Min<int>(Min<int>(R,G),B);
@@ -409,8 +414,8 @@ bool ClrByOwner(DWORD &dwClr) // new style, based on Microsoft Knowledge Base Ar
 	// Not blue
 	if (!(Inside(H, 145, 175) && (S > 100))) return false;
 	// It's blue: make it gray
-	BYTE b = GetRValue(dwClr);
-	dwClr = RGB(b, b, b) | (dwClr & 0xff000000);
+	BYTE b = GetBlueValue(dwClr);
+	dwClr = RGBA(b, b, b, 0) | (dwClr & 0xff000000);
 	return true;
 }
 
@@ -495,7 +500,7 @@ bool CSurface::UpdateSize(int wdt, int hgt)
 	return true;
 }
 
-bool CSurface::PageFlip(RECT *pSrcRt, RECT *pDstRt)
+bool CSurface::PageFlip(C4Rect *pSrcRt, C4Rect *pDstRt)
 {
 	assert(fPrimary);
 	if (!fPrimary)
@@ -537,7 +542,7 @@ IDirect3DSurface9 *CSurface::GetSurface()
 
 bool CSurface::ReadBMP(CStdStream &hGroup)
 {
-	int lcnt,iLineRest;
+	int lcnt;
 	CBitmap256Info BitmapInfo;
 	// read bmpinfo-header
 	if (!hGroup.Read(&BitmapInfo,sizeof(CBitmapInfo))) return false;
@@ -564,7 +569,6 @@ bool CSurface::ReadBMP(CStdStream &hGroup)
 	int iBufSize=DWordAligned(BitmapInfo.Info.biWidth*BitmapInfo.Info.biBitCount/8);
 	BYTE *pBuf = new BYTE[iBufSize];
 	// Read lines
-	iLineRest = DWordAligned(BitmapInfo.Info.biWidth) - BitmapInfo.Info.biWidth;
 	for (lcnt=Hgt-1; lcnt>=0; lcnt--)
 	{
 		if (!hGroup.Read(pBuf, iBufSize))
@@ -836,8 +840,8 @@ bool CSurface::GetLockTexAt(CTexRef **ppTexRef, int &rX, int &rY)
 	if ((*ppTexRef)->texLock.pBits)
 	{
 		// But not for the requested pixel
-		RECT & r = (*ppTexRef)->LockSize;
-		if (r.left > rX || r.top > rY || r.right < rX || r.bottom < rY)
+		C4Rect & r = (*ppTexRef)->LockSize;
+		if (r.x > rX || r.y > rY || (r.x + r.Wdt) < rX || (r.y + r.Hgt) < rY)
 			// Unlock, then relock the whole thing
 			(*ppTexRef)->Unlock();
 		else return true;
@@ -1084,8 +1088,8 @@ bool CSurface::SetPixDw(int iX, int iY, DWORD dwClr)
 			return true;
 		}
 		// Otherwise, make sure that the texlock covers the new pixel
-		RECT & r = pTexRef->LockSize;
-		if (r.left > iX || r.top > iY || r.right < iX || r.bottom < iY)
+		C4Rect & r = pTexRef->LockSize;
+		if (r.x > iX || r.y > iY || (r.x + r.Wdt) < iX || (r.y + r.Hgt) < iY)
 		{
 			// Unlock, then relock the whole thing
 			pTexRef->Unlock();
@@ -1214,11 +1218,8 @@ void CSurface::ClearBoxDw(int iX, int iY, int iWdt, int iHgt)
 			int iBlitX=iTexSize*x;
 			int iBlitY=iTexSize*y;
 			// get clearing bounds in texture
-			RECT rtClear;
-			rtClear.left  = Max(iX-iBlitX, 0);
-			rtClear.top   = Max(iY-iBlitY, 0);
-			rtClear.right = Min(iX+iWdt-iBlitX, iTexSize);
-			rtClear.bottom= Min(iY+iHgt-iBlitY, iTexSize);
+			C4Rect rtClear = C4Rect(0, 0, pTex->iSizeX, pTex->iSizeY);
+			rtClear.Intersect(C4Rect(iX - iBlitX, iY - iBlitY, iWdt, iHgt));
 			// is there a base-surface to be cleared first?
 			if (fBaseSfc)
 			{
@@ -1321,8 +1322,8 @@ CTexRef::CTexRef(int iSizeX, int iSizeY, bool fSingle)
 				texLock.Pitch = iSizeX*lpDDraw->byByteCnt;
 				memset(texLock.pBits, 0x00, texLock.Pitch*iSizeY);
 				// Always locked
-				LockSize.left = LockSize.top = 0;
-				LockSize.right = iSizeX; LockSize.bottom = iSizeY;
+				LockSize.x = LockSize.y = 0;
+				LockSize.Wdt = iSizeX; LockSize.Hgt = iSizeY;
 			}
 }
 
@@ -1348,13 +1349,13 @@ CTexRef::~CTexRef()
 	pTexMgr->UnregTex(this);
 }
 
-bool CTexRef::LockForUpdate(RECT & rtUpdate)
+bool CTexRef::LockForUpdate(C4Rect & rtUpdate)
 {
 	// already locked?
 	if (texLock.pBits)
 	{
 		// fully locked
-		if (LockSize.left == 0 && LockSize.right == iSizeX && LockSize.top == 0 && LockSize.bottom == iSizeY)
+		if (LockSize.x == 0 && LockSize.Wdt == iSizeX && LockSize.y == 0 && LockSize.Hgt == iSizeY)
 		{
 			return true;
 		}
@@ -1368,8 +1369,13 @@ bool CTexRef::LockForUpdate(RECT & rtUpdate)
 #ifdef USE_DIRECTX
 	if (pD3D)
 	{
+		RECT r;
+		r.left   = rtUpdate.x;
+		r.top    = rtUpdate.y;
+		r.right  = rtUpdate.x + rtUpdate.Wdt;
+		r.bottom = rtUpdate.y + rtUpdate.Hgt;
 		if (pTex)
-			if (pTex->LockRect(0, &texLock, &rtUpdate, D3DLOCK_DISCARD) == D3D_OK)
+			if (pTex->LockRect(0, &texLock, &r, D3DLOCK_DISCARD) == D3D_OK)
 			{
 				LockSize = rtUpdate;
 				return true;
@@ -1383,9 +1389,8 @@ bool CTexRef::LockForUpdate(RECT & rtUpdate)
 			if (texName)
 			{
 				// prepare texture data
-				texLock.pBits = new unsigned char[
-				  (rtUpdate.right - rtUpdate.left) * (rtUpdate.bottom - rtUpdate.top) * pGL->byByteCnt];
-				texLock.Pitch = (rtUpdate.right - rtUpdate.left) * pGL->byByteCnt;
+				texLock.pBits = new unsigned char[rtUpdate.Wdt * rtUpdate.Hgt * pGL->byByteCnt];
+				texLock.Pitch = rtUpdate.Wdt * pGL->byByteCnt;
 				LockSize = rtUpdate;
 				return true;
 			}
@@ -1403,8 +1408,8 @@ bool CTexRef::Lock()
 {
 	// already locked?
 	if (texLock.pBits) return true;
-	LockSize.right = iSizeX; LockSize.bottom = iSizeY;
-	LockSize.top = LockSize.left = 0;
+	LockSize.Wdt = iSizeX; LockSize.Hgt = iSizeY;
+	LockSize.x = LockSize.y = 0;
 	// lock
 #ifdef USE_DIRECTX
 	if (pD3D)
@@ -1477,7 +1482,7 @@ void CTexRef::Unlock()
 				// reuse the existing texture
 				glBindTexture(GL_TEXTURE_2D, texName);
 				glTexSubImage2D(GL_TEXTURE_2D, 0,
-				                LockSize.left, LockSize.top, LockSize.right - LockSize.left, LockSize.bottom - LockSize.top,
+				                LockSize.x, LockSize.y, LockSize.Wdt, LockSize.Hgt,
 				                GL_BGRA, lpDDraw->byByteCnt == 2 ? GL_UNSIGNED_SHORT_4_4_4_4_REV : GL_UNSIGNED_INT_8_8_8_8_REV, texLock.pBits);
 			}
 			delete[] static_cast<unsigned char*>(texLock.pBits); texLock.pBits=NULL;
@@ -1490,7 +1495,7 @@ void CTexRef::Unlock()
 		}
 }
 
-bool CTexRef::ClearRect(RECT &rtClear)
+bool CTexRef::ClearRect(C4Rect &rtClear)
 {
 	// ensure locked
 	if (!LockForUpdate(rtClear)) return false;
@@ -1499,16 +1504,16 @@ bool CTexRef::ClearRect(RECT &rtClear)
 	switch (lpDDraw->byByteCnt)
 	{
 	case 2:
-		for (y=rtClear.top; y<rtClear.bottom; ++y)
+		for (y = rtClear.y; y < rtClear.y + rtClear.Hgt; ++y)
 		{
-			for (int x = rtClear.left; x < rtClear.right; ++x)
+			for (int x = rtClear.x; x < rtClear.x + rtClear.Wdt; ++x)
 				SetPix2(x, y, 0x0000);
 		}
 		break;
 	case 4:
-		for (y=rtClear.top; y<rtClear.bottom; ++y)
+		for (y = rtClear.y; y < rtClear.y + rtClear.Hgt; ++y)
 		{
-			for (int x = rtClear.left; x < rtClear.right; ++x)
+			for (int x = rtClear.x; x < rtClear.x + rtClear.Wdt; ++x)
 				SetPix4(x, y, 0x00000000);
 		}
 		break;
@@ -1579,7 +1584,20 @@ void CTexMgr::IntLock()
 	for (std::list<CTexRef *>::iterator i=Textures.begin(); j--; ++i)
 	{
 		CTexRef *pRef = *i;
-		if (pRef->Lock() && !pRef->texLock.pBits) pRef->fIntLock = true;
+		if (pRef->Lock() && pRef->texLock.pBits)
+		{
+			pRef->fIntLock = true;
+#ifdef USE_GL
+			// Release the underlying texture with GL and recreate
+			// it on unlock, so that the texture survives
+			// context recreation.
+			if(pGL)
+			{
+				glDeleteTextures(1, &pRef->texName);
+				pRef->texName = 0;
+			}
+#endif
+		}
 	}
 }
 

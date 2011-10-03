@@ -4,7 +4,7 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2002, 2005, 2007  Sven Eberhardt
  * Copyright (c) 2004-2005, 2007  Peter Wortmann
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -28,6 +28,7 @@
 #include <C4Random.h>
 #include <C4GraphicsSystem.h>
 #include <C4Game.h>
+#include <C4SoundSystem.h>
 
 C4Weather::C4Weather()
 {
@@ -51,17 +52,6 @@ void C4Weather::Init(bool fScenario)
 		Temperature=Climate;
 		// Wind
 		Wind=TargetWind=Game.C4S.Weather.Wind.Evaluate();
-		// Precipitation
-		if (!Game.C4S.Head.NoInitialize)
-			if (Game.C4S.Weather.Rain.Evaluate())
-				for (int32_t iClouds = Min(GBackWdt/500,5); iClouds>0; iClouds--)
-				{
-					volatile int iWidth = GBackWdt/15+Random(320);
-					volatile int iX = Random(GBackWdt);
-					LaunchCloud(iX,-1,iWidth,
-					            Game.C4S.Weather.Rain.Evaluate(),
-					            Game.C4S.Weather.Precipitation);
-				}
 		// gamma?
 		NoGamma=Game.C4S.Weather.NoGamma;
 	}
@@ -127,18 +117,6 @@ void C4Weather::Default()
 	NoGamma=true;
 }
 
-bool C4Weather::LaunchCloud(int32_t iX, int32_t iY, int32_t iWidth, int32_t iStrength, const char *szPrecipitation)
-{
-	if (::MaterialMap.Get(szPrecipitation)==MNone) return false;
-	C4Object *pObj;
-	if ((pObj=Game.CreateObject(C4ID("FXP1"),NULL,NO_OWNER,iX,iY)))
-		if (!!pObj->Call(PSF_Activate,&C4AulParSet(C4VInt(::MaterialMap.Get(szPrecipitation)),
-		                 C4VInt(iWidth),
-		                 C4VInt(iStrength))))
-			return true;
-	return false;
-}
-
 void C4Weather::SetWind(int32_t iWind)
 {
 	Wind=BoundBy<int32_t>(iWind,-100,+100);
@@ -187,7 +165,7 @@ void C4Weather::SetSeasonGamma()
 	// get season num and offset
 	int32_t iSeason1=(Season/25)%4; int32_t iSeason2=(iSeason1+1)%4;
 	int32_t iSeasonOff1=BoundBy(Season%25, 5, 19)-5; int32_t iSeasonOff2=15-iSeasonOff1;
-	DWORD dwClr[3]; ZeroMemory(dwClr, sizeof(DWORD)*3);
+	DWORD dwClr[3]; memset(dwClr, 0, sizeof(DWORD)*3);
 	// interpolate between season colors
 	for (int32_t i=0; i<3; ++i)
 		for (int32_t iChan=0; iChan<24; iChan+=8)

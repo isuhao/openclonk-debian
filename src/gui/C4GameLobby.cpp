@@ -2,10 +2,11 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2003-2008  Sven Eberhardt
+ * Copyright (c) 2005-2006, 2009-2010  Günther Brammer
  * Copyright (c) 2005, 2009  Peter Wortmann
- * Copyright (c) 2005-2006  Günther Brammer
  * Copyright (c) 2006  Florian Groß
  * Copyright (c) 2007-2008  Matthes Bender
+ * Copyright (c) 2009  Nicolas Hake
  * Copyright (c) 2010  Carl-Philip Hänsch
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -93,13 +94,12 @@ namespace C4GameLobby
 				StdStrBuf sDesc;
 				// load desc
 				C4ComponentHost DefDesc;
-				if (DefDesc.LoadEx("Desc", ScenarioFile, C4CFN_ScenarioDesc, Config.General.LanguageEx))
+				if (DefDesc.LoadEx(ScenarioFile, C4CFN_ScenarioDesc, Config.General.LanguageEx))
 				{
 					C4RTFFile rtf;
 					rtf.Load(StdBuf(DefDesc.GetData(), SLen(DefDesc.GetData())));
 					sDesc.Take(rtf.GetPlainText());
 				}
-				DefDesc.Close();
 				if (!!sDesc)
 					pDescBox->AddTextLine(sDesc.getData(), &rTextFont, C4GUI_MessageFontClr, false, true, &rTitleFont);
 				else
@@ -151,7 +151,7 @@ namespace C4GameLobby
 		// indents / sizes
 		int32_t iDefBtnHeight = 32;
 		int32_t iIndentX1, iIndentX2, iIndentX3/*, iIndentX4*/;
-		int32_t iIndentY1, iIndentY2, iIndentY3, iIndentY4, iButtonAreaHgt;
+		int32_t iIndentY1, iIndentY2, iIndentY3, iIndentY4;
 		int32_t iClientListWdt;
 		if (GetClientRect().Wdt > 500)
 		{
@@ -176,7 +176,6 @@ namespace C4GameLobby
 			iIndentY2 = 20;    // status bar offset
 			iIndentY3 = 8;     // center area (chat)
 			iIndentY4 = 8;     // client/player list
-			iButtonAreaHgt = C4GUI_IconExHgt;
 		}
 		else
 		{
@@ -185,7 +184,6 @@ namespace C4GameLobby
 			iIndentY2 = 2;     // status bar offset
 			iIndentY3 = 1;     // center area (chat)
 			iIndentY4 = 1;     // client/player list
-			iButtonAreaHgt = iDefBtnHeight;
 		}
 		// set subtitle ToolTip
 		if (pSubTitle)
@@ -600,7 +598,6 @@ namespace C4GameLobby
 					LogF("/plrclr [RGB] - %s", LoadResStr("IDS_TEXT_CHANGEYOUROWNPLAYERCOLOR"));
 					LogF("/set comment [comment] - %s", LoadResStr("IDS_TEXT_SETANEWNETWORKCOMMENT"));
 					LogF("/set password [password] - %s", LoadResStr("IDS_TEXT_SETANEWNETWORKPASSWORD"));
-					LogF("/set faircrew [on/off] - %s", LoadResStr("IDS_TEXT_ENABLEORDISABLEFAIRCREW"));
 					LogF("/set maxplayer [number] - %s", LoadResStr("IDS_TEXT_SETANEWMAXIMUMNUMBEROFPLA"));
 					LogF("/clear - %s", LoadResStr("IDS_MSG_CLEARTHEMESSAGEBOARD"));
 				}
@@ -844,12 +841,6 @@ namespace C4GameLobby
 			pEdt->SelectAll();
 		}
 		return true;
-	}
-
-	void MainDlg::UpdateFairCrew()
-	{
-		// if the fair crew setting has changed, make sure the buttons reflect this change
-		pGameOptionButtons->UpdateFairCrewBtn();
 	}
 
 	void MainDlg::UpdatePassword()

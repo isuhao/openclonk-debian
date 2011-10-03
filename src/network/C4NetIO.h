@@ -27,6 +27,7 @@
 #include "StdScheduler.h"
 
 #ifdef _WIN32
+#include <C4windowswrapper.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #ifndef WINSOCK_VERSION

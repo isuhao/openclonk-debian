@@ -2,8 +2,9 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2003-2008  Sven Eberhardt
- * Copyright (c) 2006-2008  Günther Brammer
+ * Copyright (c) 2006-2010  Günther Brammer
  * Copyright (c) 2007-2008  Matthes Bender
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -142,10 +143,9 @@ namespace C4GUI
 		// remove from any container
 		if (pParent)
 			pParent->RemoveElement(this);
-		else if (this != Screen::GetScreenS())
+		else if (this != Screen::GetScreenS() && Screen::GetScreenS())
 			// always ensure removal from screen!
-			if (Screen::GetScreenS())
-				Screen::GetScreenS()->RemoveElement(this);
+			Screen::GetScreenS()->RemoveElement(this);
 	}
 
 	void Element::RemoveElement(Element *pChild)
@@ -155,10 +155,9 @@ namespace C4GUI
 			pParent->RemoveElement(pChild);
 		else if (this != Screen::GetScreenS())
 			// always ensure removal from screen!
-			if (Screen::GetScreenS())
-				// but not if this is the context menu, to avoid endless flip-flop!
-				if (!IsMenu())
-					Screen::GetScreenS()->RemoveElement(pChild);
+			// but not if this is the context menu, to avoid endless flip-flop!
+			if (!IsMenu())
+				Screen::GetScreenS()->RemoveElement(pChild);
 	}
 
 	void Element::UpdateSize()
@@ -740,12 +739,9 @@ namespace C4GUI
 
 	bool Screen::Execute()
 	{
-		if (!IsGUIValid()) return false;
 		// process messages
 		if (!Application.FlushMessages())
 			return false;
-		// check status
-		if (!IsGUIValid()) return false;
 		return true;
 	}
 
@@ -932,8 +928,6 @@ namespace C4GUI
 							{
 								// Okay; do input
 								pDlg->MouseInput(Mouse, iButton, fX - rcDlgBounds.x - iOffX, fY - rcDlgBounds.y - iOffY, dwKeyParam);
-								// dlgs may destroy GUI
-								if (!IsGUIValid()) return false;
 								// CAUTION: pDlg may be invalid now!
 								// set processed-flag manually
 								fProcessed = true;
@@ -947,8 +941,6 @@ namespace C4GUI
 							}
 						}
 			}
-			// check valid GUI; might be destroyed by mouse input
-			if (!IsGUIValid()) return false;
 		}
 
 		// check if MouseOver has changed
@@ -1048,7 +1040,7 @@ namespace C4GUI
 					if (pDlg->IsFullscreenDialog())
 						if (fIncludeFading || !pDlg->IsFading())
 							return pDlg;
-		return false;
+		return NULL;
 	}
 
 	void Screen::UpdateGamepadGUIControlEnabled()

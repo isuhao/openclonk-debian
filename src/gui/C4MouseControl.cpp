@@ -2,10 +2,11 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000, 2003-2004  Matthes Bender
- * Copyright (c) 2001-2003, 2005-2007  Sven Eberhardt
+ * Copyright (c) 2001-2003, 2005-2007, 2009-2010  Sven Eberhardt
  * Copyright (c) 2002, 2004  Peter Wortmann
- * Copyright (c) 2005-2006, 2008  Günther Brammer
- * Copyright (c) 2006  Armin Burgmeier
+ * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
+ * Copyright (c) 2006, 2010  Armin Burgmeier
+ * Copyright (c) 2010  Tobias Zwick
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,6 +26,7 @@
 #include <C4Include.h>
 #include <C4MouseControl.h>
 
+#include <C4DefList.h>
 #include <C4Viewport.h>
 #include <C4Object.h>
 #include <C4Command.h>
@@ -203,7 +205,7 @@ void C4MouseControl::UpdateClip()
 	// fullscreen only
 	if (Application.isEditor) return;
 	// application or mouse control not active? remove any clips
-	if (!Active || !Application.Active || (::pGUI && ::pGUI->HasMouseFocus())) { ClipCursor(NULL); return; }
+	if (!Active || !Application.Active || ::pGUI->HasMouseFocus()) { ClipCursor(NULL); return; }
 	// get controlled viewport
 	C4Viewport *pVP=::Viewports.GetViewport(Player);
 	if (!pVP) { ClipCursor(NULL); return; }
@@ -219,8 +221,7 @@ void C4MouseControl::UpdateClip()
 	}
 	ClipCursor(&vpRct);
 	// and inform GUI
-	if (::pGUI)
-		::pGUI->SetPreferredDlgRect(C4Rect(pVP->OutX, pVP->OutY, pVP->ViewWdt, pVP->ViewHgt));
+	::pGUI->SetPreferredDlgRect(C4Rect(pVP->OutX, pVP->OutY, pVP->ViewWdt, pVP->ViewHgt));
 #endif
 	//StdWindow manages this.
 }
@@ -287,7 +288,7 @@ void C4MouseControl::Move(int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyFl
 		{
 			VpX=iX; VpY=iY;
 			GameX=ViewX+VpX/Viewport->Zoom; GameY=ViewY+VpY/Viewport->Zoom;
-			GuiX=float(VpX)/C4GUI::GetZoom(); GuiY=float(VpY)/C4GUI::GetZoom();
+			GuiX=float(VpX)/Viewport->GetGUIZoom(); GuiY=float(VpY)/Viewport->GetGUIZoom();
 		}
 		UpdateTargetRegion();
 		UpdateScrolling();
@@ -302,7 +303,7 @@ void C4MouseControl::Move(int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyFl
 		// Position
 		VpX=iX; VpY=iY;
 		GameX=ViewX+VpX/Viewport->Zoom; GameY=ViewY+VpY/Viewport->Zoom;
-		GuiX=float(VpX)/C4GUI::GetZoom(); GuiY=float(VpY)/C4GUI::GetZoom();
+		GuiX=float(VpX)/Viewport->GetGUIZoom(); GuiY=float(VpY)/Viewport->GetGUIZoom();
 		// Control state
 		ControlDown=false; if (dwKeyFlags & MK_CONTROL) ControlDown=true;
 		ShiftDown=false; if (dwKeyFlags & MK_SHIFT) ShiftDown=true;
@@ -1026,8 +1027,9 @@ void C4MouseControl::ButtonUpDragConstruct()
 	Drag=C4MC_Drag_None;
 	DragImage.Default();
 	// Command
-	if (DragImagePhase==0) // if ConstructionCheck was okay (check again?)
-		SendCommand(C4CMD_Construct,int32_t(GameX),int32_t(GameY),NULL,NULL,DragID.GetHandle());
+	// FIXME: Lots and lots of dead code in this file.
+	//if (DragImagePhase==0) // if ConstructionCheck was okay (check again?)
+		//SendCommand(C4CMD_Construct,int32_t(GameX),int32_t(GameY),NULL,NULL,DragID.GetHandle());
 	// Clear selection (necessary?)
 	Selection.Clear();
 }

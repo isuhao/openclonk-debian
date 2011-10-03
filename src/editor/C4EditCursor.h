@@ -4,6 +4,7 @@
  * Copyright (c) 1998-2000  Matthes Bender
  * Copyright (c) 2001, 2005  Sven Eberhardt
  * Copyright (c) 2006  Armin Burgmeier
+ * Copyright (c) 2009  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -25,6 +26,7 @@
 
 #include "C4ObjectList.h"
 #include "C4Control.h"
+#include "C4Rect.h"
 
 #ifdef WITH_DEVELOPER_MODE
 #include <gtk/gtk.h>
@@ -37,7 +39,6 @@ public:
 	~C4EditCursor();
 protected:
 	bool fAltWasDown;
-	bool fSelectionChanged;
 	int32_t Mode;
 	float X,Y,X2,Y2;
 	bool Hold,DragFrame,DragLine;
@@ -69,6 +70,7 @@ public:
 	bool Duplicate();
 	bool OpenPropTools();
 	bool Delete();
+	void GrabContents();
 	bool LeftButtonUp();
 	bool LeftButtonDown(bool fControl);
 	bool RightButtonUp();
@@ -82,12 +84,11 @@ public:
 	bool AltDown();
 	bool AltUp();
 protected:
-	bool UpdateStatusBar();
+	void UpdateStatusBar();
 	void ApplyToolPicker();
 	void ToolFailure();
 	void PutContents();
 	void UpdateDropTarget(WORD wKeyFlags);
-	void GrabContents();
 	bool DoContextMenu();
 	void ApplyToolFill();
 	void ApplyToolRect();
@@ -103,7 +104,6 @@ protected:
 	static void OnDelete(GtkWidget* widget, gpointer data);
 	static void OnDuplicate(GtkWidget* widget, gpointer data);
 	static void OnGrabContents(GtkWidget* widget, gpointer data);
-	static void OnProperties(GtkWidget* widget, gpointer data);
 #endif
 };
 

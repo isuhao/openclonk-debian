@@ -3,8 +3,9 @@
  *
  * Copyright (c) 2005-2009  Sven Eberhardt
  * Copyright (c) 2005-2006  Peter Wortmann
+ * Copyright (c) 2006, 2009  Günther Brammer
  * Copyright (c) 2006  Florian Groß
- * Copyright (c) 2006  Günther Brammer
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -138,7 +139,8 @@ void C4Team::CompileFunc(StdCompiler *pComp)
 	if (pComp->isCompiler()) { delete [] piPlayers; piPlayers = new int32_t [iPlayerCapacity = iPlayerCount]; ZeroMem(piPlayers, sizeof(*piPlayers) * iPlayerCount); }
 	pComp->Value(mkNamingAdapt(mkArrayAdapt(piPlayers, iPlayerCount, -1), "Players"));
 	pComp->Value(mkNamingAdapt(dwClr,                "Color",        0u));
-	pComp->Value(mkNamingAdapt(sIconSpec,            "IconSpec",     StdCopyStrBuf()));
+	pComp->Value(mkNamingAdapt(mkParAdapt(sIconSpec, StdCompiler::RCT_All),
+	                                                 "IconSpec",     StdCopyStrBuf()));
 	pComp->Value(mkNamingAdapt(iMaxPlayer,           "MaxPlayer",    0));
 }
 
@@ -386,7 +388,7 @@ C4Team *C4TeamList::GetTeamByID(int32_t iID) const
 C4Team *C4TeamList::GetGenerateTeamByID(int32_t iID)
 {
 	// only if enabled
-	if (!IsMultiTeams()) return false;
+	if (!IsMultiTeams()) return NULL;
 	// new team?
 	if (iID == TEAMID_New) iID = GetLargestTeamID()+1;
 	// find in list
@@ -561,7 +563,7 @@ void C4TeamList::CompileFunc(StdCompiler *pComp)
 
 	pComp->Value(mkNamingAdapt(fTeamColors, "TeamColors", false));
 	pComp->Value(mkNamingAdapt(iMaxScriptPlayers, "MaxScriptPlayers", 0));
-	pComp->Value(mkNamingAdapt(sScriptPlayerNames, "ScriptPlayerNames", StdStrBuf()));
+	pComp->Value(mkNamingAdapt(mkParAdapt(sScriptPlayerNames, StdCompiler::RCT_All), "ScriptPlayerNames", StdStrBuf()));
 
 	int32_t iOldTeamCount = iTeamCount;
 	pComp->Value(mkNamingCountAdapt(iTeamCount,  "Team"));
@@ -573,7 +575,7 @@ void C4TeamList::CompileFunc(StdCompiler *pComp)
 		if ((iTeamCapacity = iTeamCount))
 		{
 			ppList = new C4Team *[iTeamCapacity];
-			ZeroMemory(ppList, sizeof(C4Team *)*iTeamCapacity);
+			memset(ppList, 0, sizeof(C4Team *)*iTeamCapacity);
 		}
 		else
 			ppList = NULL;
@@ -604,15 +606,13 @@ bool C4TeamList::Load(C4Group &hGroup, class C4Scenario *pInitDefault, class C4L
 	Clear();
 	// load file contents
 	StdStrBuf Buf;
-	if (!hGroup.LoadEntryString(C4CFN_Teams, Buf))
+	if (!hGroup.LoadEntryString(C4CFN_Teams, &Buf))
 	{
 		// no teams: Try default init
 		if (!pInitDefault) return false;
 		// no teams defined: Activate default melee teams if a melee rule is found
 		// default: FFA for anything that looks like melee
-		if ( pInitDefault->Game.Goals.GetIDCount(C4ID::Melee, 1)
-		     || pInitDefault->Game.Rules.GetIDCount(C4ID::Rivalry, 1)
-		     || pInitDefault->Game.Goals.GetIDCount(C4ID::TeamworkMelee, 1))
+		if ( pInitDefault->Game.Goals.GetIDCount(C4ID::Melee, 1))
 		{
 			fAllowHostilityChange = true;
 			fActive = true;

@@ -6,7 +6,7 @@
   <func>
     <title>GetActMapVal</title>
     <category>Get*Val</category>
-    <version>4.9.1.0 GWE</version>
+    <version>5.1 OC</version>
     <syntax>
       <rtype>any</rtype>
       <params>
@@ -24,7 +24,7 @@
         <param>
           <type>id</type>
           <name>definition</name>
-          <desc>Object definition of which to get action data. If 0, the definition of the calling object is used.</desc>
+          <desc>Object definition of which to get action data. If not specified, the definition of the calling object is used.</desc>
           <optional />
         </param>
         <param>
@@ -35,7 +35,7 @@
         </param>
       </params>
     </syntax>
-    <desc>Gets activity data from the <emlink href="definition/actmap.html">ActMap.txt</emlink> of an object.</desc>
+    <desc>Gets activity data from <emlink href="definition/actmap.html">the ActMap</emlink> of an object.</desc>
     <examples>
       <example>
         <code>var act_length = GetActMapVal(&quot;Length&quot;, <funclink>GetAction</funclink>()) * GetActMapVal(&quot;Delay&quot;, <funclink>GetAction</funclink>());</code>

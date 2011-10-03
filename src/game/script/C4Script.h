@@ -2,8 +2,9 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 1998-2000  Matthes Bender
- * Copyright (c) 2001, 2004, 2007  Sven Eberhardt
  * Copyright (c) 2001  Peter Wortmann
+ * Copyright (c) 2001, 2004, 2007  Sven Eberhardt
+ * Copyright (c) 2010  Tobias Zwick
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -62,10 +63,10 @@ struct C4ScriptFnDef
 	C4Value (*FunctionC4V2)(struct C4AulContext *, C4Value *);
 };
 
-extern C4ScriptConstDef C4ScriptConstMap[];
-extern C4ScriptFnDef C4ScriptFnMap[];
-
-void InitFunctionMap(C4AulScriptEngine *pEngine); // add functions to engine
+// add functions to engine
+void InitGameFunctionMap(C4AulScriptEngine *pEngine);
+void InitObjectFunctionMap(C4AulScriptEngine *pEngine);
+void InitCoreFunctionMap(C4AulScriptEngine *pEngine);
 
 bool C4ValueToMatrix(C4Value& value, StdMeshMatrix* matrix);
 bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
@@ -82,6 +83,7 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_PreInitializePlayer "~PreInitializePlayer" // iPlayer
 #define PSF_InitializePlayerControl "~InitializePlayerControl" // iPlayer, szControlSet, hasKeyboard, hasMouse, hasGamepad
 #define PSF_RemovePlayer        "~RemovePlayer" // iPlayer
+#define PSF_RelaunchPlayer      "~RelaunchPlayer" // iPlayer, iKilledBy
 #define PSF_Time1               "~Time1"
 #define PSF_Hit                 "~Hit"
 #define PSF_Hit2                "~Hit2"
@@ -95,7 +97,6 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_Ejection            "~Ejection" // pObject
 #define PSF_Entrance            "~Entrance" // pContainer
 #define PSF_Departure           "~Departure" // pContainer
-#define PSF_Completion          "~Completion"
 #define PSF_Purchase            "~Purchase" // iPlayer, pBuyObj
 #define PSF_Sale                "~Sale" // iPlayer
 #define PSF_Damage              "~Damage" // iChange, iCausedBy
@@ -103,12 +104,7 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_IncinerationEx      "~IncinerationEx" // iCausedBy
 #define PSF_Death               "~Death" // iCausedBy
 #define PSF_ActivateEntrance    "~ActivateEntrance" // pByObject
-#define PSF_Activate            "~Activate" // pByObject
 #define PSF_LiftTop             "~LiftTop"
-#define PSF_Control             "~Control%s"  // pByObject
-#define PSF_ContainedControl    "~Contained%s"  // pByObject
-#define PSF_ControlUpdate       "~ControlUpdate" // pByObject, iComs
-#define PSF_ContainedControlUpdate "~ContainedUpdate" // pByObject, iComs
 #define PSF_Contact             "~Contact%s"
 #define PSF_ControlCommand      "~ControlCommand" // szCommand, pTarget, iTx, iTy
 #define PSF_ControlCommandFinished "~ControlCommandFinished" // szCommand, pTarget, iTx, iTy, pTarget2, iData
@@ -125,22 +121,19 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_SellTo              "~SellTo" // int iByPlr
 #define PSF_InputCallback       "InputCallback" // const char *szText
 #define PSF_MenuQueryCancel     "~MenuQueryCancel" // int iSelection
-#define PSF_IsFulfilled         "~IsFulfilled"
-#define PSF_IsFulfilledforPlr   "~IsFulfilledforPlr" // int iCallPlayer
+#define PSF_IsFulfilled         "~IsFulfilled" // int for_plr
 #define PSF_AttachTargetLost    "~AttachTargetLost"
 #define PSF_CrewSelection       "~CrewSelection" // bool fDeselect
 #define PSF_GetObject2Drop      "~GetObject2Drop" // C4Object *pForCollectionOfObj
 #define PSF_LeagueGetResult     "~LeagueGetResult" // int iForPlr
 #define PSF_FireMode            "~FireMode"
 #define PSF_FrameDecoration     "~FrameDecoration%s"
-#define PSF_GetFairCrewPhysical "~GetFairCrewPhysical" // C4String *szPhysicalName, int iRank, int iPrevPhysical
-#define PSF_DoMagicEnergy       "DoMagicEnergy" // int iChange, C4Object *pObj, bool fAllowPartial
-#define PSF_GetCustomComponents "~GetCustomComponents" // C4Object *pBuilder
 #define PSF_CalcBuyValue        "~CalcBuyValue" // C4ID idItem, int iDefValue
 #define PSF_CalcSellValue       "~CalcSellValue" // C4Object *pObj, int iObjValue
 #define PSF_OnJoinCrew          "~Recruitment" // int Player
 #define PSF_OnRemoveCrew        "~DeRecruitment" // int Player
-
+#define PSF_OnBlastIncinerationDamage "OnBlastIncinerationDamage" // int Level, int Player
+#define PSF_OnInIncendiaryMaterial "OnInIncendiaryMaterial"
 
 // Effect callbacks
 
@@ -181,9 +174,7 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_OnHostilityChange        "~OnHostilityChange" // int iPlr1, int iPlr2, bool fNewHostility, bool fOldHostility
 #define PSF_OnTeamSwitch             "~OnTeamSwitch" // int iPlr1, int idNewTeam, int idOldTeam
 #define PSF_OnOwnerRemoved           "~OnOwnerRemoved"
-#define PSF_MagicEnergyChange        "~OnMagicEnergyChange" // int iChange
 #define PSF_Promotion                "~OnPromotion"
-#define PSF_PhysicalChange           "~OnPhysicalChange" // C4String *Physical, int iChange, int iMode
 #define PSF_CrewEnabled              "~OnCrewEnabled"
 #define PSF_CrewDisabled             "~OnCrewDisabled"
 #define PSF_NameChange               "~OnNameChanged" // bool inInfoSection

@@ -1,3 +1,23 @@
+/*
+ * OpenClonk, http://www.openclonk.org
+ *
+ * Copyright (c) 2009  Peter Wortmann
+ * Copyright (c) 2009, 2011  Günther Brammer
+ * Copyright (c) 2010  Martin Plicht
+ * Copyright (c) 2010  Benjamin Herr
+ * 
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+
 #include <C4Include.h>
 #include <C4Version.h>
 #include <C4GameControl.h>
@@ -23,6 +43,33 @@ C4AulDebug::~C4AulDebug()
 {
 	for (std::list<StdStrBuf*>::iterator it = StackTrace.begin(); it != StackTrace.end(); it++)
 		{delete *it;}
+	if (pDebug == this) pDebug = NULL;
+}
+
+bool C4AulDebug::InitDebug(uint16_t iPort, const char *szPassword, const char *szHost, bool fWait)
+{
+	// Create debug object
+	if (!pDebug) pDebug = new C4AulDebug();
+	// Initialize
+	pDebug->SetPassword(szPassword);
+	pDebug->SetAllowed(szHost);
+	pDebug->SetEngine(&AulExec);
+	if (!pDebug->Init(iPort))
+		{ LogFatal("C4Aul debugger failed to initialize!"); return false; }
+	// Log
+	LogF("C4Aul debugger initialized on port %d", iPort);
+	// Add to application
+	Application.Add(pDebug);
+	// Wait for connection
+	if (fWait)
+	{
+		Log("C4Aul debugger waiting for connection...");
+		while (!pDebug->isConnected())
+			if (!Application.ScheduleProcs())
+				return false;
+	}
+	// Done
+	return true;
 }
 
 void C4AulDebug::PackPacket(const C4NetIOPacket &rPacket, StdBuf &rOutBuf)
@@ -207,6 +254,7 @@ void C4AulDebug::ProcessLine(const StdStrBuf &Line)
 	// toggle breakpoint
 	else if (SEqualNoCase(szCmd, "TBR"))
 	{
+		// FIXME: this doesn't find functions which were included/appended
 		StdStrBuf scriptPath;
 		scriptPath.CopyUntil(szData, ':');
 		const char* lineStart = szData+1+scriptPath.getLength();
@@ -223,13 +271,14 @@ void C4AulDebug::ProcessLine(const StdStrBuf &Line)
 		{
 			C4AulBCC* foundDebugChunk = NULL;
 			const char* scriptText = script->GetScript();
-			for (C4AulBCC* chunk = script->Code; chunk; chunk++)
+			for (C4AulBCC* chunk = &script->Code[0]; chunk; chunk++)
 			{
 				switch (chunk->bccType)
 				{
 				case AB_DEBUG:
-					int lineOfThisOne;
-					if ((lineOfThisOne = SGetLine(scriptText, chunk->SPos)) == line)
+					{
+					int lineOfThisOne = SGetLine(scriptText, script->PosForCode[chunk - &script->Code[0]]);
+					if (lineOfThisOne == line)
 					{
 						foundDebugChunk = chunk;
 						goto Done;
@@ -237,7 +286,7 @@ void C4AulDebug::ProcessLine(const StdStrBuf &Line)
 					/*else {
 					  DebugLogF("Debug chunk at %d", lineOfThisOne);
 					}*/
-
+					}
 					break;
 				case AB_EOF:
 					goto Done;
@@ -472,10 +521,11 @@ void C4AulDebug::ObtainStackTrace(C4AulScriptContext* pCtx, C4AulBCC* pCPos)
 StdStrBuf C4AulDebug::FormatCodePos(C4AulScriptContext *pCtx, C4AulBCC *pCPos)
 {
 	// Get position in script
-	const char *szScript = pCtx->Func->pOrgScript->GetScript();
-	int iLine = SGetLine(szScript, pCPos->SPos);
+	int iLine = pCtx->Func->GetLineOfCode(pCPos);
 	// Format
 	return FormatString("%s:%d", RelativePath(pCtx->Func->pOrgScript->ScriptName), iLine);
 }
+
+C4AulDebug * C4AulDebug::pDebug = NULL;
 
 #endif

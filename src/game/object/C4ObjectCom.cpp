@@ -3,11 +3,12 @@
  *
  * Copyright (c) 1998-2000, 2007-2008  Matthes Bender
  * Copyright (c) 2001-2004  Peter Wortmann
- * Copyright (c) 2001, 2005-2006, 2008-2009  Sven Eberhardt
+ * Copyright (c) 2001, 2003, 2005-2006, 2008-2009  Sven Eberhardt
  * Copyright (c) 2001  Michael Käser
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005-2006, 2008-2010  Günther Brammer
  * Copyright (c) 2006  Armin Burgmeier
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2009-2010  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -27,6 +28,7 @@
 #include <C4Include.h>
 #include <C4ObjectCom.h>
 
+#include <C4Effects.h>
 #include <C4Object.h>
 #include <C4Physics.h>
 #include <C4Command.h>
@@ -137,7 +139,7 @@ bool ObjectActionThrow(C4Object *cObj, C4Object *pThing)
 	// Nothing to throw
 	if (!pThing) return false;
 	// Force and direction
-	C4Real pthrow=ValByPhysical(400, cObj->GetPhysical()->Throw);
+	C4Real pthrow=C4REAL100(cObj->GetPropertyInt(P_ThrowSpeed));
 	int32_t iDir=1; if (cObj->Action.Dir==DIR_Left) iDir=-1;
 	// Set action
 	if (!cObj->SetActionByName("Throw")) return false;
@@ -157,19 +159,9 @@ bool ObjectActionDig(C4Object *cObj)
 	return true;
 }
 
-bool ObjectActionBuild(C4Object *cObj, C4Object *target)
-{
-	return cObj->SetActionByName("Build",target);
-}
-
 bool ObjectActionPush(C4Object *cObj, C4Object *target)
 {
 	return cObj->SetActionByName("Push",target);
-}
-
-bool ObjectActionChop(C4Object *cObj, C4Object *target)
-{
-	return cObj->SetActionByName("Chop",target);
 }
 
 bool CornerScaleOkay(C4Object *cObj, int32_t iRangeX, int32_t iRangeY)
@@ -301,9 +293,8 @@ bool ObjectComJump(C4Object *cObj) // by ObjectComUp, ExecCMDFMoveTo, FnJump
 	if (cObj->GetProcedure()!=DFA_WALK) return false;
 	// Calculate direction & forces
 	C4Real TXDir=Fix0;
-	C4PhysicalInfo *pPhysical=cObj->GetPhysical();
-	C4Real iPhysicalWalk = ValByPhysical(280, pPhysical->Walk) * itofix(cObj->GetCon(), FullCon);
-	C4Real iPhysicalJump = ValByPhysical(1000, pPhysical->Jump) * itofix(cObj->GetCon(), FullCon);
+	C4Real iPhysicalWalk = itofix(0);//FIXME: ValByPhysical(280, pPhysical->Walk) * itofix(cObj->GetCon(), FullCon);
+	C4Real iPhysicalJump = itofix(0);//FIXME: ValByPhysical(1000, pPhysical->Jump) * itofix(cObj->GetCon(), FullCon);
 
 	if (cObj->Action.ComDir==COMD_Left || cObj->Action.ComDir==COMD_UpLeft)  TXDir=-iPhysicalWalk;
 	else if (cObj->Action.ComDir==COMD_Right || cObj->Action.ComDir==COMD_UpRight) TXDir=+iPhysicalWalk;
@@ -368,237 +359,12 @@ bool ObjectComUp(C4Object *cObj) // by DFA_WALK or DFA_SWIM
 
 bool ObjectComDig(C4Object *cObj) // by DFA_WALK
 {
-	C4PhysicalInfo *phys=cObj->GetPhysical();
-	if (!phys->CanDig || !ObjectActionDig(cObj))
+	if (!ObjectActionDig(cObj))
 	{
 		GameMsgObjectError(FormatString(LoadResStr("IDS_OBJ_NODIG"),cObj->GetName()).getData(),cObj);
 		return false;
 	}
 	return true;
-}
-
-C4Object *CreateLine(C4ID idType, int32_t iOwner, C4Object *pFrom, C4Object *pTo)
-{
-	C4Object *pLine;
-	if (!pFrom || !pTo) return NULL;
-	if (!(pLine=Game.CreateObject(idType,pFrom,iOwner,0,0))) return NULL;
-	pLine->Shape.VtxNum=2;
-	pLine->Shape.VtxX[0]=pFrom->GetX();
-	pLine->Shape.VtxY[0]=pFrom->GetY()+pFrom->Shape.Hgt/4;
-	pLine->Shape.VtxX[1]=pTo->GetX();
-	pLine->Shape.VtxY[1]=pTo->GetY()+pTo->Shape.Hgt/4;
-	pLine->Action.Target=pFrom;
-	pLine->Action.Target2=pTo;
-	return pLine;
-}
-
-bool ObjectComLineConstruction(C4Object *cObj)
-{
-	C4Object *linekit,*tstruct,*cline;
-	DWORD ocf;
-
-	ObjectActionStand(cObj);
-
-	// Check physical
-	if (!cObj->GetPhysical()->CanConstruct)
-	{
-		GameMsgObjectError(FormatString(LoadResStr("IDS_OBJ_NOLINECONSTRUCT"),cObj->GetName()).getData(),cObj); return false;
-	}
-
-	// - - - - - - - - - - - - - - - - - - Line pickup - - - - - - - - - - - - - - - - -
-
-	// Check for linekit
-	if (!(linekit=cObj->Contents.Find(C4ID::Linekit)))
-	{
-		// Check line pickup
-		ocf=OCF_LineConstruct;
-		tstruct=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj);
-		if (!tstruct || !(ocf & OCF_LineConstruct)) return false;
-		if (!(cline=Game.FindObject(C4ID::None,0,0,0,0,OCF_All,"Connect",tstruct))) return false;
-		// Check line connected to linekit at other end
-		if ( (cline->Action.Target && (cline->Action.Target->Def->id==C4ID::Linekit))
-		     || (cline->Action.Target2 && (cline->Action.Target2->Def->id==C4ID::Linekit)) )
-		{
-			StartSoundEffect("Error",false,100,cObj);
-			GameMsgObjectError(FormatString(LoadResStr("IDS_OBJ_NODOUBLEKIT"),cline->GetName()).getData(),cObj); return false;
-		}
-		// Create new linekit
-		if (!(linekit=Game.CreateObject(C4ID::Linekit,cObj,cline->Owner))) return false;
-		// Enter linekit into clonk
-		bool fRejectCollect;
-		if (!linekit->Enter(cObj, true, true, &fRejectCollect))
-		{
-			// Enter failed: abort operation
-			linekit->AssignRemoval(); return false;
-		}
-		// Attach line to collected linekit
-		StartSoundEffect("Connect",false,100,cObj);
-		if (cline->Action.Target==tstruct) cline->Action.Target=linekit;
-		if (cline->Action.Target2==tstruct) cline->Action.Target2=linekit;
-		// Message
-		GameMsgObject(FormatString(LoadResStr("IDS_OBJ_DISCONNECT"),cline->GetName(),tstruct->GetName()).getData(),tstruct);
-		return true;
-	}
-
-	// - - - - - - - - - -  - - - - - Active construction - - - - - - - - - - - - - - - - -
-
-	// Active line construction
-	if ((cline=Game.FindObject(C4ID::None,0,0,0,0,OCF_All,"Connect",linekit)))
-	{
-
-		// Check for structure connection
-		ocf=OCF_LineConstruct;
-		tstruct=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj);
-		// No structure
-		if (!tstruct || !(ocf & OCF_LineConstruct))
-		{
-			// No connect
-			StartSoundEffect("Error",false,100,cObj);
-			GameMsgObjectError(LoadResStr("IDS_OBJ_NOCONNECT"),cObj);  return false;
-		}
-
-		// Check short circuit -> removal
-		if ((cline->Action.Target==tstruct)
-		    || (cline->Action.Target2==tstruct))
-		{
-			StartSoundEffect("Connect",false,100,cObj);
-			GameMsgObject(FormatString(LoadResStr("IDS_OBJ_LINEREMOVAL"),cline->GetName()).getData(),tstruct);
-			cline->AssignRemoval();
-			return true;
-		}
-
-		// Check for correct connection type
-		bool connect_okay=false;
-		switch (cline->Def->Line)
-		{
-		case C4D_Line_Power:
-			if (tstruct->Def->LineConnect & C4D_Power_Input) connect_okay=true;
-			if (tstruct->Def->LineConnect & C4D_Power_Output) connect_okay=true;
-			break;
-		case C4D_Line_Source:
-			if (tstruct->Def->LineConnect & C4D_Liquid_Output) connect_okay=true; break;
-		case C4D_Line_Drain:
-			if (tstruct->Def->LineConnect & C4D_Liquid_Input) connect_okay=true;  break;
-		default: return false; // Undefined line type
-		}
-		if (!connect_okay)
-		{
-			StartSoundEffect("Error",false,100,cObj);
-			GameMsgObjectError(FormatString(LoadResStr("IDS_OBJ_NOCONNECTTYPE"),cline->GetName(),tstruct->GetName()).getData(),tstruct);
-			return false;
-		}
-
-		// Connect line to structure
-		StartSoundEffect("Connect",false,100,cObj);
-		if (cline->Action.Target==linekit) cline->Action.Target=tstruct;
-		if (cline->Action.Target2==linekit) cline->Action.Target2=tstruct;
-		linekit->Exit();
-		linekit->AssignRemoval();
-
-		GameMsgObject(FormatString(LoadResStr("IDS_OBJ_CONNECT"),cline->GetName(),tstruct->GetName()).getData(),tstruct);
-
-		return true;
-	}
-
-	// - - - - - - - - - - - - - - - - New line - - - - - - - - - - - - - - - - - - - - -
-
-	// Check for new structure connection
-	ocf=OCF_LineConstruct;
-	tstruct=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj);
-	if (!tstruct || !(ocf & OCF_LineConstruct))
-	{
-		StartSoundEffect("Error",false,100,cObj);
-		GameMsgObjectError(LoadResStr("IDS_OBJ_NONEWLINE"),cObj);  return false;
-	}
-
-	// Determine new line type
-	C4ID linetype=C4ID::None;
-	// Check source pipe
-	if (linetype==C4ID::None)
-		if (tstruct->Def->LineConnect & C4D_Liquid_Pump)
-			if (!Game.FindObject(C4ID::SourcePipe,0,0,0,0,OCF_All,"Connect",tstruct))
-				linetype = C4ID::SourcePipe;
-	// Check drain pipe
-	if (linetype==C4ID::None)
-		if (tstruct->Def->LineConnect & C4D_Liquid_Output)
-			if (!Game.FindObject(C4ID::DrainPipe,0,0,0,0,OCF_All,"Connect",tstruct))
-				linetype = C4ID::DrainPipe;
-	// Check power
-	if (linetype==C4ID::None)
-		if (tstruct->Def->LineConnect & C4D_Power_Output)
-			linetype = C4ID::PowerLine;
-	// No good
-	if (linetype==C4ID::None)
-	{
-		StartSoundEffect("Error",false,100,cObj);
-		GameMsgObjectError(LoadResStr("IDS_OBJ_NONEWLINE"),cObj);  return false;
-	}
-
-	// Create new line
-	C4Object *newline=CreateLine(linetype,cObj->Owner,
-	                             tstruct,linekit);
-	if (!newline) return false;
-	StartSoundEffect("Connect",false,100,cObj);
-	GameMsgObject(FormatString(LoadResStr("IDS_OBJ_NEWLINE"),newline->GetName()).getData(),tstruct);
-
-	return true;
-}
-
-void ObjectComDigDouble(C4Object *cObj) // "Activation" by DFA_WALK, DFA_DIG, DFA_SWIM
-{
-	C4Object *pTarget;
-	DWORD ocf;
-	C4PhysicalInfo *phys=cObj->GetPhysical();
-
-	// Contents activation (first contents object only)
-	if (cObj->Contents.GetObject())
-		if (!! cObj->Contents.GetObject()->Call(PSF_Activate,&C4AulParSet(C4VObj(cObj))))
-			return;
-
-	// Linekit: Line construction (move to linekit script...)
-	if (cObj->Contents.GetObject() && (cObj->Contents.GetObject()->id==C4ID::Linekit))
-	{
-		ObjectComLineConstruction(cObj);
-		return;
-	}
-
-	// Chop
-	ocf=OCF_Chop;
-	if (phys->CanChop)
-		if (cObj->GetProcedure()!=DFA_SWIM)
-			if ((pTarget=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj)))
-				if (ocf & OCF_Chop)
-				{
-					PlayerObjectCommand(cObj->Owner,C4CMD_Chop,pTarget);
-					return;
-				}
-
-	// Line construction pick up
-	ocf=OCF_LineConstruct;
-	if (phys->CanConstruct)
-		if (!cObj->Contents.GetObject())
-			if ((pTarget=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj)))
-				if (ocf & OCF_LineConstruct)
-					if (ObjectComLineConstruction(cObj))
-						return;
-
-	// Own activation call
-	if (!! cObj->Call(PSF_Activate, &C4AulParSet(C4VObj(cObj)))) return;
-
-}
-
-bool ObjectComDownDouble(C4Object *cObj) // by DFA_WALK
-{
-	C4Object *pTarget;
-	DWORD ocf= OCF_Construct | OCF_Grab;
-	if ((pTarget=::Objects.AtObject(cObj->GetX(),cObj->GetY(),ocf,cObj)))
-	{
-		if (ocf & OCF_Construct)
-			{ PlayerObjectCommand(cObj->Owner,C4CMD_Build,pTarget); return true; }
-		if (ocf & OCF_Grab)
-			{ PlayerObjectCommand(cObj->Owner,C4CMD_Grab,pTarget); return true; }
-	}
-	return false;
 }
 
 bool ObjectComPut(C4Object *cObj, C4Object *pTarget, C4Object *pThing)
@@ -658,14 +424,14 @@ bool ObjectComDrop(C4Object *cObj, C4Object *pThing)
 	// When dropping diagonally, drop from edge of shape
 	// When doing a diagonal forward drop during flight, exit a bit closer to the Clonk to allow planned tumbling
 	// Except when hangling, so you can mine effectively form the ceiling, and when swimming because you cannot tumble then
-	C4Real pthrow=ValByPhysical(400, cObj->GetPhysical()->Throw);
+	C4Real pthrow=C4REAL100(cObj->GetPropertyInt(P_ThrowSpeed));
 	int32_t tdir=0; int right=0;
 	bool isHanglingOrSwimming = false;
-	int32_t iProc = DFA_NONE;
+	int32_t iProc = -1;
 	C4PropList* pActionDef = cObj->GetAction();
 	if (pActionDef)
 	{
-		iProc = pActionDef->GetPropertyInt(P_Procedure);
+		iProc = pActionDef->GetPropertyP(P_Procedure);
 		if (iProc == DFA_HANGLE || iProc == DFA_SWIM) isHanglingOrSwimming = true;
 	}
 	int32_t iOutposReduction = 1; // don't exit object too far forward during jump
@@ -685,28 +451,6 @@ bool ObjectComDrop(C4Object *cObj, C4Object *pThing)
 	ObjectComUnGrab(cObj);
 	// Done
 	return true;
-}
-
-bool ObjectComChop(C4Object *cObj, C4Object *pTarget)
-{
-	if (!pTarget) return false;
-	if (!cObj->GetPhysical()->CanChop)
-	{
-		GameMsgObjectError(FormatString(LoadResStr("IDS_OBJ_NOCHOP"),cObj->GetName()).getData(),cObj);
-		return false;
-	}
-	if (cObj->GetProcedure()!=DFA_WALK) return false;
-	return ObjectActionChop(cObj,pTarget);
-}
-
-bool ObjectComBuild(C4Object *cObj, C4Object *pTarget)
-{
-	if (!pTarget) return false;
-	// Needs to be idle or walking
-	if (cObj->GetAction())
-		if (cObj->GetProcedure()!=DFA_WALK)
-			return false;
-	return ObjectActionBuild(cObj,pTarget);
 }
 
 bool ObjectComPutTake(C4Object *cObj, C4Object *pTarget, C4Object *pThing) // by C4CMD_Throw
@@ -791,81 +535,6 @@ void ObjectComStopDig(C4Object *cObj)
 	if (cObj->Command)
 		if (cObj->Command->Command == C4CMD_Dig)
 			cObj->ClearCommand(cObj->Command);
-}
-
-int32_t ComOrder(int32_t iIndex)
-{
-	static BYTE bComOrder[ComOrderNum] =
-	{
-		COM_Left, COM_Right, COM_Up, COM_Down, COM_Throw, COM_Dig, COM_Special, COM_Special2,
-		COM_Left_S, COM_Right_S, COM_Up_S, COM_Down_S, COM_Throw_S, COM_Dig_S, COM_Special_S, COM_Special2_S,
-		COM_Left_D, COM_Right_D, COM_Up_D, COM_Down_D, COM_Throw_D, COM_Dig_D, COM_Special_D, COM_Special2_D
-	};
-
-	if (Inside<int32_t>(iIndex,0,ComOrderNum-1)) return bComOrder[iIndex];
-
-	return COM_None;
-}
-
-const char *ComName(int32_t iCom)
-{
-	switch (iCom)
-	{
-	case COM_Up:          return "Up";
-	case COM_Up_S:        return "UpSingle";
-	case COM_Up_D:        return "UpDouble";
-	case COM_Up_R:        return "UpReleased";
-	case COM_Down:        return "Down";
-	case COM_Down_S:      return "DownSingle";
-	case COM_Down_D:      return "DownDouble";
-	case COM_Down_R:      return "DownReleased";
-	case COM_Left:        return "Left";
-	case COM_Left_S:      return "LeftSingle";
-	case COM_Left_D:      return "LeftDouble";
-	case COM_Left_R:      return "LeftReleased";
-	case COM_Right:       return "Right";
-	case COM_Right_S:     return "RightSingle";
-	case COM_Right_D:     return "RightDouble";
-	case COM_Right_R:     return "RightReleased";
-	case COM_Dig:         return "Dig";
-	case COM_Dig_S:       return "DigSingle";
-	case COM_Dig_D:       return "DigDouble";
-	case COM_Dig_R:       return "DigReleased";
-	case COM_Throw:       return "Throw";
-	case COM_Throw_S:     return "ThrowSingle";
-	case COM_Throw_D:     return "ThrowDouble";
-	case COM_Throw_R:     return "ThrowReleased";
-	case COM_Special:     return "Special";
-	case COM_Special_S:   return "SpecialSingle";
-	case COM_Special_D:   return "SpecialDouble";
-	case COM_Special_R:     return "SpecialReleased";
-	case COM_Special2:    return "Special2";
-	case COM_Special2_S:  return "Special2Single";
-	case COM_Special2_D:  return "Special2Double";
-	case COM_Special2_R:    return "Special2Released";
-	case COM_WheelUp:     return "WheelUp";
-	case COM_WheelDown:   return "WheelDown";
-	}
-	return "Undefined";
-}
-
-int32_t Coms2ComDir(int32_t iComs)
-{
-	// This is possible because COM_Left - COM_Down are < 32
-	static int32_t DirComs = (1 << COM_Left) | (1 << COM_Right) | (1 << COM_Up) | (1 << COM_Down);
-	switch (iComs & DirComs)
-	{
-	case (1 << COM_Up):                      return COMD_Up;
-	case (1 << COM_Up) | (1 << COM_Right):   return COMD_UpRight;
-	case (1 << COM_Right):                   return COMD_Right;
-	case (1 << COM_Down) | (1 << COM_Right): return COMD_DownRight;
-	case (1 << COM_Down):                    return COMD_Down;
-	case (1 << COM_Down) | (1 << COM_Left):  return COMD_DownLeft;
-	case (1 << COM_Left):                    return COMD_Left;
-	case (1 << COM_Up) | (1 << COM_Left):    return COMD_UpLeft;
-		// up, right and left could be interpreted as COMD_Up etc., but that's too complicated for now
-	default:                                 return COMD_Stop;
-	}
 }
 
 bool ComDirLike(int32_t iComDir, int32_t iSample)

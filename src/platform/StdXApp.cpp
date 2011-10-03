@@ -1,9 +1,10 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
+ * Copyright (c) 2005-2011  Günther Brammer
  * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2005-2009  Günther Brammer
- * Copyright (c) 2006, 2008  Armin Burgmeier
+ * Copyright (c) 2006, 2008-2009  Armin Burgmeier
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -374,6 +375,7 @@ void CStdApp::HandleXMessage()
 	case ConfigureNotify:
 		if (pWindow && event.xany.window == pWindow->wnd)
 		{
+			XResizeWindow(dpy, pWindow->renderwnd, event.xconfigure.width, event.xconfigure.height);
 			OnResolutionChanged(event.xconfigure.width, event.xconfigure.height);
 		}
 		break;
@@ -400,7 +402,6 @@ bool CStdApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int 
 	if (!fFullScreen)
 	{
 		XResizeWindow(dpy, pWindow->wnd, iXRes, iYRes);
-		OnResolutionChanged(iXRes, iYRes);
 		return true;
 	}
 	if (Priv->xf86vmode_targetmode.hdisplay == iXRes && Priv->xf86vmode_targetmode.vdisplay == iYRes)
@@ -550,7 +551,6 @@ bool CStdAppPrivate::SwitchToFullscreen(CStdApp * pApp, Window wnd)
 		}
 	}
 	XGrabPointer(pApp->dpy, wnd, true, 0, GrabModeAsync, GrabModeAsync, wnd, None, LastEventTime);
-	pApp->OnResolutionChanged(wdt, hgt);
 	return true;
 }
 

@@ -1,10 +1,13 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2007  Sven Eberhardt
  * Copyright (c) 2007-2008  Matthes Bender
+ * Copyright (c) 2007, 2009-2010  Günther Brammer
  * Copyright (c) 2007  Peter Wortmann
- * Copyright (c) 2007  Günther Brammer
+ * Copyright (c) 2007  Sven Eberhardt
+ * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2010  Tobias Zwick
  * Copyright (c) 2007-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -20,9 +23,9 @@
  */
 // IRC client dialog
 
+#include "C4Include.h"
 #include <utility>
 
-#include "C4Include.h"
 #include "C4ChatDlg.h"
 
 #include "C4InputValidation.h"
@@ -110,7 +113,7 @@ C4ChatControl::ChatSheet::ChatSheet(C4ChatControl *pChatControl, const char *szT
 	if (szIdent) sIdent.Copy(szIdent);
 	// create elements - positioned later
 	C4Rect rcDefault(0,0,10,10);
-	pChatBox = new C4GUI::TextWindow(rcDefault);
+	pChatBox = new C4GUI::TextWindow(rcDefault,0,0,0,100,4096,"  ",false,0,0,true);
 	//pChatBox->SetToolTip(LoadResStr("IDS_DLGTIP_CHATWIN")); tooltip doesn't really help, only makes things un�bersichtlich
 	pChatBox->SetDecoration(false, false, NULL, false);
 	AddElement(pChatBox);
@@ -527,6 +530,7 @@ void C4ChatControl::OnConnectBtn(C4GUI::Control *btn)
 	if (sChannel.getLength() && C4InVal::ValidateString(sChannel, C4InVal::VAL_IRCChannel))
 	{
 		GetScreen()->ShowErrorMessage(LoadResStr("IDS_ERR_INVALIDCHANNELNAME"));
+		pEdtLoginChannel->SetText(sChannel.getData(), false);
 		GetDlg()->SetFocus(pEdtLoginChannel, false);
 		return;
 	}
@@ -797,6 +801,8 @@ void C4ChatControl::UpdateTitle()
 		sTitle.Take(std::move(sNewTitle));
 		if (pTitleChangeBC) pTitleChangeBC->OnOK(sTitle);
 	}
+	// reload the channel join string from config to fetch C4Network2IRCClient's changes
+	pEdtLoginChannel->SetText(Config.IRC.Channel, false);
 }
 
 bool C4ChatControl::DlgEnter()
@@ -992,7 +998,6 @@ C4ChatDlg::~C4ChatDlg()
 
 C4ChatDlg *C4ChatDlg::ShowChat()
 {
-	if (!::pGUI) return NULL;
 	if (!pInstance)
 	{
 		pInstance = new C4ChatDlg();
@@ -1009,7 +1014,7 @@ void C4ChatDlg::StopChat()
 {
 	if (!pInstance) return;
 	pInstance->Close(false);
-	// 2do: Quit IRC
+	Application.IRCClient.Close();
 }
 
 bool C4ChatDlg::ToggleChat()

@@ -28,17 +28,17 @@
 
 const int32_t C4FCT_None   = 0,
 
-                             C4FCT_Left   = 1,
-                                            C4FCT_Right  = 2,
-                                                           C4FCT_Top    = 4,
-                                                                          C4FCT_Bottom = 8,
-                                                                                         C4FCT_Center = 16,
+              C4FCT_Left   = 1,
+              C4FCT_Right  = 2,
+              C4FCT_Top    = 4,
+              C4FCT_Bottom = 8,
+              C4FCT_Center = 16,
 
-                                                                                                        C4FCT_Alignment = C4FCT_Left | C4FCT_Right | C4FCT_Top | C4FCT_Bottom | C4FCT_Center,
+              C4FCT_Alignment = C4FCT_Left | C4FCT_Right | C4FCT_Top | C4FCT_Bottom | C4FCT_Center,
 
-                                                                                                                          C4FCT_Half   = 32,
-                                                                                                                                         C4FCT_Double = 64,
-                                                                                                                                                        C4FCT_Triple = 128;
+              C4FCT_Half   = 32,
+              C4FCT_Double = 64,
+              C4FCT_Triple = 128;
 
 // tuple of two integers
 struct C4Vec2D
@@ -93,11 +93,11 @@ public:
 		FlipDir = iNewFlipDir; mat[0] = -mat[0];
 	}
 
-	bool IsIdentity()
+	bool IsIdentity() const
 	{
-		return (mat[0]==1.0f) && (mat[1]==0.0f) && (mat[2]=0.0f)
-		       && (mat[3]==0.0f) && (mat[4]==1.0f) && (mat[5]=0.0f)
-		       && (mat[6]==0.0f) && (mat[7]==0.0f) && (mat[8]=1.0f)
+		return (mat[0]==1.0f) && (mat[1]==0.0f) && (mat[2]==0.0f)
+		       && (mat[3]==0.0f) && (mat[4]==1.0f) && (mat[5]==0.0f)
+		       && (mat[6]==0.0f) && (mat[7]==0.0f) && (mat[8]==1.0f)
 		       && (FlipDir==1); // flipdir must be 1, because otherwise matrices flipped by action+script would be removed
 	}
 
@@ -159,9 +159,6 @@ public:
 	{ return iHeight * Wdt / (Hgt ? Hgt : 1); }
 	int32_t GetHeightByWidth(int32_t iWidth) // calc height so it matches facet aspect to width
 	{ return iWidth * Hgt / (Wdt ? Wdt : 1); }
-#ifdef _WIN32
-	void Draw(HWND hWnd, int32_t iTx, int32_t iTy, int32_t iTWdt, int32_t iTHgt, bool fAspect=true, int32_t iPhaseX=0, int32_t iPhaseY=0);
-#endif
 };
 
 #endif // INC_C4Facet

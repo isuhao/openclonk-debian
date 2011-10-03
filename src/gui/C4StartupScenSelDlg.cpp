@@ -1,13 +1,15 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005, 2007-2008  Matthes Bender
- * Copyright (c) 2005-2006, 2008  Günther Brammer
  * Copyright (c) 2005-2008  Sven Eberhardt
+ * Copyright (c) 2005-2006, 2008-2010  Günther Brammer
+ * Copyright (c) 2005, 2007-2008  Matthes Bender
  * Copyright (c) 2006  Florian Groß
  * Copyright (c) 2008  Peter Wortmann
  * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2010  Carl-Philip Hänsch
+ * Copyright (c) 2011  Armin Burgmeier
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -125,10 +127,10 @@ bool C4MapFolderData::Load(C4Group &hGroup, C4ScenarioListLoader::Folder *pScenL
 	Clear();
 	// load localization info
 	C4LangStringTable LangTable;
-	bool fHasLangTable = !!LangTable.LoadEx("StringTbl", hGroup, C4CFN_ScriptStringTbl, Config.General.LanguageEx);
+	bool fHasLangTable = !!LangTable.LoadEx(hGroup, C4CFN_ScriptStringTbl, Config.General.LanguageEx);
 	// load core data
 	StdStrBuf Buf;
-	if (!hGroup.LoadEntryString(C4CFN_MapFolderData, Buf)) return false;
+	if (!hGroup.LoadEntryString(C4CFN_MapFolderData, &Buf)) return false;
 	if (fHasLangTable) LangTable.ReplaceStrings(Buf);
 	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkNamingAdapt(*this, "FolderMap"), Buf, C4CFN_MapFolderData)) return false;
 	// check resolution requirement
@@ -209,7 +211,7 @@ void C4MapFolderData::CompileFunc(StdCompiler *pComp)
 		if (iScenCount)
 		{
 			ppScenList = new Scenario *[iScenCount];
-			ZeroMemory(ppScenList, sizeof(Scenario *)*iScenCount);
+			memset(ppScenList, 0, sizeof(Scenario *)*iScenCount);
 		}
 		else
 			ppScenList = NULL;
@@ -229,7 +231,7 @@ void C4MapFolderData::CompileFunc(StdCompiler *pComp)
 		if (iAccessGfxCount)
 		{
 			ppAccessGfxList = new AccessGfx *[iAccessGfxCount];
-			ZeroMemory(ppAccessGfxList, sizeof(AccessGfx *)*iAccessGfxCount);
+			memset(ppAccessGfxList, 0, sizeof(AccessGfx *)*iAccessGfxCount);
 		}
 		else
 			ppAccessGfxList = NULL;
@@ -480,10 +482,9 @@ bool C4ScenarioListLoader::Entry::Load(C4Group *pFromGrp, const StdStrBuf *psFil
 			return false;
 		// Load entry name
 		C4ComponentHost DefNames;
-		if (DefNames.LoadEx("Title", Group, C4CFN_Title, Config.General.LanguageEx))
+		if (DefNames.LoadEx(Group, C4CFN_Title, Config.General.LanguageEx))
 			if (DefNames.GetLanguageString(Config.General.LanguageEx, sName))
 				fNameLoaded = true;
-		DefNames.Close();
 		// load entry icon
 		if (Group.FindEntry(C4CFN_IconPNG) && fctIcon.Load(Group, C4CFN_IconPNG))
 			fIconLoaded = true;
@@ -515,8 +516,6 @@ bool C4ScenarioListLoader::Entry::Load(C4Group *pFromGrp, const StdStrBuf *psFil
 		}
 		// load any entryx-type-specific custom data (e.g. fallbacks for scenario title, and icon)
 		if (!LoadCustom(Group, fNameLoaded, fIconLoaded)) return false;
-		// store maker
-		sMaker.Copy(Group.GetMaker());
 		fBaseLoaded = true;
 	}
 	// load extended stuff: title picture
@@ -524,43 +523,25 @@ bool C4ScenarioListLoader::Entry::Load(C4Group *pFromGrp, const StdStrBuf *psFil
 	{
 		// load desc
 		C4ComponentHost DefDesc;
-		if (DefDesc.LoadEx("Desc", Group, C4CFN_ScenarioDesc, Config.General.LanguageEx))
+		if (DefDesc.LoadEx(Group, C4CFN_ScenarioDesc, Config.General.LanguageEx))
 		{
 			C4RTFFile rtf;
 			rtf.Load(StdBuf(DefDesc.GetData(), SLen(DefDesc.GetData())));
 			sDesc.Take(rtf.GetPlainText());
 		}
-		DefDesc.Close();
 		// load title
 		if (!fctTitle.Load(Group, C4CFN_ScenarioTitlePNG, C4FCT_Full, C4FCT_Full, false, true))
 			fctTitle.Load(Group, C4CFN_ScenarioTitle, C4FCT_Full, C4FCT_Full, true, true);
 		fExLoaded = true;
-		// load author
-		if (Group.IsPacked())
-		{
-			const char *strSecAuthors = "RedWolf Design;Clonk History Project;GWE-Team"; // Now hardcoded...
-			if (SIsModule(strSecAuthors, Group.GetMaker()) && Group.LoadEntryString(C4CFN_Author, sAuthor))
-			{
-				// OK; custom author by txt
-			}
-			else
-				// defeault author by group
-				sAuthor.Copy(Group.GetMaker());
-		}
-		else
-		{
-			// unpacked groups do not have an author
-			sAuthor.Clear();
-		}
 		// load version
-		Group.LoadEntryString(C4CFN_Version, sVersion);
+		Group.LoadEntryString(C4CFN_Version, &sVersion);
 	}
 	//LogF("dbg: Loaded \"%s\" as \"%s\". (%s)", (const char *) sFilename, (const char *) sName, GetIsFolder() ? "Folder" : "Scenario");
 	// done, success
 	return true;
 }
 
-// helper func: Recursive check whether a directory contains a .c4s or .c4f file
+// helper func: Recursive check whether a directory contains a .ocs or .ocf file
 bool DirContainsScenarios(const char *szDir)
 {
 	// create iterator on free store to avoid stack overflow with deeply recursed folders
@@ -697,7 +678,7 @@ bool C4ScenarioListLoader::Scenario::LoadCustomPre(C4Group &rGrp)
 {
 	// load scenario core first
 	StdStrBuf sFileContents;
-	if (!rGrp.LoadEntryString(C4CFN_ScenarioCore, sFileContents)) return false;
+	if (!rGrp.LoadEntryString(C4CFN_ScenarioCore, &sFileContents)) return false;
 	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkParAdapt(C4S, false), sFileContents, (rGrp.GetFullName() + DirSep C4CFN_ScenarioCore).getData()))
 		return false;
 	return true;
@@ -945,7 +926,7 @@ bool C4ScenarioListLoader::Folder::LoadCustomPre(C4Group &rGrp)
 {
 	// load folder core if available
 	StdStrBuf sFileContents;
-	if (rGrp.LoadEntryString(C4CFN_FolderCore, sFileContents))
+	if (rGrp.LoadEntryString(C4CFN_FolderCore, &sFileContents))
 		if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(C4F, sFileContents, (rGrp.GetFullName() + DirSep C4CFN_FolderCore).getData()))
 			return false;
 	return true;
@@ -1062,7 +1043,7 @@ bool C4ScenarioListLoader::RegularFolder::DoLoadContents(C4ScenarioListLoader *p
 	ClearChildren();
 	// regular folders must exist and not be within group!
 	assert(!pFromGrp);
-	if (sFilename[0])
+	if (sFilename.getData() && sFilename[0])
 		Merge(sFilename.getData());
 
 	// get number of entries, to estimate progress
@@ -1185,7 +1166,10 @@ bool C4ScenarioListLoader::Load(const StdStrBuf &sRootFolder)
 	if (!BeginActivity(true)) return false;
 	if (pRootFolder) { delete pRootFolder; pRootFolder = NULL; }
 	pCurrFolder = pRootFolder = new RegularFolder(NULL);
-	pRootFolder->Merge(Config.General.UserDataPath);
+	// Load regular game data if no explicit path specified
+	if(!sRootFolder.getData())
+		for(C4Reloc::iterator iter = Reloc.begin(); iter != Reloc.end(); ++iter)
+			pRootFolder->Merge(iter->getData());
 	bool fSuccess = pRootFolder->LoadContents(this, NULL, &sRootFolder, false, false);
 	EndActivity();
 	return fSuccess;
@@ -1456,7 +1440,7 @@ void C4StartupScenSelDlg::OnShown()
 	// init file list
 	fIsInitialLoading = true;
 	if (!pScenLoader) pScenLoader = new C4ScenarioListLoader();
-	pScenLoader->Load(StdStrBuf(Config.General.ExePath));
+	pScenLoader->Load(StdStrBuf()); //Config.General.ExePath));
 	UpdateList();
 	UpdateSelection();
 	fIsInitialLoading = false;
@@ -1482,13 +1466,6 @@ void C4StartupScenSelDlg::OnClosed(bool fOK)
 		::Network.SetPassword(NULL);
 		C4Startup::Get()->SwitchDialog(C4Startup::SDID_Back);
 	}
-}
-
-void C4StartupScenSelDlg::UpdateUseCrewBtn()
-{
-	C4ScenarioListLoader::Entry *pSel = GetSelectedEntry();
-	C4SForceFairCrew eOpt = pSel ? pSel->GetFairCrewAllowed() : C4SFairCrew_Free;
-	pGameOptionButtons->SetForceFairCrewState(eOpt);
 }
 
 void C4StartupScenSelDlg::UpdateList()
@@ -1604,15 +1581,13 @@ void C4StartupScenSelDlg::UpdateSelection()
 	// set data in selection component
 	pSelectionInfo->ClearText(false);
 	pSelectionInfo->SetPicture(fctTitle);
-	if (!!sTitle && (!sDesc || !*sDesc.getData())) pSelectionInfo->AddTextLine(sTitle.getData(), &C4Startup::Get()->Graphics.BookFontCapt, ClrScenarioItem, false, false);
-	if (!!sDesc) pSelectionInfo->AddTextLine(sDesc.getData(), &C4Startup::Get()->Graphics.BookFont, ClrScenarioItem, false, false, &C4Startup::Get()->Graphics.BookFontCapt);
-	if (!!sAuthor) pSelectionInfo->AddTextLine(FormatString(LoadResStr("IDS_CTL_AUTHOR"), sAuthor.getData()).getData(),
+	if (sTitle && (!sDesc || !*sDesc.getData())) pSelectionInfo->AddTextLine(sTitle.getData(), &C4Startup::Get()->Graphics.BookFontCapt, ClrScenarioItem, false, false);
+	if (sDesc) pSelectionInfo->AddTextLine(sDesc.getData(), &C4Startup::Get()->Graphics.BookFont, ClrScenarioItem, false, false, &C4Startup::Get()->Graphics.BookFontCapt);
+	if (sAuthor) pSelectionInfo->AddTextLine(FormatString(LoadResStr("IDS_CTL_AUTHOR"), sAuthor.getData()).getData(),
 		    &C4Startup::Get()->Graphics.BookFont, ClrScenarioItemXtra, false, false);
-	if (!!sVersion) pSelectionInfo->AddTextLine(FormatString(LoadResStr("IDS_DLG_VERSION"), sVersion.getData()).getData(),
+	if (sVersion) pSelectionInfo->AddTextLine(FormatString(LoadResStr("IDS_DLG_VERSION"), sVersion.getData()).getData(),
 		    &C4Startup::Get()->Graphics.BookFont, ClrScenarioItemXtra, false, false);
 	pSelectionInfo->UpdateHeight();
-	// usecrew-button
-	UpdateUseCrewBtn();
 }
 
 C4StartupScenSelDlg::ScenListItem *C4StartupScenSelDlg::GetSelectedItem()
@@ -1638,7 +1613,7 @@ bool C4StartupScenSelDlg::StartScenario(C4ScenarioListLoader::Scenario *pStartSc
 	{
 		// get definitions as user selects them
 		StdStrBuf sDefinitions;
-		if (!pStartScen->GetC4S().Definitions.GetModules(&sDefinitions)) sDefinitions.Copy("Objects.c4d");
+		if (!pStartScen->GetC4S().Definitions.GetModules(&sDefinitions)) sDefinitions.Copy("Objects.ocd");
 		if (!C4DefinitionSelDlg::SelectDefinitions(GetScreen(), &sDefinitions))
 			// user aborted during definition selection
 			return false;
@@ -1646,13 +1621,12 @@ bool C4StartupScenSelDlg::StartScenario(C4ScenarioListLoader::Scenario *pStartSc
 	}
 	else
 		// for no user change, just set default objects. Custom settings will override later anyway
-		SCopy("Objects.c4d", Game.DefinitionFilenames);
+		SCopy("Objects.ocd", Game.DefinitionFilenames);
 	// set other default startup parameters
-	SCopy(pStartScen->GetEntryFilename().getData(), Game.ScenarioFilename);
 	Game.fLobby = !!Game.NetworkActive; // always lobby in network
 	Game.fObserve = false;
 	// start with this set!
-	C4Startup::Get()->Start();
+	Application.OpenGame(pStartScen->GetEntryFilename().getData());
 	return true;
 }
 
@@ -1752,17 +1726,7 @@ bool C4StartupScenSelDlg::KeyDelete()
 	if (!pSel) return false;
 	C4ScenarioListLoader::Entry *pEnt = pSel->GetEntry();
 	StdStrBuf sWarning;
-	bool fOriginal = false;
-	if (C4Group_IsGroup(pEnt->GetEntryFilename().getData()))
-	{
-		C4Group Grp;
-		if (Grp.Open(pEnt->GetEntryFilename().getData()))
-		{
-			fOriginal = !!Grp.GetOriginal();
-		}
-		Grp.Close();
-	}
-	sWarning.Format(LoadResStr(fOriginal ? "IDS_MSG_DELETEORIGINAL" : "IDS_MSG_PROMPTDELETE"), FormatString("%s %s", pEnt->GetTypeName().getData(), pEnt->GetName().getData()).getData());
+	sWarning.Format(LoadResStr("IDS_MSG_PROMPTDELETE"), FormatString("%s %s", pEnt->GetTypeName().getData(), pEnt->GetName().getData()).getData());
 	GetScreen()->ShowRemoveDlg(new C4GUI::ConfirmationDialog(sWarning.getData(), LoadResStr("IDS_MNU_DELETE"),
 	                           new C4GUI::CallbackHandlerExPar<C4StartupScenSelDlg, ScenListItem *>(this, &C4StartupScenSelDlg::DeleteConfirm, pSel), C4GUI::MessageDialog::btnYesNo));
 	return true;

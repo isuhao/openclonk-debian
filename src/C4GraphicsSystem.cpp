@@ -4,7 +4,7 @@
  * Copyright (c) 1998-2000, 2004, 2008  Matthes Bender
  * Copyright (c) 2001-2003, 2005-2009  Sven Eberhardt
  * Copyright (c) 2001  Michael Käser
- * Copyright (c) 2005-2006, 2008  Günther Brammer
+ * Copyright (c) 2005-2006, 2008-2010  Günther Brammer
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -29,7 +29,6 @@
 #include <C4Application.h>
 #include <C4Console.h>
 #include <C4Random.h>
-#include <C4SurfaceFile.h>
 #include <C4FullScreen.h>
 #include <C4Gui.h>
 #include <C4LoaderScreen.h>
@@ -111,20 +110,20 @@ void C4GraphicsSystem::Execute()
 	bool fBGDrawn = false;
 
 	// If lobby running, message board only (page flip done by startup message board)
-	if (!::pGUI || !::pGUI->HasFullscreenDialog(true)) // allow for message board behind GUI
+	if (!::pGUI->HasFullscreenDialog(true)) // allow for message board behind GUI
 		if (::Network.isLobbyActive() || !Game.IsRunning)
 			if (!Application.isEditor)
 			{
 				// Message board
 				if (iRedrawBackground) ClearFullscreenBackground();
 				MessageBoard.Execute();
-				if (!::pGUI || !C4GUI::IsActive())
+				if (!C4GUI::IsActive())
 					{ FinishDrawing(); return; }
 				fBGDrawn = true;
 			}
 
 	// fullscreen GUI?
-	if (!Application.isEditor && ::pGUI && C4GUI::IsActive() && (::pGUI->HasFullscreenDialog(false) || !Game.IsRunning))
+	if (!Application.isEditor && C4GUI::IsActive() && (::pGUI->HasFullscreenDialog(false) || !Game.IsRunning))
 	{
 		if (!fBGDrawn && iRedrawBackground) ClearFullscreenBackground();
 		::pGUI->Render(!fBGDrawn);
@@ -138,7 +137,7 @@ void C4GraphicsSystem::Execute()
 
 	// some hack to ensure the mouse is drawn after a dialog close and before any
 	// movement messages
-	if (::pGUI && !C4GUI::IsActive())
+	if (!C4GUI::IsActive())
 		::pGUI->SetMouseInGUI(false, false);
 
 	// Viewports
@@ -160,7 +159,7 @@ void C4GraphicsSystem::Execute()
 	}
 
 	// InGame-GUI
-	if (::pGUI && C4GUI::IsActive())
+	if (C4GUI::IsActive())
 	{
 		::pGUI->Render(false);
 	}

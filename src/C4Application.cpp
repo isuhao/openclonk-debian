@@ -3,9 +3,12 @@
  *
  * Copyright (c) 1998-2000, 2004-2005, 2007-2008  Matthes Bender
  * Copyright (c) 2004-2008  Sven Eberhardt
+ * Copyright (c) 2005-2006, 2008-2011  Günther Brammer
  * Copyright (c) 2005-2006, 2009  Peter Wortmann
- * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2009, 2011  Nicolas Hake
+ * Copyright (c) 2010  Benjamin Herr
+ * Copyright (c) 2011  Armin Burgmeier
+ * Copyright (c) 2011  Julius Michaelis
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -34,7 +37,6 @@
 #include "C4GraphicsSystem.h"
 #include "C4GraphicsResource.h"
 #include "C4MessageInput.h"
-#include <C4FileClasses.h>
 #include <C4FullScreen.h>
 #include <C4Language.h>
 #include <C4Console.h>
@@ -44,14 +46,18 @@
 #include <C4GameLobby.h>
 #include <C4Fonts.h>
 #include <C4Network2.h>
+#include <C4Network2IRC.h>
 
 #include <StdRegistry.h> // For DDraw emulation warning
 
 #include <getopt.h>
 
+static C4Network2IRCClient ApplicationIRCClient;
+
 C4Application::C4Application():
 		isEditor(false),
-		UseStartupDialog(true),
+		IRCClient(ApplicationIRCClient),
+		QuitAfterGame(false),
 		CheckForUpdates(false),
 		NoSplash(false),
 		restartAtEnd(false),
@@ -87,7 +93,7 @@ bool C4Application::DoInit(int argc, char * argv[])
 		if (sConfigFilename)
 		{
 			// custom config corrupted: Fail
-			Log("Warning: Custom configuration corrupted - program abort!\n");
+			Log("ERROR: Custom configuration corrupted - program abort!\n");
 			return false;
 		}
 		else
@@ -100,9 +106,8 @@ bool C4Application::DoInit(int argc, char * argv[])
 		}
 	}
 	// Init C4Group
-	C4Group_SetMaker(Config.General.Name);
 	C4Group_SetProcessCallback(&ProcessCallback);
-	C4Group_SetTempPath(Config.General.TempPath);
+	C4Group_SetTempPath(Config.General.TempPath.getData());
 	C4Group_SetSortList(C4CFN_FLS);
 
 	// Open log
@@ -110,13 +115,16 @@ bool C4Application::DoInit(int argc, char * argv[])
 
 	Revision.Ref(C4REVISION);
 
+	// Initialize game data paths
+	Reloc.Init();
+
 	// init system group
-	if (!SystemGroup.Open(C4CFN_System))
+	if (!Reloc.Open(SystemGroup, C4CFN_System))
 	{
 		// Error opening system group - no LogFatal, because it needs language table.
 		// This will *not* use the FatalErrors stack, but this will cause the game
 		// to instantly halt, anyway.
-		const char *szMessage = "Error opening system group file (System.c4g)!";
+		const char *szMessage = "Error opening system group file (System.ocg)!";
 		Log(szMessage);
 		// Fatal error, game cannot start - have player notice
 		MessageDialog(szMessage);
@@ -132,11 +140,6 @@ bool C4Application::DoInit(int argc, char * argv[])
 		// No language table was loaded - bad luck...
 		if (!IsResStrTableLoaded())
 			Log("WARNING: No language string table loaded!");
-
-	// Set unregistered user name
-	if (!Config.Registered())
-		C4Group_SetMaker(LoadResStr("IDS_PRC_UNREGUSER"));
-
 
 #ifdef WIN32
 	// Windows: handle incoming updates directly, even before starting up the gui
@@ -182,12 +185,6 @@ bool C4Application::DoInit(int argc, char * argv[])
 			pWindow->SetSize(Config.Graphics.ResX, Config.Graphics.ResY);
 	}
 
-#if defined(_WIN32) && !defined(USE_CONSOLE)
-	// Register clonk file classes - notice: under Vista this will only work if we have administrator rights
-	char szModule[_MAX_PATH+1]; GetModuleFileName(NULL, szModule, _MAX_PATH);
-	SetC4FileClasses(szModule);
-#endif
-
 	// Initialize gamepad
 	if (!pGamePadControl && Config.General.GamepadEnabled)
 		pGamePadControl = new C4GamePadControl();
@@ -215,20 +212,18 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 
 	ClearCommandLine();
 	Game.NetworkActive = false;
-	Config.General.ClearAdditionalDataPaths();
+	Reloc.Init(); // re-init from config
 	isEditor = 2;
 	int c;
 	while (1)
 	{
+
 		static struct option long_options[] =
 		{
+			// option, w/ argument?, set directly, set to...
 			{"editor", no_argument, &isEditor, 1},
 			{"fullscreen", no_argument, &isEditor, 0},
 			{"debugwait", no_argument, &Game.DebugWait, 1},
-			{"ucrw", no_argument, &Config.General.FairCrew, 0},
-			{"trainedcrew", no_argument, &Config.General.FairCrew, 0},
-			{"ncrw", no_argument, &Config.General.FairCrew, 1},
-			{"faircrew", no_argument, &Config.General.FairCrew, 1},
 			{"nosplash", no_argument, &NoSplash, 1},
 			{"update", no_argument, &CheckForUpdates, 1},
 			{"noruntimejoin", no_argument, &Config.Network.NoRuntimeJoin, 1},
@@ -318,7 +313,7 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 		// startup start screen
 		case 's': C4Startup::SetStartScreen(optarg); break;
 		// additional read-only data path
-		case 'd': Config.General.AddAdditionalDataPath(optarg); break;
+		case 'd': Reloc.AddPath(optarg); break;
 		// debug options
 		case 'D': Game.DebugPort = atoi(optarg); break;
 		case 'P': Game.DebugPassword = optarg; break;
@@ -352,15 +347,19 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 		char * szParameter = argv[optind++];
 		{ // Strip trailing / that result from tab-completing unpacked c4groups
 			int iLen = SLen(szParameter);
-			if (iLen > 5 && szParameter[iLen-1] == '/' && szParameter[iLen-5] == '.' && szParameter[iLen-4] == 'c' && szParameter[iLen-3] == '4')
+			if (iLen > 5 && szParameter[iLen-1] == '/' && szParameter[iLen-5] == '.' && szParameter[iLen-4] == 'o' && szParameter[iLen-3] == 'c')
 			{
 				szParameter[iLen-1] = '\0';
 			}
 		}
 		// Scenario file
-		if (SEqualNoCase(GetExtension(szParameter),"c4s"))
+		if (SEqualNoCase(GetExtension(szParameter),"ocs"))
 		{
-			Game.SetScenarioFilename(Config.AtDataReadPath(szParameter, true));
+			if(IsGlobalPath(szParameter))
+				Game.SetScenarioFilename(szParameter);
+			else
+				Game.SetScenarioFilename((std::string(GetWorkingDirectory()) + DirSep + szParameter).c_str());
+
 			continue;
 		}
 		if (SEqualNoCase(GetFilename(szParameter),"scenario.txt"))
@@ -369,14 +368,17 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 			continue;
 		}
 		// Player file
-		if (SEqualNoCase(GetExtension(szParameter),"c4p"))
+		if (SEqualNoCase(GetExtension(szParameter),"ocp"))
 		{
-			const char *param = Config.AtDataReadPath(szParameter, true);
-			SAddModule(Game.PlayerFilenames,param);
+			if(IsGlobalPath(szParameter))
+				SAddModule(Game.PlayerFilenames, szParameter);
+			else
+				SAddModule(Game.PlayerFilenames, (std::string(GetWorkingDirectory()) + DirSep + szParameter).c_str());
+
 			continue;
 		}
 		// Definition file
-		if (SEqualNoCase(GetExtension(szParameter),"c4d"))
+		if (SEqualNoCase(GetExtension(szParameter),"ocd"))
 		{
 			SAddModule(Game.DefinitionFilenames,szParameter);
 			continue;
@@ -388,7 +390,7 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 			continue;
 		}
 		// Update file
-		if (SEqualNoCase(GetExtension(szParameter),"c4u"))
+		if (SEqualNoCase(GetExtension(szParameter),"ocu"))
 		{
 			Application.IncomingUpdate.Copy(szParameter);
 			continue;
@@ -424,20 +426,20 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 	// Determine startup player count
 	Game.StartupPlayerCount = SModuleCount(Game.PlayerFilenames);
 
-	// default record?
-	Game.Record = Game.Record || Config.General.DefRec || (Config.Network.LeagueServerSignUp && Game.NetworkActive);
+	// record?
+	Game.Record = Game.Record || (Config.Network.LeagueServerSignUp && Game.NetworkActive);
 
 	// startup dialog required?
-	UseStartupDialog = !isEditor && !*Game.DirectJoinAddress && !*Game.ScenarioFilename && !Game.RecordStream.getSize();
+	QuitAfterGame = !isEditor && Game.HasScenario();
 }
 
 void C4Application::ApplyResolutionConstraints()
 {
 	// Enumerate display modes
-	int32_t idx = 0, iXRes, iYRes, iBitDepth, iRefreshRate;
+	int32_t idx = -1, iXRes, iYRes, iBitDepth, iRefreshRate;
 	int32_t best_match = -1;
 	uint32_t best_delta = ~0;
-	while (GetIndexedDisplayMode(idx++, &iXRes, &iYRes, &iBitDepth, &iRefreshRate, Config.Graphics.Monitor))
+	while (GetIndexedDisplayMode(++idx, &iXRes, &iYRes, &iBitDepth, &iRefreshRate, Config.Graphics.Monitor))
 	{
 		if (iBitDepth != Config.Graphics.BitDepth) continue;
 		uint32_t delta = std::abs(Config.Graphics.ResX*Config.Graphics.ResY - iXRes*iYRes);
@@ -467,7 +469,7 @@ void C4Application::ApplyResolutionConstraints()
 bool C4Application::PreInit()
 {
 	// startup dialog: Only use if no next mission has been provided
-	bool fDoUseStartupDialog = UseStartupDialog && !*Game.ScenarioFilename;
+	bool fUseStartupDialog = !Game.HasScenario();
 
 	// Startup message board
 	if (!isEditor)
@@ -479,14 +481,14 @@ bool C4Application::PreInit()
 	Game.SetInitProgress(0.0f);
 
 	// init loader: Black screen for first start if a video is to be shown; otherwise default spec
-	if (fDoUseStartupDialog)
+	if (fUseStartupDialog && !isEditor)
 	{
 		//Log(LoadResStr("IDS_PRC_INITLOADER"));
-		bool fUseBlackScreenLoader = UseStartupDialog && !C4Startup::WasFirstRun() && !Config.Startup.NoSplash && !NoSplash && FileExists(C4CFN_Splash);
+		bool fUseBlackScreenLoader = !C4Startup::WasFirstRun() && !Config.Startup.NoSplash && !NoSplash && FileExists(C4CFN_Splash);
 		if (!::GraphicsSystem.InitLoaderScreen(C4CFN_StartupBackgroundMain, fUseBlackScreenLoader))
 			{ LogFatal(LoadResStr("IDS_PRC_ERRLOADER")); return false; }
 	}
-	Game.SetInitProgress(fDoUseStartupDialog ? 10.0f : 1.0f);
+	Game.SetInitProgress(fUseStartupDialog ? 10.0f : 1.0f);
 
 	if (!Game.PreInit()) return false;
 
@@ -494,15 +496,32 @@ bool C4Application::PreInit()
 	if (!MusicSystem.Init("Frontend.*"))
 		Log(LoadResStr("IDS_PRC_NOMUSIC"));
 
-	Game.SetInitProgress(fDoUseStartupDialog ? 34.0f : 2.0f);
+	// Play some music!
+	if (fUseStartupDialog && !isEditor && Config.Sound.FEMusic)
+		MusicSystem.Play();
+
+	Game.SetInitProgress(fUseStartupDialog ? 34.0f : 2.0f);
 
 	// Sound
 	if (!SoundSystem.Init())
 		Log(LoadResStr("IDS_PRC_NOSND"));
 
-	Game.SetInitProgress(fDoUseStartupDialog ? 35.0f : 3.0f);
+	Game.SetInitProgress(fUseStartupDialog ? 35.0f : 3.0f);
 
-	AppState = fDoUseStartupDialog ? C4AS_Startup : C4AS_StartGame;
+	if (fUseStartupDialog)
+	{
+		AppState = C4AS_Startup;
+		// default record?
+		Game.Record = Game.Record || Config.General.DefRec;
+		// if no scenario or direct join has been specified, get game startup parameters by startup dialog
+		if (!isEditor)
+			C4Startup::InitStartup();
+	}
+	// directly launch scenario / network game
+	else
+	{
+		AppState = C4AS_StartGame;
+	}
 
 	return true;
 }
@@ -520,7 +539,9 @@ void C4Application::Clear()
 	// stop timer
 	Remove(pGameTimer);
 	delete pGameTimer; pGameTimer = NULL;
-	// close system group (System.c4g)
+	// quit irc
+	IRCClient.Close();
+	// close system group (System.ocg)
 	SystemGroup.Close();
 	// Log
 	if (IsResStrTableLoaded()) // Avoid (double and undefined) message on (second?) shutdown...
@@ -543,23 +564,6 @@ void C4Application::Clear()
 	CStdApp::Clear();
 }
 
-bool C4Application::OpenGame()
-{
-	if (!isEditor)
-	{
-		// Open game
-		return Game.Init();
-	}
-	else
-	{
-		// Execute command line
-		if (Game.ScenarioFilename[0] || Game.DirectJoinAddress[0])
-			return Console.OpenGame();
-	}
-	// done; success
-	return true;
-}
-
 void C4Application::Quit()
 {
 	// Participants should not be cleared for usual startup dialog
@@ -575,27 +579,27 @@ void C4Application::Quit()
 	AppState = C4AS_Quit;
 }
 
+void C4Application::OpenGame(const char * scenario)
+{
+	if (AppState == C4AS_Startup)
+	{
+		if (scenario) Game.SetScenarioFilename(scenario);
+		AppState = C4AS_StartGame;
+	}
+	else
+	{
+		SetNextMission(scenario);
+		AppState = C4AS_AfterGame;
+	}
+
+}
+
 void C4Application::QuitGame()
 {
 	// reinit desired? Do restart
-	if (UseStartupDialog || NextMission)
+	if (!QuitAfterGame || NextMission)
 	{
-		// backup last start params
-		bool fWasNetworkActive = Game.NetworkActive;
-		// stop game
-		Game.Clear();
-		Game.Default();
-		AppState = C4AS_PreInit;
-		// if a next mission is desired, set to start it
-		if (NextMission)
-		{
-			SCopy(NextMission.getData(), Game.ScenarioFilename, _MAX_PATH);
-			SReplaceChar(Game.ScenarioFilename, '\\', DirSep[0]); // linux/mac: make sure we are using forward slashes
-			Game.fLobby = Game.NetworkActive = fWasNetworkActive;
-			Game.fObserve = false;
-			Game.Record = !!Config.General.Record;
-			NextMission.Clear();
-		}
+		AppState = C4AS_AfterGame;
 	}
 	else
 	{
@@ -618,22 +622,34 @@ void C4Application::GameTick()
 		if (!PreInit()) Quit();
 		break;
 	case C4AS_Startup:
-		AppState = C4AS_Game;
-		// if no scenario or direct join has been specified, get game startup parameters by startup dialog
-		if (!C4Startup::Execute()) { Quit(); return; }
-		AppState = C4AS_StartGame;
+		// wait for the user to start a game
 		break;
 	case C4AS_StartGame:
 		// immediate progress to next state; OpenGame will enter HandleMessage-loops in startup and lobby!
+		C4Startup::CloseStartup();
 		AppState = C4AS_Game;
 		// first-time game initialization
-		if (!OpenGame())
+		if (!Game.Init())
 		{
 			// set error flag (unless this was a lobby user abort)
 			if (!C4GameLobby::UserAbort)
 				Game.fQuitWithError = true;
 			// no start: Regular QuitGame; this may reset the engine to startup mode if desired
 			QuitGame();
+			break;
+		}
+		break;
+	case C4AS_AfterGame:
+		// stop game
+		Game.Clear();
+		AppState = C4AS_PreInit;
+		// if a next mission is desired, set to start it
+		if (NextMission)
+		{
+			Game.SetScenarioFilename(NextMission.getData());
+			Game.fLobby = Game.NetworkActive;
+			Game.fObserve = false;
+			NextMission.Clear();
 		}
 		break;
 	case C4AS_Game:
@@ -744,7 +760,11 @@ void C4Application::SetNextMission(const char *szMissionFilename)
 {
 	// set next mission if any is desired
 	if (szMissionFilename)
+	{
 		NextMission.Copy(szMissionFilename);
+		// scenarios tend to use the wrong slash
+		SReplaceChar(NextMission.getMData(), AltDirectorySeparator, DirectorySeparator);
+	}
 	else
 		NextMission.Clear();
 }
@@ -789,7 +809,7 @@ bool C4ApplicationGameTimer::Execute(int iTimeout, pollfd *)
 {
 	// Check timer and reset
 	if (!CheckAndReset()) return true;
-	unsigned int Now = timeGetTime();
+	unsigned int Now = GetTime();
 	// Execute
 	if (Now >= iLastGameTick + iGameTickDelay || Game.GameGo)
 	{
@@ -804,3 +824,4 @@ bool C4ApplicationGameTimer::Execute(int iTimeout, pollfd *)
 	return true;
 }
 
+bool  C4ApplicationGameTimer::IsLowPriority() { return true; }

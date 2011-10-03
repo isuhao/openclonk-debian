@@ -4,6 +4,7 @@
  * Copyright (c) 2005-2006  Peter Wortmann
  * Copyright (c) 2006  Günther Brammer
  * Copyright (c) 2008  Armin Burgmeier
+ * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2010  Carl-Philip Hänsch
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
  *
@@ -67,7 +68,7 @@ void C4ClientCore::SetLocal(int32_t inID, bool fnActivated, bool fnObserver)
 		const char* position = std::strchr(Config.General.Participants, ';');
 		if (!position)
 			position = Config.General.Participants + std::strlen(Config.General.Participants);
-		if (Config.General.Participants + 4 <= position && std::strncmp(position - 4, ".c4p", 4) == 0)
+		if (Config.General.Participants + 4 <= position && std::strncmp(position - 4, ".ocp", 4) == 0)
 			Name.CopyValidated(std::string(Config.General.Participants, position - Config.General.Participants - 4).c_str());
 		else
 			Name.Copy("empty");

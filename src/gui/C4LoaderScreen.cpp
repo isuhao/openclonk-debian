@@ -1,9 +1,9 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2003, 2005-2007  Sven Eberhardt
+ * Copyright (c) 2002-2003, 2005-2007  Sven Eberhardt
  * Copyright (c) 2003  Matthes Bender
- * Copyright (c) 2005-2006  Günther Brammer
+ * Copyright (c) 2005-2006, 2009-2010  Günther Brammer
  * Copyright (c) 2003-2009, RedWolf Design GmbH, http://www.clonk.de
  *
  * Portions might be copyrighted by other authors who have contributed
@@ -73,7 +73,7 @@ bool C4LoaderScreen::Init(const char *szLoaderSpec)
 	{
 		// open it
 		GfxGrp.Close();
-		if (!GfxGrp.Open(Config.AtSystemDataPath(C4CFN_Graphics)))
+		if (!Reloc.Open(GfxGrp, C4CFN_Graphics))
 		{
 			LogFatal(FormatString(LoadResStr("IDS_PRC_NOGFXFILE"),C4CFN_Graphics,GfxGrp.GetError()).getData());
 			return false;
