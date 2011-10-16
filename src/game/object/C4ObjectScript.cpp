@@ -1955,7 +1955,7 @@ static Nillable<int> FnGetAnimationLength(C4AulObjectContext *ctx, C4String *szA
 
 	const StdMeshAnimation* animation = Instance->GetMesh().GetAnimationByName(szAnimation->GetData());
 	if (!animation) return C4Void();
-	return static_cast<int>(animation->Length * 1000.0f); // TODO: sync critical
+	return fixtoi(ftofix(animation->Length), 1000); // sync critical!
 }
 
 static Nillable<C4String*> FnGetAnimationName(C4AulObjectContext *ctx, Nillable<int> iAnimationNumber, Nillable<int> iAttachNumber)
@@ -2480,7 +2480,6 @@ void InitObjectFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, PSF_OnOwnerRemoved, FnOnOwnerRemoved, false);
 	AddFunc(pEngine, "GetUnusedOverlayID", FnGetUnusedOverlayID, false);
 	AddFunc(pEngine, "ExecuteCommand", FnExecuteCommand);
-	//FIXME new C4AulDefCastFunc(pEngine, "ScoreboardCol", C4V_C4ID, C4V_Int);
 
 	AddFunc(pEngine, "PlayAnimation", FnPlayAnimation);
 	AddFunc(pEngine, "StopAnimation", FnStopAnimation);

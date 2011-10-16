@@ -151,7 +151,7 @@ StdStrBuf::StdStrBuf(const wchar_t * utf16)
 	SetSize(len);
 	WideCharToMultiByte(CP_UTF8, 0, utf16, -1, getMData(), getSize(), 0, 0);
 }
-StdStrBuf::wchar_t_holder StdStrBuf::GetWideChar()
+StdStrBuf::wchar_t_holder StdStrBuf::GetWideChar() const
 {
 	if (!getSize()) return StdStrBuf::wchar_t_holder(NULL);
 
@@ -417,7 +417,7 @@ void StdStrBuf::AppendCharacter(uint32_t unicodechar)
 		*getMPtr(getLength() - 2) = (0x80 | ((unicodechar >> 6) & 0x3F));
 		*getMPtr(getLength() - 1) = (0x80 | (unicodechar & 0x3F));
 	}
-	else /* not an unicode code point, ignore */;
+	else /* not an unicode code point, ignore */ {}
 }
 
 void StdStrBuf::EnsureUnicode()
