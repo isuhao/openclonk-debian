@@ -24,12 +24,12 @@ protected func Initialize()
 	goal->SetFlagBase(2, LandscapeWidth() - 135, 264);
 	CreateObject(Rule_KillLogs);	
 	
-	var gate = CreateObject(StoneDoor, 345, 273, NO_OWNER);
-	gate->SetClrModulation(RGB(180,205,255));
-	AddEffect("AutoControl", gate, 100, 3, gate, nil, 1);
-	var gate = CreateObject(StoneDoor, LandscapeWidth()-344, 273, NO_OWNER);
-	gate->SetClrModulation(RGB(180,205,255));
-	AddEffect("AutoControl", gate, 100, 3, gate, nil, 2);
+	var gate = CreateObject(StoneDoor, 345, 272, NO_OWNER);
+	gate->SetClrModulation(RGB(140,185,255));
+	gate->SetAutoControl(1);
+	var gate = CreateObject(StoneDoor, LandscapeWidth()-344, 272, NO_OWNER);
+	gate->SetClrModulation(RGB(140,185,255));
+	gate->SetAutoControl(2);
 
 	// Chests with weapons.
 	var chest;
@@ -186,7 +186,7 @@ global func FxFillBaseChestStart(object target, effect, int temporary, bool supp
 		
 	effect.supply_type=supply;
 	if(effect.supply_type) 
-		var w_list = [Firestone, Dynamite, Shovel, Loam, Ropeladder];
+		var w_list = [Firestone, Dynamite, IronBomb, Shovel, Loam, Ropeladder];
 	else
 		var w_list = [Bow, Shield, Sword, Javelin, Musket, FrostboltScroll];
 	for(var i=0; i<5; i++)
@@ -199,7 +199,7 @@ global func FxFillBaseChestTimer(object target, effect)
 	
 	if(effect.supply_type) 
 	{
-		var w_list = [Firestone, Dynamite, Shovel, Loam, Ropeladder];
+		var w_list = [Firestone, Dynamite, IronBomb, Shovel, Loam, Ropeladder];
 		var maxcount = [2,2,1,2,1];
 	}
 	else
@@ -230,7 +230,7 @@ global func FxFillOtherChestStart(object target, effect, int temporary)
 {
 	if (temporary) 
 		return 1;
-	var w_list = [Sword, Javelin, Club, Firestone, Dynamite, Firestone];
+	var w_list = [Sword, Javelin, Club, Firestone, Dynamite, IronBomb, Firestone];
 	if (target->ContentsCount() < 5)
 		target->CreateChestContents(w_list[Random(GetLength(w_list))]);
 	return 1;
@@ -239,7 +239,7 @@ global func FxFillOtherChestStart(object target, effect, int temporary)
 global func FxFillOtherChestTimer(object target)
 {
 
-	var w_list = [Sword, Javelin, Dynamite, WindScroll, FrostboltScroll, Loam, HardeningScroll, PowderKeg];
+	var w_list = [Sword, Javelin, Dynamite, IronBomb, WindScroll, FrostboltScroll, Loam, HardeningScroll, PowderKeg];
 	var maxcount = [1,1,3,1,2,1,1,1];
 	
 	var contents;

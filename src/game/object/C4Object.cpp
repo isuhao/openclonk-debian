@@ -326,7 +326,9 @@ void C4Object::AssignRemoval(bool fExitContents)
 	if (!Status) return;
 #ifdef DEBUGREC
 	C4RCCreateObj rc;
+	memset(&rc, '\0', sizeof(rc));
 	rc.oei=Number;
+	if (Def && Def->GetName()) strncpy(rc.id, Def->GetName(), 32+1);
 	rc.x=GetX(); rc.y=GetY(); rc.ownr=Owner;
 	AddDbgRec(RCT_DsObj, &rc, sizeof(rc));
 #endif
@@ -1109,6 +1111,7 @@ void C4Object::AssignDeath(bool fForced)
 	// Values
 	Alive=0;
 	ClearCommands();
+	C4ObjectInfo * pInfo = Info;
 	if (Info)
 	{
 		Info->HasDied=true;
@@ -1137,7 +1140,8 @@ void C4Object::AssignDeath(bool fForced)
 		if(!pPlr->Crew.ObjectCount())
 			::GameScript.GRBroadcast(PSF_RelaunchPlayer,
 			                         &C4AulParSet(C4VInt(Owner),C4VInt(iDeathCausingPlayer)));
-
+	if (pInfo)
+		pInfo->HasDied = false;
 }
 
 bool C4Object::ChangeDef(C4ID idNew)
@@ -2559,7 +2563,6 @@ bool C4Object::AssignInfo()
 		// Dead and gone (info flags, remove from crew/cursor)
 		if (!Alive)
 		{
-			Info->HasDied=true;
 			if (ValidPlr(Owner)) ::Players.Get(Owner)->ClearPointers(this, true);
 		}
 		return true;
@@ -4364,8 +4367,6 @@ bool C4Object::GrabInfo(C4Object *pFrom)
 	SetName(Info->Name);
 	// retire from old crew
 	Info->Retire();
-	// set death status
-	Info->HasDied = !Alive;
 	// if alive, recruit to new crew
 	if (Alive) Info->Recruit();
 	// make new crew member
