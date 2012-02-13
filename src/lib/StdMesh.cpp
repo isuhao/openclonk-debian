@@ -28,6 +28,13 @@
 
 #include <algorithm>
 
+static int StdMeshFaceCmp(const StdMeshFace& face1, const StdMeshFace& face2);
+
+#define SORT_NAME StdMesh
+#define SORT_TYPE StdMeshFace
+#define SORT_CMP StdMeshFaceCmp
+#include "timsort/sort.h"
+
 std::vector<StdMeshInstance::SerializableValueProvider::IDBase*>* StdMeshInstance::SerializableValueProvider::IDs = NULL;
 
 namespace
@@ -44,12 +51,12 @@ namespace
 	// Helper to sort faces for FaceOrdering
 	struct StdMeshInstanceFaceOrderingCmpPred
 	{
-		const StdMeshInstance& m_inst;
+		const StdSubMeshInstance& m_inst;
 		const StdMeshVertex* m_vertices;
 		const StdMeshMatrix& m_global_trans;
 
-		StdMeshInstanceFaceOrderingCmpPred(const StdMeshInstance& inst, unsigned int submesh, const StdMeshMatrix& global_trans):
-				m_inst(inst), m_vertices(m_inst.GetSubMesh(submesh).GetVertices()), m_global_trans(global_trans) {}
+		StdMeshInstanceFaceOrderingCmpPred(const StdSubMeshInstance& inst, const StdMeshMatrix& global_trans):
+				m_inst(inst), m_vertices(m_inst.GetVertices()), m_global_trans(global_trans) {}
 
 		inline float get_z(const StdMeshVertex& vtx) const
 		{
@@ -64,14 +71,19 @@ namespace
 
 		bool operator()(const StdMeshFace& face1, const StdMeshFace& face2) const
 		{
+			return compare(face1, face2) < 0;
+		}
+
+		int compare(const StdMeshFace& face1, const StdMeshFace& face2) const
+		{
 			// TODO: Need to apply attach matrix in case of attached meshes
 			switch (m_inst.GetFaceOrdering())
 			{
-			case StdMeshInstance::FO_Fixed:
+			case StdSubMeshInstance::FO_Fixed:
 				assert(false);
-				return false;
-			case StdMeshInstance::FO_FarthestToNearest:
-			case StdMeshInstance::FO_NearestToFarthest:
+				return 0;
+			case StdSubMeshInstance::FO_FarthestToNearest:
+			case StdSubMeshInstance::FO_NearestToFarthest:
 			{
 				float z11 = get_z(m_vertices[face1.Vertices[0]]);
 				float z12 = get_z(m_vertices[face1.Vertices[1]]);
@@ -83,14 +95,14 @@ namespace
 				float z1 = std::max(std::max(z11, z12), z13);
 				float z2 = std::max(std::max(z21, z22), z23);
 
-				if (m_inst.GetFaceOrdering() == StdMeshInstance::FO_FarthestToNearest)
-					return z1 < z2;
+				if (m_inst.GetFaceOrdering() == StdSubMeshInstance::FO_FarthestToNearest)
+					return (z1 < z2 ? -1 : (z1 > z2 ? +1 : 0));
 				else
-					return z2 < z1;
+					return (z2 < z1 ? -1 : (z2 > z1 ? +1 : 0));
 			}
 			default:
 				assert(false);
-				return false;
+				return 0;
 			}
 		}
 	};
@@ -137,7 +149,7 @@ namespace
 
 		ALLOW_TEMP_TO_REF(ValueProviderAdapt)
 	};
-	
+
 	ValueProviderAdapt mkValueProviderAdapt(StdMeshInstance::ValueProvider** ValueProvider) { return ValueProviderAdapt(ValueProvider); }
 
 	// Serialize a bone index by name with StdCompiler
@@ -195,18 +207,14 @@ namespace
 	void MirrorKeyFrame(StdMeshKeyFrame& frame, const StdMeshTransformation& old_bone_transformation, const StdMeshTransformation& new_inverse_bone_transformation)
 	{
 		// frame was a keyframe of a track for old_bone and was now transplanted to new_bone.
-
-		//frame.Transformation.rotate.x = -frame.Transformation.rotate.x;
 		frame.Transformation.rotate.y = -frame.Transformation.rotate.y;
 		frame.Transformation.rotate.z = -frame.Transformation.rotate.z;
 
-		// We might also want to do something like this... need to get feedback
-		// from modelers...
-#if 0
 		StdMeshVector d = old_bone_transformation.scale * (old_bone_transformation.rotate * frame.Transformation.translate);
-		//d.x = -d.x;
+		d.x = -d.x;
 		frame.Transformation.translate = new_inverse_bone_transformation.rotate * (new_inverse_bone_transformation.scale * d);
-#endif
+
+		// TODO: scale
 	}
 
 	bool MirrorName(StdStrBuf& buf)
@@ -222,6 +230,13 @@ namespace
 
 		return true;
 	}
+
+	StdMeshInstanceFaceOrderingCmpPred* g_pred = NULL;
+}
+
+static int StdMeshFaceCmp(const StdMeshFace& face1, const StdMeshFace& face2)
+{
+	return g_pred->compare(face1, face2);
 }
 
 /* Boring Math stuff begins here */
@@ -960,35 +975,36 @@ void StdMesh::MirrorAnimation(const StdStrBuf& name, const StdMeshAnimation& ani
 	// Go through all bones
 	for(unsigned int i = 0; i < GetNumBones(); ++i)
 	{
-		// Only proceed if the bone is used in this animation
-		if(animation.Tracks[i] != NULL)
+		const StdMeshBone& bone = GetBone(i);
+		StdCopyStrBuf other_bone_name(bone.Name);
+		if(MirrorName(other_bone_name))
 		{
-			const StdMeshBone& bone = GetBone(i);
-			StdCopyStrBuf other_bone_name(bone.Name);
-			if(MirrorName(other_bone_name))
+			const StdMeshBone* other_bone = GetBoneByName(other_bone_name);
+			if(!other_bone)
+				throw std::runtime_error(std::string("No counterpart for bone ") + bone.Name.getData() + " found");
+
+			// Make sure to not swap tracks twice
+			if( (animation.Tracks[i] != NULL || animation.Tracks[other_bone->Index] != NULL) &&
+			   other_bone->Index > bone.Index)
 			{
-				const StdMeshBone* other_bone = GetBoneByName(other_bone_name);
-				if(!other_bone)
-					throw std::runtime_error(std::string("No counterpart for bone ") + bone.Name.getData() + " found");
+				std::swap(new_anim.Tracks[i], new_anim.Tracks[other_bone->Index]);
 
-				// Make sure to not swap tracks twice
-				if(other_bone->Index > bone.Index)
-				{
-					std::swap(new_anim.Tracks[i], new_anim.Tracks[other_bone->Index]);
-#if 1
-					StdMeshTransformation own_trans = bone.GetParent()->InverseTransformation * bone.Transformation;
-					StdMeshTransformation other_own_trans = other_bone->GetParent()->InverseTransformation * other_bone->Transformation;
+				StdMeshTransformation own_trans = bone.GetParent()->InverseTransformation * bone.Transformation;
+				StdMeshTransformation other_own_trans = other_bone->GetParent()->InverseTransformation * other_bone->Transformation;
 
-					// Mirror all the keyframes of both tracks
+				// Mirror all the keyframes of both tracks
+				if(new_anim.Tracks[i] != NULL)
 					for(std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[i]->Frames.begin(); iter != new_anim.Tracks[i]->Frames.end(); ++iter)
 						MirrorKeyFrame(iter->second, own_trans, StdMeshTransformation::Inverse(other_own_trans));
 
+				if(new_anim.Tracks[other_bone->Index] != NULL)
 					for(std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[other_bone->Index]->Frames.begin(); iter != new_anim.Tracks[other_bone->Index]->Frames.end(); ++iter)
 						MirrorKeyFrame(iter->second, other_own_trans, StdMeshTransformation::Inverse(own_trans));
-#endif
-				}
 			}
-			else if(bone.Name.Compare_(".N", bone.Name.getLength()-2) != 0)
+		}
+		else if(bone.Name.Compare_(".N", bone.Name.getLength()-2) != 0)
+		{
+			if(new_anim.Tracks[i] != NULL)
 			{
 				StdMeshTransformation own_trans = bone.Transformation;
 				if(bone.GetParent()) own_trans = bone.GetParent()->InverseTransformation * bone.Transformation;
@@ -1023,7 +1039,7 @@ void StdMesh::PostInit()
 
 StdSubMeshInstance::StdSubMeshInstance(const StdSubMesh& submesh):
 		Vertices(submesh.GetNumVertices()), Faces(submesh.GetNumFaces()),
-		Material(NULL)
+		Material(NULL), CurrentFaceOrdering(FO_Fixed)
 {
 	// Copy initial Vertices/Faces
 	for (unsigned int i = 0; i < submesh.GetNumVertices(); ++i)
@@ -1060,6 +1076,32 @@ void StdSubMeshInstance::SetMaterial(const StdMeshMaterial& material)
 
 	// TODO: Reorder this submesh so that opaque submeshes are drawn
 	// before non-opaque ones.
+	// TODO: Reset face ordering
+}
+
+void StdSubMeshInstance::SetFaceOrdering(const StdSubMesh& submesh, FaceOrdering ordering)
+{
+	if (CurrentFaceOrdering != ordering)
+	{
+		CurrentFaceOrdering = ordering;
+		if (ordering == FO_Fixed)
+		{
+			for (unsigned int i = 0; i < submesh.GetNumFaces(); ++i)
+				Faces[i] = submesh.GetFace(i);
+		}
+	}
+}
+
+void StdSubMeshInstance::SetFaceOrderingForClrModulation(const StdSubMesh& submesh, uint32_t clrmod)
+{
+	bool opaque = Material->IsOpaque();
+
+	if(!opaque)
+		SetFaceOrdering(submesh, FO_FarthestToNearest);
+	else if( ((clrmod >> 24) & 0xff) != 0xff)
+		SetFaceOrdering(submesh, FO_NearestToFarthest);
+	else
+		SetFaceOrdering(submesh, FO_Fixed);
 }
 
 void StdMeshInstance::SerializableValueProvider::CompileFunc(StdCompiler* pComp)
@@ -1277,7 +1319,7 @@ void StdMeshInstance::AttachedMesh::DenumeratePointers()
 }
 
 StdMeshInstance::StdMeshInstance(const StdMesh& mesh):
-		Mesh(&mesh), CurrentFaceOrdering(FO_Fixed),
+		Mesh(&mesh),
 		BoneTransforms(Mesh->GetNumBones(), StdMeshMatrix::Identity()),
 		SubMeshInstances(Mesh->GetNumSubMeshes()), AttachParent(NULL),
 		BoneTransformsDirty(false)
@@ -1310,46 +1352,26 @@ StdMeshInstance::~StdMeshInstance()
 
 void StdMeshInstance::SetFaceOrdering(FaceOrdering ordering)
 {
-	if (CurrentFaceOrdering != ordering)
-	{
-		CurrentFaceOrdering = ordering;
-		if (ordering == FO_Fixed)
-		{
-			// Copy original face ordering from StdMesh
-			for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
-			{
-				const StdSubMesh& submesh = Mesh->GetSubMesh(i);
-				//SubMeshInstances[i]->Faces = submesh.GetFaces();
-				for (unsigned int j = 0; j < submesh.GetNumFaces(); ++j)
-					SubMeshInstances[i]->Faces[j] = submesh.GetFace(j);
-			}
-		}
+	for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
+		SubMeshInstances[i]->SetFaceOrdering(Mesh->GetSubMesh(i), ordering);
 
-		//BoneTransformsDirty = true;
-
-		// Update attachments (only own meshes for now... others might be displayed both attached and non-attached...)
-		// still not optimal.
-		for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
-			if ((*iter)->OwnChild)
-				(*iter)->Child->SetFaceOrdering(ordering);
-	}
+	// Update attachments (only own meshes for now... others might be displayed both attached and non-attached...)
+	// still not optimal.
+	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
+		if ((*iter)->OwnChild)
+			(*iter)->Child->SetFaceOrdering(ordering);
 }
 
 void StdMeshInstance::SetFaceOrderingForClrModulation(uint32_t clrmod)
 {
-	// TODO: This could do face ordering only for non-opaque submeshes
+	for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
+		SubMeshInstances[i]->SetFaceOrderingForClrModulation(Mesh->GetSubMesh(i), clrmod);
 
-	bool opaque = true;
-	for(unsigned int i = 0; i < SubMeshInstances.size(); ++i)
-		if(!SubMeshInstances[i]->Material->IsOpaque())
-			{ opaque = false; break; }
-
-	if(!opaque)
-		SetFaceOrdering(FO_FarthestToNearest);
-	else if( ((clrmod >> 24) & 0xff) != 0xff)
-		SetFaceOrdering(FO_NearestToFarthest);
-	else
-		SetFaceOrdering(FO_Fixed);
+	// Update attachments (only own meshes for now... others might be displayed both attached and non-attached...)
+	// still not optimal.
+	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
+		if ((*iter)->OwnChild)
+			(*iter)->Child->SetFaceOrderingForClrModulation(clrmod);
 }
 
 StdMeshInstance::AnimationNode* StdMeshInstance::PlayAnimation(const StdStrBuf& animation_name, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight)
@@ -1566,7 +1588,6 @@ void StdMeshInstance::ExecuteAnimation(float dt)
 StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags)
 {
 	StdMeshInstance* instance = new StdMeshInstance(mesh);
-	instance->SetFaceOrdering(CurrentFaceOrdering);
 	AttachedMesh* attach = AttachMesh(*instance, denumerator, parent_bone, child_bone, transformation, flags, true);
 	if (!attach) { delete instance; delete denumerator; return NULL; }
 	return attach;
@@ -1596,7 +1617,6 @@ StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& inst
 	const StdMeshBone* child_bone_obj = instance.Mesh->GetBoneByName(child_bone);
 	if (!parent_bone_obj || !child_bone_obj) return NULL;
 
-	// TODO: Face Ordering is not lined up... can't do that properly here
 	attach = new AttachedMesh(number, this, &instance, own_child, auto_denumerator.release(), parent_bone_obj->Index, child_bone_obj->Index, transformation, flags);
 	instance.AttachParent = attach;
 
@@ -1751,14 +1771,32 @@ bool StdMeshInstance::UpdateBoneTransforms()
 	return was_dirty;
 }
 
+//#include <sys/time.h>
 void StdMeshInstance::ReorderFaces(StdMeshMatrix* global_trans)
 {
-	if(CurrentFaceOrdering != FO_Fixed)
+	for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
 	{
-		for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
+		StdSubMeshInstance& inst = *SubMeshInstances[i];
+		if(inst.CurrentFaceOrdering != StdSubMeshInstance::FO_Fixed)
 		{
-			StdMeshInstanceFaceOrderingCmpPred pred(*this, i, global_trans ? *global_trans : StdMeshMatrix::Identity());
-			std::sort(SubMeshInstances[i]->Faces.begin(), SubMeshInstances[i]->Faces.end(), pred);
+			StdMeshInstanceFaceOrderingCmpPred pred(inst, global_trans ? *global_trans : StdMeshMatrix::Identity());
+
+			// The usage of timsort instead of std::sort at this point is twofold.
+			// First, it's faster in our case where the array is already sorted in
+			// many cases (remember this is called at least once a frame).
+			// And it's not just a bit faster either but a lot. I have measured
+			// a factor of 7 on my system.
+			// Second, in our Windows autobuilds there is a crash within std::sort
+			// which is very hard to debug because it's hardly reproducible with
+			// anything other than the autobuilds (I tried hard). If the crash goes
+			// away with timsort then great, if not then maybe it's easier to debug
+			// since the code is in our tree.
+
+			//std::sort(inst.Faces.begin(), inst.Faces.end(), pred);
+
+			g_pred = &pred;
+			StdMesh_tim_sort(&inst.Faces[0], inst.Faces.size());
+			g_pred = NULL;
 		}
 	}
 

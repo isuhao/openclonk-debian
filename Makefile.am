@@ -87,6 +87,9 @@ do_subst = sed -e 's,[@]C4PROJECT[@],'"$$(sed -n 's/SET(C4PROJECT\s\+"\(.\+\)")/
 
 C4Version.h: $(srcdir)/src/C4Version.h.in $(srcdir)/Version.txt
 	$(do_subst) < $< > $@
+WindowsGamesExplorer.xml: $(srcdir)/src/res/WindowsGamesExplorer.xml.in $(srcdir)/Version.txt
+	$(do_subst) < $< > $@
+src/res/engine.o: WindowsGamesExplorer.xml
 
 #various hacks to get dependency tracking working with a precompiled C4Include
 if RECENT_GCC
@@ -122,6 +125,7 @@ src/config/C4SecurityCertificates.cpp \
 src/config/C4SecurityCertificates.h \
 src/lib/C4InputValidation.cpp \
 src/lib/C4InputValidation.h \
+src/lib/SHA1.h \
 src/lib/Standard.cpp \
 src/lib/Standard.h \
 src/lib/StdBuf.cpp \
@@ -170,8 +174,6 @@ src/C4Version.h.in \
 src/C4WinMain.cpp \
 src/config/C4Config.cpp \
 src/config/C4Config.h \
-src/config/C4ConfigShareware.cpp \
-src/config/C4ConfigShareware.h \
 src/config/C4Constants.h \
 src/config/C4Reloc.cpp \
 src/config/C4Reloc.h \
@@ -582,8 +584,7 @@ clonk_LDADD = \
   $(SDL_LIBS) \
   $(PTHREAD_LIBS) \
   $(Z_LIBS) \
-  $(CLONK_LIBS) \
-  $(OPENSSL_LIBS)
+  $(CLONK_LIBS)
 
 # build the resources
 .rc.o:
@@ -620,7 +621,6 @@ c4group_LDADD = \
   lib.a \
   $(LIBICONV) \
   $(Z_LIBS) \
-  $(OPENSSL_LIBS) \
   $(PTHREAD_LIBS)
 
 ## gunzip4c4group
@@ -682,10 +682,9 @@ src/c4group/C4LangStringTable.cpp
 
 c4script_LDADD = \
   lib.a \
-  $(OPENSSL_LIBS) \
   $(Z_LIBS)
 
-dist_doc_DATA = planet/AUTHORS planet/COPYING licenses/LGPL.txt licenses/OpenSSL.txt Credits.txt
+dist_doc_DATA = planet/AUTHORS planet/COPYING licenses/LGPL.txt Credits.txt
 
 c4groups = \
   Graphics.ocg \
@@ -701,18 +700,24 @@ CLEANFILES += $(c4groups)
 pkgdata_DATA = $(c4groups)
 AM_CXXFLAGS += -DOC_SYSTEM_DATA_DIR=\"${pkgdatadir}\"
 
-%.ocg: planet/%.ocg c4group$(EXEEXT)
+%.ocg: $(srcdir)/planet/%.ocg c4group$(EXEEXT)
 	./c4group$(EXEEXT) $< -t $@ || c4group $< -t $@
-%.ocd: planet/%.ocd c4group$(EXEEXT)
+%.ocd: $(srcdir)/planet/%.ocd c4group$(EXEEXT)
 	./c4group$(EXEEXT) $< -t $@ || c4group $< -t $@
-%.ocf: planet/%.ocf c4group$(EXEEXT)
+%.ocf: $(srcdir)/planet/%.ocf c4group$(EXEEXT)
 	./c4group$(EXEEXT) $< -t $@ || c4group $< -t $@
 
+## windows setup.exe
+if WIN32
+tools/install/firewall.dll: $(srcdir)/tools/install/firewall.cpp
+	mkdir -p tools/install
+	$(CXX) -shared -o tools/install/firewall.dll $(srcdir)/tools/install/firewall.cpp -lole32 -loleaut32
 setup_openclonk.exe: $(srcdir)/tools/install/oc.nsi c4group$(EXEEXT) clonk$(EXEEXT) $(c4groups)
 	makensis -NOCD -DSRCDIR=$(srcdir) '-DPROGRAMFILES=$$PROGRAMFILES' \
 	  -DPRODUCT_NAME="$$(sed -n 's/SET(C4ENGINENAME\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)$$(sed -n 's/SET(C4VERSIONBUILDNAME\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)" \
 	  -DPRODUCT_COMPANY="$$(sed -n 's/SET(C4PROJECT\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)" \
 	  $< "-XOutFile $@"
+endif
 
 ## other stuff
 

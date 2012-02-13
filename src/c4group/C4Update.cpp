@@ -211,16 +211,12 @@ public:
 	{
 		C4GroupEntryCore *pCore = ((C4GroupEx &)rByGrp).GetEntry(szEntry);
 		// copy core
-		SavedCore.HasCRC = pCore->HasCRC;
-		SavedCore.CRC = pCore->CRC;
 		SavedCore.Executable = pCore->Executable;
 	}
 	void SetSavedEntryCore(const char *szEntry)
 	{
 		C4GroupEntryCore *pCore = GetEntry(szEntry);
 		// copy core
-		pCore->HasCRC = SavedCore.HasCRC;
-		pCore->CRC = SavedCore.CRC;
 		pCore->Executable = SavedCore.Executable;
 	}
 
@@ -364,7 +360,7 @@ bool C4UpdatePackage::Execute(C4Group *pGroup)
 		  return false;*/
 		// check checksum
 		uint32_t iCRC32;
-		if (!C4Group_GetFileCRC(TargetGrp.GetFullName().getData(), &iCRC32))
+		if (!GetFileCRC(TargetGrp.GetFullName().getData(), &iCRC32))
 			return false;
 		int i = 0;
 		for (; i < UpGrpCnt; i++)
@@ -398,7 +394,7 @@ bool C4UpdatePackage::Execute(C4Group *pGroup)
 	{
 		// check the result
 		uint32_t iResChks;
-		if (!C4Group_GetFileCRC(strTarget, &iResChks))
+		if (!GetFileCRC(strTarget, &iResChks))
 			return false;
 		if (iResChks != GrpChks2)
 		{
@@ -472,7 +468,7 @@ int C4UpdatePackage::Check(C4Group *pGroup)
 
 	// check source crc
 	uint32_t iCRC32;
-	if (!C4Group_GetFileCRC(DestPath, &iCRC32))
+	if (!GetFileCRC(DestPath, &iCRC32))
 		return C4UPD_CHK_BAD_SOURCE;
 	// equal to destination group?
 	if (iCRC32 == GrpChks2)
@@ -576,9 +572,6 @@ bool C4UpdatePackage::DoGrpUpdate(C4Group *pUpdateData, C4GroupEx *pGrpTo)
 			// strip checksum/time (if given)
 			char *pTime = strchr(strItemName, '=');
 			if (pTime) *pTime = '\0';
-			// update EntryCRC32. This will make updates to old groups invalid
-			// however, it's needed so updates will update the EntryCRC of *unchanged* files correctly
-			pGrpTo->EntryCRC32(strItemName);
 			// copy to sort list
 			SAppend(strItemName, strSortList);
 			SAppendChar('|', strSortList);
@@ -671,9 +664,9 @@ bool C4UpdatePackage::MakeUpdate(const char *strFile1, const char *strFile2, con
 		sprintf(Name, "%s Update", GetFilename(strFile1));
 	SCopy(strFile1, DestPath, _MAX_PATH);
 	GrpUpdate = true;
-	if (!C4Group_GetFileCRC(strFile1, &GrpChks1[UpGrpCnt]))
+	if (!GetFileCRC(strFile1, &GrpChks1[UpGrpCnt]))
 		{ WriteLog("Error: could not calc checksum for %s!\n", strFile1); return false; }
-	if (!C4Group_GetFileCRC(strFile2, &GrpChks2))
+	if (!GetFileCRC(strFile2, &GrpChks2))
 		{ WriteLog("Error: could not calc checksum for %s!\n", strFile2); return false; }
 	if (fContinued)
 	{

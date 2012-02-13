@@ -28,6 +28,7 @@
 #endif
 #include <StdFile.h>
 #include <CStdFile.h>
+#include <SHA1.h>
 
 #include <zlib.h>
 #include <stdio.h>
@@ -332,4 +333,56 @@ size_t CStdFile::AccessedEntrySize()
 		return FileSize(fileno(hFile));
 	assert(!hgzFile);
 	return 0;
+}
+
+bool GetFileCRC(const char *szFilename, uint32_t *pCRC32)
+{
+	if (!pCRC32) return false;
+	// open file
+	CStdFile File;
+	if (!File.Open(szFilename))
+		return false;
+	// calculcate CRC
+	uint32_t iCRC32 = 0;
+	for (;;)
+	{
+		// read a chunk of data
+		BYTE szData[CStdFileBufSize]; size_t iSize = 0;
+		if (!File.Read(szData, CStdFileBufSize, &iSize))
+			if (!iSize)
+				break;
+		// update CRC
+		iCRC32 = crc32(iCRC32, szData, iSize);
+	}
+	// close file
+	File.Close();
+	// okay
+	*pCRC32 = iCRC32;
+	return true;
+}
+
+bool GetFileSHA1(const char *szFilename, BYTE *pSHA1)
+{
+	if (!pSHA1) return false;
+	// open file
+	CStdFile File;
+	if (!File.Open(szFilename))
+		return false;
+	// calculcate CRC
+	sha1 ctx;
+	for (;;)
+	{
+		// read a chunk of data
+		BYTE szData[CStdFileBufSize]; size_t iSize = 0;
+		if (!File.Read(szData, CStdFileBufSize, &iSize))
+			if (!iSize)
+				break;
+		// update CRC
+		ctx.process_bytes(szData, iSize);
+	}
+	// close file
+	File.Close();
+	// finish calculation
+	ctx.get_digest((sha1::digest_type) pSHA1);
+	return true;
 }

@@ -82,8 +82,6 @@ bool C4Group_UnpackDirectory(const char *szFilename);
 bool C4Group_ExplodeDirectory(const char *szFilename);
 bool C4Group_SetOriginal(const char *szFilename, bool fOriginal);
 bool C4Group_ReadFile(const char *szFilename, char **pData, size_t *iSize);
-bool C4Group_GetFileCRC(const char *szFilename, uint32_t *pCRC32);
-bool C4Group_GetFileSHA1(const char *szFilename, BYTE *pSHA1);
 
 extern const char *C4CFN_FLS[];
 
@@ -104,10 +102,6 @@ public:
 	void Init();
 };
 
-const char C4GECS_None = 0,
-           C4GECS_Old = 1,
-           C4GECS_New = 2;
-
 class C4GroupEntryCore
 {
 public:
@@ -117,7 +111,7 @@ public:
 	int32_t Packed,ChildGroup;
 	int32_t Size, reserved1, Offset;
 	int32_t reserved2;
-	char HasCRC; unsigned int CRC;
+	char reserved3; unsigned int reserved4;
 	char Executable;
 	BYTE fbuf[26];
 };
@@ -281,8 +275,6 @@ protected:
 	              bool childgroup,
 	              const char *fname,
 	              long size,
-	              char cCRC,
-	              unsigned int iCRC,
 	              const char *entryname = NULL,
 	              BYTE *membuf = NULL,
 	              bool fDeleteOnDisk = false,
@@ -295,7 +287,7 @@ protected:
 	C4GroupEntry *GetEntry(const char *szName);
 	C4GroupEntry *SearchNextEntry(const char *szName);
 	C4GroupEntry *GetNextFolderEntry();
-	bool CalcCRC32(C4GroupEntry *pEntry);
+	uint32_t CalcCRC32(C4GroupEntry *pEntry);
 };
 
 #endif
