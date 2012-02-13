@@ -1,8 +1,8 @@
-openclonk (5.2.1-1) UNRELEASED; urgency=low
+openclonk (5.2.2-1) UNRELEASED; urgency=low
 
   * Initial Debian release.  (Closes: #531324)
 
- -- Philipp Kern <pkern@debian.org>  Sun, 16 Oct 2011 09:53:30 +0200
+ -- Philipp Kern <pkern@debian.org>  Mon, 13 Feb 2012 22:26:12 +0100
 
 openclonk (5.1.2.4-0ubuntu1-ppa5) maverick; urgency=low
 
