@@ -45,7 +45,6 @@
 #include <C4Group.h>
 #include <C4Version.h>
 #include <C4Update.h>
-#include <C4ConfigShareware.h>
 #include <StdRegistry.h>
 #ifdef _WIN32
 #include <C4windowswrapper.h>
@@ -186,6 +185,11 @@ bool ProcessGroup(const char *FilenamePar)
 						if (!hGroup.Close())
 						{
 							fprintf(stderr, "Closing failed: %s\n", hGroup.GetError());
+						}
+						else if (!EraseItem(argv[iArg]))
+						{
+							fprintf(stderr, "Destination Clear failed\n");
+							break;
 						}
 						// Pack
 						else if (!C4Group_PackDirectoryTo(szFilename, argv[iArg]))
@@ -457,10 +461,6 @@ int main(int argc, char *argv[])
 
 	// Program info
 	LogF("OpenClonk C4Group %s", C4VERSION);
-
-	// Registration check
-	/*  Config.Init();
-	  Config.Load(false);*/
 
 	// Init C4Group
 	C4Group_SetSortList(C4CFN_FLS);

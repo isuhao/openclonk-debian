@@ -985,12 +985,14 @@ void DirectoryIterator::Read(const char *dirname)
 	{
 		switch (GetLastError())
 		{
+		case ERROR_PATH_NOT_FOUND:
 		case ERROR_FILE_NOT_FOUND:
 			// This is okay, either the directory doesn't exist or there are no files
 			return;
 		default:
 			// Something else broke
-			throw std::runtime_error("DirectoryIterator::Read(const char*): Unable to read file system");
+			Log("DirectoryIterator::Read(const char*): Unable to read file system");
+			return;
 		}
 	}
 	// Insert files into list
@@ -1015,7 +1017,8 @@ void DirectoryIterator::Read(const char *dirname)
 			return;
 		default:
 			// Something else broke
-			throw std::runtime_error("DirectoryIterator::Read(const char*): Unable to read file system");
+			Log("DirectoryIterator::Read(const char*): Unable to read file system");
+			return;
 		}
 	}
 	dirent *file;

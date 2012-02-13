@@ -183,8 +183,6 @@ set(OC_CLONK_SOURCES
 	src/C4Version.h
 	src/config/C4Config.cpp
 	src/config/C4Config.h
-	src/config/C4ConfigShareware.cpp
-	src/config/C4ConfigShareware.h
 	src/config/C4Constants.h
 	src/config/C4Reloc.cpp
 	src/config/C4Reloc.h
@@ -398,6 +396,7 @@ set(OC_CLONK_SOURCES
 	src/lib/C4Stat.h
 	src/lib/PathFinder.cpp
 	src/lib/PathFinder.h
+	src/lib/SHA1.h
 	src/lib/Standard.cpp
 	src/lib/Standard.h
 	src/lib/StdAdaptors.h
@@ -548,6 +547,7 @@ set(OC_CLONK_SOURCES
 	src/script/C4ValueMap.h
 	src/zlib/gzio.c
 	src/zlib/zutil.h
+	thirdparty/timsort/sort.h
 )
 mark_as_advanced(OC_CLONK_SOURCES)
 mark_as_advanced(OC_SYSTEM_SOURCES)
@@ -788,11 +788,6 @@ macro(FINDLIB lib)
 	mark_as_advanced(${lib})
 endmacro(FINDLIB)
 
-# isilkor 09-05-29: Don't use FindOpenSSL, because that wants to link to ssleay
-FINDLIB(OPENSSL_LIBRARIES NAMES crypto libeay32)
-FIND_PATH(OPENSSL_INCLUDE_DIR NAMES openssl/sha.h)
-include_directories(${OPENSSL_INCLUDE_DIR})
-
 if(USE_CONSOLE)
 	find_package(Readline)
 	include_directories(${READLINE_INCLUDE_DIRS})
@@ -954,7 +949,6 @@ target_link_libraries(clonk
 	${ZLIB_LIBRARIES}
 	${PNG_LIBRARIES}
 	${JPEG_LIBRARIES}
-	${OPENSSL_LIBRARIES}
 	${ICONV_LIBRARY}
 	${VORBIS_LIBRARY}
 	${VORBISFILE_LIBRARY}
@@ -962,11 +956,9 @@ target_link_libraries(clonk
 )
 target_link_libraries(c4group
 	${ZLIB_LIBRARIES}
-	${OPENSSL_LIBRARIES}
 )
 target_link_libraries(c4script
 	${ZLIB_LIBRARIES}
-	${OPENSSL_LIBRARIES}
 )
 if(HAVE_PTHREAD)
 	target_link_libraries(netpuncher
@@ -1189,20 +1181,13 @@ if (WIN32)
 	target_link_libraries(c4script ws2_32 winmm)
 
 	if(NOT USE_OPEN_AL)
-		if(MSVC_VERSION)
-			if(CMAKE_CL_64)
-				FINDLIB(FMOD_LIBRARIES fmod64vc)
-			else()
-				FINDLIB(FMOD_LIBRARIES fmodvc)
-			endif()
-		elseif(CMAKE_COMPILER_IS_GNUCXX)
-			FINDLIB(FMOD_LIBRARIES fmod)
-		endif()
-		if(FMOD_LIBRARIES)
+		find_package(FMod)
+		if(FMOD_FOUND)
 			set(HAVE_FMOD TRUE)
 			target_link_libraries(clonk
 				${FMOD_LIBRARIES}
 			)
+			include_directories(${FMOD_INCLUDE_DIR})
 		else()
 			set(HAVE_FMOD FALSE)
 		endif()
@@ -1250,39 +1235,8 @@ EXECUTE_PROCESS(COMMAND \"convert\" \"${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc.ico
 IF(NOT \${CONVERT_RESULT} EQUAL 0)
 	MESSAGE(SEND_ERROR \"Creating icon failed\")
 ENDIF()
+FILE(MAKE_DIRECTORY ${CMAKE_INSTALL_PREFIX}/share/openclonk)
 ")
-
-# Remove previously installed data files
-FILE(GLOB OC_INSTALLED_DATA_FILES "${CMAKE_INSTALL_PREFIX}/share/openclonk/*.oc[dfgs]")
-install(CODE "
-FOREACH(CURRENT_FILE ${OC_INSTALLED_DATA_FILES})
-	FILE(REMOVE \${CURRENT_FILE})
-ENDFOREACH()
-")
-
-# Install new files
-FILE(GLOB OC_DATA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/planet/*.oc[dfgs]")
-install(DIRECTORY ${OC_DATA_FILES} DESTINATION share/openclonk)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/clonk.desktop DESTINATION share/applications)
-
-# Pack them
-install(CODE "
-FOREACH(CURRENT_FILE ${OC_DATA_FILES})
-	GET_FILENAME_COMPONENT(CURRENT_FILENAME \"\${CURRENT_FILE}\" NAME)
-	MESSAGE(\"Packing \${CURRENT_FILENAME}...\")
-	EXECUTE_PROCESS(COMMAND \"${CMAKE_CURRENT_BINARY_DIR}/c4group\" \"${CMAKE_INSTALL_PREFIX}/share/openclonk/\${CURRENT_FILENAME}\" \"-p\" RESULT_VARIABLE C4GROUP_RESULT)
-	IF(NOT \${C4GROUP_RESULT} EQUAL 0)
-		MESSAGE(SEND_ERROR \"Packing ${CURRENT_FILENAME} failed\")
-	ENDIF()
-ENDFOREACH()
-")
-
-# Install binaries
-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/clonk ${CMAKE_CURRENT_BINARY_DIR}/c4group DESTINATION bin/)
-
-############################################################################
-# setup_openclonk.exe
-############################################################################
 
 set(OC_C4GROUPS
 	Graphics.ocg
@@ -1306,30 +1260,56 @@ foreach(group ${OC_C4GROUPS})
 			DEPENDS c4group
 			)
 	else()
-		add_custom_command(
-			OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${group}
-			COMMAND ${C4GROUP_LOCATION} ${CMAKE_CURRENT_SOURCE_DIR}/planet/${group} -t ${CMAKE_CURRENT_BINARY_DIR}/${group}
-			DEPENDS c4group ${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}
-			VERBATIM
-			)
+		INSTALL(CODE "
+		MESSAGE(\"Packing and installing ${group}...\")
+		EXECUTE_PROCESS(COMMAND \"${CMAKE_CURRENT_BINARY_DIR}/c4group\" \"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}\" -t \"${CMAKE_INSTALL_PREFIX}/share/openclonk/${group}\" RESULT_VARIABLE PACK_RESULT)
+		IF(NOT \${PACK_RESULT} EQUAL 0)
+			MESSAGE(SEND_ERROR \"Packing ${group} failed\")
+		ENDIF()
+		")
 	endif()
 endforeach()
+
+# Install new files
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/clonk.desktop DESTINATION share/applications)
+
+# Install binaries
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/clonk ${CMAKE_CURRENT_BINARY_DIR}/c4group DESTINATION bin/)
+
+############################################################################
+# setup_openclonk.exe
+############################################################################
 
 find_program(MAKENSIS makensis PATHS [HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS])
 
 string(REPLACE / \\ C4GROUP_LOCATION ${C4GROUP_LOCATION})
 string(REPLACE / \\ CLONK_LOCATION ${CLONK_LOCATION})
 
+foreach(group ${OC_C4GROUPS})
+	add_custom_command(
+		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${group}"
+		COMMAND c4group ARGS "${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}" -t "${CMAKE_CURRENT_BINARY_DIR}/${group}"
+		MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}
+		DEPENDS c4group
+		VERBATIM
+		)
+endforeach()
+
 add_custom_command(
 	OUTPUT setup_openclonk.exe
 	COMMAND ${MAKENSIS} -NOCD -DSRCDIR=${CMAKE_CURRENT_SOURCE_DIR} -DPROGRAMFILES=$PROGRAMFILES "-DPRODUCT_NAME=${C4ENGINENAME}${C4VERSIONBUILDNAME}" "-DPRODUCT_COMPANY=${C4PROJECT}" "-DCLONK=${CLONK_LOCATION}" "-DC4GROUP=${C4GROUP_LOCATION}" ${CMAKE_CURRENT_SOURCE_DIR}/tools/install/oc.nsi "-XOutFile setup_openclonk.exe"
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/install/oc.nsi ${OC_C4GROUPS} clonk c4group
+	MAIN_DEPENDENCY
+		${CMAKE_CURRENT_SOURCE_DIR}/tools/install/oc.nsi
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/tools/install/header.bmp
+		${CMAKE_CURRENT_SOURCE_DIR}/tools/install/inst.ico
+		${CMAKE_CURRENT_SOURCE_DIR}/tools/install/uninst.ico
+		${OC_C4GROUPS} clonk c4group
 	VERBATIM
 )
 
 add_custom_target(setup
 	DEPENDS setup_openclonk.exe
-	SOURCES tools/install/oc.nsi tools/install/header.bmp tools/install/inst.ico tools/install/uninst.ico
 )
 
 ############################################################################
@@ -1346,8 +1326,8 @@ set(CPACK_PACKAGE_FILE_NAME "openclonk-${C4XVER1}.${C4XVER2}.${C4XVER3}")
 set(CPACK_SOURCE_PACKAGE_FILE_NAME "openclonk-src-${C4XVER1}.${C4XVER2}.${C4XVER3}")
 set(CPACK_SOURCE_GENERATOR "TGZ;ZIP")
 # Somebody who uses Debian/Ubuntu should set this
-#set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libgcc1, libx11, libXrandr, libXpm, libGLEW, libGL, libpng, libssl, libSDL-1.2, libSDL_mixer-1.2, gtk2, libjpeg, zlib")
+#set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libgcc1, libx11, libXrandr, libXpm, libGLEW, libGL, libpng, libSDL-1.2, libSDL_mixer-1.2, gtk2, libjpeg, zlib")
 set(CPACK_RPM_PACKAGE_LICENSE "MIT")
-set(CPACK_RPM_PACKAGE_REQUIRES "libc6, libgcc1, libx11, libXrandr, libXpm, libGLEW, libGL, libpng, libssl, libSDL-1.2, libSDL_mixer-1.2, gtk2, libjpeg, zlib")
+set(CPACK_RPM_PACKAGE_REQUIRES "libc6, libgcc1, libx11, libXrandr, libXpm, libGLEW, libGL, libpng, libSDL-1.2, libSDL_mixer-1.2, gtk2, libjpeg, zlib")
 
 include(CPack)
