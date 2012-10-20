@@ -377,6 +377,7 @@ bool C4MessageInput::ProcessInput(const char *szText)
 		eMsgType = C4CMT_Sound;
 		szMsg = szText+7;
 	}
+	// Disabled due to spamming
 	// Starts with "/alert": Taskbar flash (message optional)
 	else if (SEqual2NoCase(szText, "/alert ") || SEqualNoCase(szText, "/alert"))
 	{
@@ -482,7 +483,7 @@ bool C4MessageInput::ProcessCommand(const char *szCommand)
 		::Control.DoInput(CID_Script, new C4ControlScript(pCmdPar, C4ControlScript::SCOPE_Console, false), CDT_Decide);
 		return true;
 	}
-	// set runtimte properties
+	// set runtime properties
 	if (SEqual(szCmdName, "set"))
 	{
 		if (SEqual2(pCmdPar, "maxplayer "))

@@ -32,9 +32,6 @@
 #ifndef INC_C4Gui
 #define INC_C4Gui
 
-#define ConsoleDlgClassName L"C4GUIdlg"
-#define ConsoleDlgWindowStyle (WS_VISIBLE | WS_POPUP | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX)
-
 #include "C4Rect.h"
 #include "C4Shape.h"
 #include "C4FacetEx.h"
@@ -47,8 +44,7 @@
 #include <C4Id.h>
 
 #include <StdResStr2.h>
-#include <StdWindow.h>
-
+#include <C4Window.h>
 
 // consts (load those from a def file some time)
 // font colors - alpha is font alpha, which is inversed opaque
@@ -1947,17 +1943,14 @@ namespace C4GUI
 	class Dialog;
 
 	// EM window class
-	class DialogWindow : public CStdWindow
+	class DialogWindow : public C4Window
 	{
 	public:
 		Dialog* pDialog;
-		DialogWindow(): CStdWindow(), pDialog(NULL) {}
-		using CStdWindow::Init;
-		CStdWindow * Init(CStdWindow::WindowKind windowKind, CStdApp * pApp, const char * Title, CStdWindow * pParent, const C4Rect &rcBounds, const char *szID);
+		DialogWindow(): C4Window(), pDialog(NULL) {}
+		using C4Window::Init;
+		C4Window * Init(C4AbstractApp * pApp, const char * Title, const C4Rect &rcBounds, const char *szID);
 		virtual void Close();
-#ifdef USE_X11
-		virtual void HandleMessage (XEvent &);
-#endif
 		virtual void PerformUpdate();
 	};
 
@@ -2143,7 +2136,6 @@ namespace C4GUI
 	protected:
 		Label *pFullscreenTitle, *pSubTitle; // subtitle to be put in upper-right corner
 		int32_t iDlgMarginX, iDlgMarginY; // dialog margin set by screen size
-		IconButton *pBtnHelp;
 
 		virtual const char *GetID() { return 0; } // no ID needed, because it's never created as a window
 
@@ -2151,9 +2143,6 @@ namespace C4GUI
 		FullscreenDialog(const char *szTitle, const char *szSubtitle); // ctor
 
 		void SetTitle(const char *szToTitle); // change title text; creates or removes title bar if necessary
-
-	private:
-		void UpdateHelpButtonPos();
 
 	protected:
 		virtual void DrawElement(C4TargetFacet &cgo); // draw dlg bg
@@ -2176,8 +2165,6 @@ namespace C4GUI
 
 		// helper func: draw facet to screen background
 		void DrawBackground(C4TargetFacet &cgo, C4Facet &rFromFct);
-
-		void OnHelpBtn(C4GUI::Control *pBtn);
 	};
 
 	// a button closing the Dlg
@@ -2248,7 +2235,7 @@ namespace C4GUI
 	class ResetButton : public CloseButton
 	{
 	public: ResetButton(const C4Rect &rtBounds) // ctor
-				: CloseButton(LoadResStr("[!]Reset"), rtBounds, true) {} };
+				: CloseButton(LoadResStr("IDS_BTN_RESET"), rtBounds, true) {} };
 
 	// a simple message dialog
 	class MessageDialog : public Dialog
@@ -2536,9 +2523,8 @@ namespace C4GUI
 		void Init(int32_t tx, int32_t ty, int32_t twdt, int32_t thgt);
 		void Clear();
 
-		void Render(bool fDoBG);                 // render to lpDDraw
+		void Render(bool fDoBG);                 // render to pDraw
 		void RenderMouse(C4TargetFacet &cgo);        // draw mouse only
-		bool Execute();                // handle messages; execute all dialogs
 
 		virtual Screen *GetScreen() { return this; }; // return contained screen
 		static Screen *GetScreenS() { return pScreen; } // get global screen
@@ -2564,10 +2550,10 @@ namespace C4GUI
 
 		void CloseAllDialogs(bool fWithOK); // close all dialogs on the screen; top dlgs first
 		void SetPreferredDlgRect(const C4Rect &rtNewPref) { PreferredDlgRect = rtNewPref; }
-#ifdef _WIN32
+#ifdef USE_WIN32_WINDOWS
 		Dialog *GetDialog(HWND hWindow); // get console dialog
 #endif
-		Dialog *GetDialog(CStdWindow * pWindow); // get console dialog
+		Dialog *GetDialog(C4Window * pWindow); // get console dialog
 		void DoContext(ContextMenu *pNewCtx, Element *pAtElement, int32_t iX, int32_t iY); // open context menu (closes any other contextmenu)
 		void AbortContext(bool fByUser) { if (pContext) pContext->Abort(fByUser); } // close context menu
 		int32_t GetContextMenuIndex() { return pContext ? pContext->GetMenuIndex() : 0; } // get current context-menu (lowest level)

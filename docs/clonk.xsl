@@ -14,9 +14,6 @@
       <link rel="stylesheet">
         <xsl:attribute name="href"><xsl:value-of select="$relpath" />doku.css</xsl:attribute>
       </link>
-      <xsl:if test="not($chm)">
-      <link rel="stylesheet" href="http://www.openclonk.org/header/header.css" />
-      </xsl:if>
       <xsl:if test="descendant::table[bitmask]">
         <script>
           <xsl:attribute name="src"><xsl:value-of select="$relpath" />bitmasks.js</xsl:attribute>
@@ -355,7 +352,8 @@
   <xsl:template match="search">
     <form action="../search.php" method="get">
       <input name="search" type="text"></input> 
-      <input type="submit" name="fulltext" value="Go"></input>
+      <input type="submit" name="func" value="Search"></input>
+      <input type="submit" name="fulltext" value="Fulltext"></input>
     </form>
   </xsl:template>
   

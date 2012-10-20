@@ -240,9 +240,9 @@ protected:
 	C4StartupPlrSelDlg::PlayerListItem * pForPlayer;
 	C4GUI::Edit *pNameEdit; // player name edit box
 	C4GUI::CheckBox *pAutoStopControl; // wether the player uses AutoStopControl
-	C4GUI::Picture *pClrPreview;
-	C4GUI::ScrollBar *pClrSliderR, *pClrSliderG, *pClrSliderB;
+	C4GUI::IconButton *pClrPreview;
 	C4GUI::Picture *pCtrlImg;
+	C4GUI::Picture *pSkinImg;
 	C4GUI::IconButton *pMouseBtn, *pJumpNRunBtn, *pClassicBtn, *pPictureBtn;
 	C4GUI::Label *ctrl_name_lbl;
 	C4PlayerInfoCore C4P; // player info core copy currently being edited
@@ -262,17 +262,17 @@ protected:
 
 	void OnClrChangeLeft(C4GUI::Control *pBtn);
 	void OnClrChangeRight(C4GUI::Control *pBtn);
-	void OnClrSliderRChange(int32_t iNewVal);
-	void OnClrSliderGChange(int32_t iNewVal);
-	void OnClrSliderBChange(int32_t iNewVal);
+	void OnClrChangeCustom(C4GUI::Control *pBtn);
 	void OnCtrlChangeLeft(C4GUI::Control *pBtn);
 	void OnCtrlChangeRight(C4GUI::Control *pBtn);
-	void OnCtrlChangeMouse(C4GUI::Control *pBtn);
+	void OnSkinChangeLeft(C4GUI::Control *pBtn);
+	void OnSkinChangeRight(C4GUI::Control *pBtn);
 	void OnPictureBtn(C4GUI::Control *pBtn);
 
 private:
 	void UpdatePlayerColor(bool fUpdateSliders);
 	void UpdatePlayerControl();
+	void UpdatePlayerSkin();
 	void UpdateBigIcon();
 
 	bool SetNewPicture(C4Surface &srcSfc, C4FacetSurface *trgFct, int32_t iMaxSize, bool fColorize);
@@ -284,8 +284,5 @@ public:
 
 	virtual void OnClosed(bool fOK); // close CB
 };
-
-
-
 
 #endif // INC_C4StartupPlrSelDlg

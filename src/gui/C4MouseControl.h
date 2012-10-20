@@ -40,6 +40,10 @@ const int32_t C4MC_Button_None        = 0,
 
 const int32_t C4MC_DragSensitivity = 5;
 
+const int32_t C4MC_MD_DragSource = 1,
+              C4MC_MD_DropTarget = 2,
+              C4MC_MD_NoClick = 4;
+
 class C4Viewport;
 class C4Menu;
 class C4Player;
@@ -56,8 +60,7 @@ protected:
 	int32_t Player;
 	C4Player *pPlayer; // valid during Move()
 	C4Viewport *Viewport; // valid during Move()
-	StdStrBuf Caption;
-	bool IsHelpCaption;
+	StdCopyStrBuf Caption;
 	int32_t Cursor;
 	int32_t DownCursor;
 	int32_t CaptionBottomY;
@@ -72,20 +75,20 @@ protected:
 	int32_t KeepCaption;
 	int32_t ScrollSpeed;
 	int32_t Drag,DragSelecting;
-	int32_t DragImagePhase;
 	bool LeftButtonDown,RightButtonDown,LeftDoubleIgnoreUp;
 	bool ButtonDownOnSelection;
 	bool ControlDown;
 	bool ShiftDown;
+	bool AltDown;
 	bool Scrolling;
 	bool InitCentered;
-	bool Help;
 	bool FogOfWar;
 	bool Visible;
 	C4Object *DragObject;
 	C4ID DragID;
 	C4ObjectList Selection;
-	C4Facet DragImage;
+	C4Def* DragImageDef;
+	C4Object* DragImageObject;
 	// Target object
 	C4Object *TargetObject; // valid during Move()
 	C4Object *DownTarget;
@@ -133,7 +136,6 @@ protected:
 	void LeftDown();
 	void UpdateTargetRegion();
 	void UpdateScrolling();
-	void CreateDragImage(C4ID id, C4Object *obj, bool fPicture);
 	void UpdateCursorTarget();
 	void SendCommand(int32_t iCommand, int32_t iX=0, int32_t iY=0, C4Object *pTarget=NULL, C4Object *pTarget2=NULL, int32_t iData=0, int32_t iAddMode=C4P_Command_Set);
 	int32_t UpdateObjectSelection();
@@ -147,9 +149,6 @@ protected:
 	void ScrollView(float iX, float iY, float ViewWdt, float ViewHgt); // in landscape coordinates
 
 public:
-	bool IsHelp() { return Help; }
-	void SetHelp() { Help = true; }
-	void AbortHelp() { Help = false; }
 	bool IsDragging();
 	void StartConstructionDrag(C4ID id);
 	int32_t GetPlayer() { return Player; }

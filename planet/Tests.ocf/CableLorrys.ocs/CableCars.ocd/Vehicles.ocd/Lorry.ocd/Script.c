@@ -1,6 +1,6 @@
 /*-- Lorry --*/
 
-#include Library_ItemContainer
+
 #include Library_CableCar
 
 local content_menu;
@@ -11,9 +11,9 @@ protected func Construction()
 	SetProperty("MeshTransformation",Trans_Rotate(13,0,1,0));
 }
 
-public func IsLorry() { return 1; }
+public func IsLorry() { return true; }
 
-public func IsToolProduct() { return 1; }
+public func IsToolProduct() { return true; }
 
 local drive_anim;
 local tremble_anim;
@@ -24,6 +24,7 @@ protected func Initialize()
 	tremble_anim = PlayAnimation("Tremble", 5, Anim_Const(0), Anim_Const(500));
 
 	iRotWheels = 0;
+	AddTimer("TurnWheels", 1);
 	iTremble = 0;
 	iMovementSpeed = 2;
 	return _inherited(...);
@@ -54,10 +55,6 @@ private func MaxContentsCount()
 {
 	return 50;
 }
-
-private func MenuOnInteraction() { return false; }
-private func MenuOnControlUse() { return true; }
-private func MenuOnControlUseAlt() { return false; }
 
 protected func RejectCollect(id object_id, object obj)
 {

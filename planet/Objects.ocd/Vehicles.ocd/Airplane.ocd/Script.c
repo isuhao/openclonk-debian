@@ -14,6 +14,8 @@ local reticle;
 local health;
 local clonkmesh;
 
+public func IsVehicle() { return true; }
+
 protected func Construction(object byobj)
 {
 	SetR(-90);
@@ -61,7 +63,7 @@ public func ContainedUseStop(object clonk, int ix, int iy)
 		var shot = ammo->TakeObject();
 		var angle = this->GetR();
 		shot->Launch(clonk, angle, 35, 200);
-		Sound("GunShoot*.ogg");
+		Sound("GunShoot?");
 
 		// Muzzle Flash & gun smoke
 		var IX = Sin(GetR(), 30);
@@ -143,7 +145,6 @@ public func ContainedStop(object clonk)
 
 public func StartFlight(int new_throttle)
 {
-	Sound("EngineStart.ogg");
 	AddEffect("IntSoundDelay",this,1,1,this);
 	SetAction("Fly");
 	throttle = new_throttle;
@@ -152,8 +153,8 @@ public func StartFlight(int new_throttle)
 public func StartInstantFlight(int angle, int new_throttle)
 {
 	angle -= 10;
-	Sound("EngineStart.ogg");
-	AddEffect("IntSoundDelay",this,1,1,this);
+	var effect = AddEffect("IntSoundDelay",this,1,1,this);
+	effect.Immediate = true;
 	SetAction("Fly");
 	throttle = new_throttle;
 	thrust = new_throttle;
@@ -166,8 +167,7 @@ public func StartInstantFlight(int angle, int new_throttle)
 public func CancelFlight()
 {
 	RemoveEffect("IntSoundDelay",this);
-	Sound("EngineLoop.ogg",0,100,nil,-1);
-	Sound("EngineStop.ogg");
+	Sound("PropellerLoop",0,100,nil,-1);
 	SetAction("Land");
 	rdir = 0;
 	throttle = 0;
@@ -175,9 +175,9 @@ public func CancelFlight()
 
 private func FxIntSoundDelayTimer(object target, effect, int timer)
 {
-	if(timer >= 78)
+	if(timer >= 78 || (effect.Immediate && timer >= 5))
 	{
-		Sound("EngineLoop.ogg",0,100,nil,1);
+		Sound("PropellerLoop",0,100,nil,1);
 		return -1;
 	}
 }
@@ -288,9 +288,9 @@ public func FaceRight()
 
 public func IsProjectileTarget(target,shooter) { return true; }
 
-public func Damage(int change, int byplayer)
+public func Damage()
 {
-	if(GetDamage() > health)
+	if(GetDamage() >= health)
 	{
 		if(Random(2)) PlaneDeath();
 		else
@@ -307,7 +307,7 @@ private func PlaneDeath()
 
 public func Hit()
 {
-	if(GetDamage() > health) PlaneDeath();
+	if(GetDamage() >= health) PlaneDeath();
 }
 
 public func ActivateEntrance(object clonk)

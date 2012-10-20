@@ -32,6 +32,13 @@ const float C4GFX_ZoomStep = 1.1040895f;
 // one control definition, e.g. "Left", "Throw", etc.
 class C4PlayerControlDef
 {
+public:
+	enum CoordinateSpace // coordinate space for mouse position
+	{
+		COS_Game = 0,     // game (landscape) coordinates 
+		COS_Viewport = 1  // viewport (GUI) coordinates
+	};
+
 private:
 	StdCopyStrBuf sIdentifier; // name as seen in script and config
 	StdCopyStrBuf sGUIName;    // name as displayed to player
@@ -42,6 +49,7 @@ private:
 	int32_t iInitialRepeatDelay; // delay after which KeyRepeat will be enabled
 	bool fDefaultDisabled;    // if true, the control is disabled by default and needs to be enabled by script
 	C4ID idControlExtraData;  // extra data to be passed to script function
+	CoordinateSpace eCoordSpace; // coordinate space to be used for mouse coordinates when control is triggered by mouse
 	bool fSendCursorPos;      // if true, x/y parameters will be set by current GUI mouse cursor pos (or GetCursor()-GUI coordinate pos for gamepad)
 public:
 	enum Actions //action to be performed when control is triggered
@@ -57,7 +65,7 @@ private:
 	Actions eAction;
 
 public:
-	C4PlayerControlDef() : fGlobal(false), fIsHoldKey(false), fDefaultDisabled(false), idControlExtraData(C4ID::None), fSendCursorPos(false), eAction(CDA_Script) {}
+	C4PlayerControlDef() : fGlobal(false), fIsHoldKey(false), fDefaultDisabled(false), idControlExtraData(C4ID::None), fSendCursorPos(false), eAction(CDA_Script), eCoordSpace(COS_Game) {}
 	~C4PlayerControlDef() {};
 
 	void CompileFunc(StdCompiler *pComp);
@@ -72,6 +80,7 @@ public:
 	int32_t GetRepeatDelay() const { return iRepeatDelay; }
 	int32_t GetInitialRepeatDelay() const { return iInitialRepeatDelay; }
 	bool IsDefaultDisabled() const { return fDefaultDisabled; }
+	CoordinateSpace GetCoordinateSpace() const { return eCoordSpace; }
 	bool IsSendCursorPos() const { return fSendCursorPos; }
 
 	//C4PlayerControlDef &operator =(const C4PlayerControlDef &src);
@@ -156,10 +165,13 @@ private:
 	C4KeyCodeEx TriggerKey;
 
 	StdCopyStrBuf sControlName; // name of the control to be executed on this key
+	StdCopyStrBuf sGUIName;    // name as displayed to player. If empty, name stored in control def should be used.
+	StdCopyStrBuf sGUIDesc;    // key description displayed to player in config dialog. If empty, name stored in control def should be used.
+	bool fGUIDisabled;   // whether this key can't be reassigned through the GUI dialogue
+	int32_t iGUIGroup;  // in which this control is grouped in the gui
 	int32_t iControl; // the control to be executed on this key, i.e. the resolved sControlName
 	int32_t iPriority;          // higher priority assignments get handled first
 	bool fOverrideAssignments;  // override all other assignments to the same key?
-	bool is_group_start; // true for first assignment in a group (for grouping in control config list box)
 
 	const C4PlayerControlAssignment *inherited_assignment; // valid for assignments that were copied from a parent: source assignment
 	bool is_inherited; // set for assignments that were copied from a parent set without modification
@@ -181,7 +193,7 @@ private:
 	bool fRefsResolved; // set to true after sControlName and sKeyNames have been resolved to runtime values
 
 public:
-	C4PlayerControlAssignment() : TriggerKey(), iControl(CON_None), iPriority(0), fOverrideAssignments(false), iTriggerMode(CTM_Default), fRefsResolved(false), inherited_assignment(NULL),is_inherited(false), is_group_start(false) {}
+	C4PlayerControlAssignment() : TriggerKey(), iControl(CON_None), iPriority(0), fOverrideAssignments(false), iTriggerMode(CTM_Default), fRefsResolved(false), inherited_assignment(NULL),is_inherited(false), iGUIGroup(0) {}
 	~C4PlayerControlAssignment() {}
 
 	void CompileFunc(StdCompiler *pComp);
@@ -199,8 +211,12 @@ public:
 	bool operator <(const C4PlayerControlAssignment &cmp) const { return iPriority > cmp.iPriority; } // assignments are processed in DESCENDING priority!
 	const char *GetControlName() const { return sControlName.getData(); }
 	int32_t GetControl() const { return iControl; }
-	bool IsGroupStart() const { return is_group_start; }
+	const char *GetGUIName(const C4PlayerControlDefs &defs) const;
+	const char *GetGUIDesc(const C4PlayerControlDefs &defs) const;
+	bool IsGUIDisabled() const;
+	int32_t GetGUIGroup() const; 
 	bool IsRefsResolved() const { return fRefsResolved; }
+	void ResetRefsResolved() { fRefsResolved = false; } // Mark references to other assignments as not resolved
 	bool IsAlwaysUnhandled() const { return !!(iTriggerMode & CTM_AlwaysUnhandled); }
 	int32_t GetTriggerMode() const { return iTriggerMode; }
 	const C4KeyCodeEx &GetTriggerKey() const { return TriggerKey; }
@@ -208,6 +224,7 @@ public:
 	bool IsOverrideAssignments() const { return fOverrideAssignments; }
 	bool IsInherited() const { return is_inherited; }
 	const C4PlayerControlAssignment *GetInheritedAssignment() const { return inherited_assignment; }
+	StdStrBuf GetKeysAsString(bool human_readable, bool short_name) const;
 };
 
 typedef std::vector<C4PlayerControlAssignment> C4PlayerControlAssignmentVec;
@@ -220,7 +237,8 @@ class C4PlayerControlAssignmentSet
 private:
 	StdCopyStrBuf sName, sGUIName, sParentSetName;
 	const C4PlayerControlAssignmentSet *parent_set;
-	C4PlayerControlAssignmentVec Assignments;
+	C4PlayerControlAssignmentVec Assignments; // ordered by priority
+
 	bool has_keyboard;  
 	bool has_mouse;
 	bool has_gamepad;
@@ -244,7 +262,7 @@ public:
 	const char *GetGUIName() const { return sGUIName.getData(); }
 	bool IsWildcardName() const { return IsWildcardString(sName.getData()); }
 
-	C4PlayerControlAssignment *GetAssignmentByIndex(int32_t index);
+	C4PlayerControlAssignment *GetAssignmentByIndex(int32_t index); // assignments are ordered by priority
 	C4PlayerControlAssignment *GetAssignmentByControlName(const char *szControlName);
 	C4PlayerControlAssignment *GetAssignmentByControl(int32_t control);
 	void GetAssignmentsByKey(const C4PlayerControlDefs &rDefs, const C4KeyCodeEx &key, bool fHoldKeysOnly, C4PlayerControlAssignmentPVec *pOutVec, const C4PlayerControlRecentKeyList &DownKeys, const C4PlayerControlRecentKeyList &RecentKeys) const; // match only by TriggerKey (last key of Combo) if fHoldKeysOnly
@@ -369,8 +387,7 @@ private:
 	// callbacks from Game.KeyboardInput
 	bool ProcessKeyEvent(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key, bool fUp, const C4KeyEventData &rKeyExtraData, bool reset_down_states_only=false);
 	bool ProcessKeyDown(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key);
-	bool ProcessKeyUp(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key) { return ProcessKeyUpEx(pressed_key, matched_key, false); }
-	bool ProcessKeyUpEx(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key, bool reset_down_states_only);
+	bool ProcessKeyUp(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key);
 
 	// execute single control. return if handled.
 	bool ExecuteControl(int32_t iControl, bool fUp, const C4KeyEventData &rKeyExtraData, int32_t iTriggerMode, bool fRepeated, bool fHandleDownStateOnly);
@@ -382,7 +399,7 @@ private:
 
 	// helper function: get current cursor position of controlling player in GUI coordinates
 	// used e.g. to open menus at cursor pos
-	bool GetCurrentPlayerCursorPos(int32_t *x_out, int32_t *y_out);
+	bool GetCurrentPlayerCursorPos(int32_t *x_out, int32_t *y_out, int32_t *game_x_out, int32_t *game_y_out);
 
 public:
 	C4PlayerControl();

@@ -35,7 +35,13 @@ func FxNoDropTimer(object target, effect, int timer)
 	}
 }
 
+func Hit()
+{
+	Sound("GeneralHit?");
+}
+
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Rebuy = true;

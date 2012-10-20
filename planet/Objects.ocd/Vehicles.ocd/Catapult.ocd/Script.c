@@ -11,7 +11,8 @@ local olddir;
 local dir;
 local clonkmesh;
 
-public func IsToolProduct() { return 1; }
+public func IsVehicle() { return true; }
+public func IsArmoryProduct() { return true; }
 
 protected func Initialize()
 {
@@ -141,16 +142,16 @@ public func ContainedUse(object clonk, int x, int y)
 protected func DoFire(object clonk, int power, int hand)
 {
 	//Fire the catapult!
-	PlayAnimation("Launch", 5, Anim_Linear(0,0, GetAnimationLength("Launch"), 10, ANIM_Remove), Anim_Const(1000));
+//	PlayAnimation("Launch", 5, Anim_Linear(0,0, GetAnimationLength("Launch"), 10, ANIM_Remove), Anim_Const(1000));
 	aim_anim = PlayAnimation("ArmPosition", 1, Anim_Linear(GetAnimationPosition(aim_anim),0, GetAnimationLength("ArmPosition"), 3, ANIM_Hold), Anim_Const(1000));
 
 	//Sound
-	Sound("Catapult_Launch.ogg");
+	Sound("Catapult_Launch");
 
 	var projectile = nil;
 	if(Contents(0))	projectile = Contents(0); //Is clonk sitting in the catapult? Then (s)he shall be the projectile!
 	else
-		if(clonk->GetItem(hand)) projectile = clonk->GetItem(hand); //otherwise, fire what is in the clonk's hand
+		if(clonk->GetHandItem(hand)) projectile = clonk->GetHandItem(hand); //otherwise, fire what is in the clonk's hand
 	if(projectile)
 	{
 		//finding the spot of the catapult's arm depending on rotation

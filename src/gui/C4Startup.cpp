@@ -133,7 +133,6 @@ CStdFont &C4StartupGraphics::GetBlackFontByHeight(int32_t iHgt, float *pfZoom)
 // statics
 C4Startup::DialogID C4Startup::eLastDlgID = C4Startup::SDID_Main;
 StdCopyStrBuf C4Startup::sSubDialog = StdCopyStrBuf();
-bool C4Startup::fFirstRun = false;
 
 // startup singleton instance
 C4Startup *C4Startup::pInstance = NULL;
@@ -242,19 +241,6 @@ void C4Startup::DoStartup()
 	fInStartup = true;
 	fLastDlgWasBack = false;
 
-	// first run: Splash video
-#ifndef USE_CONSOLE
-	if (!fFirstRun)
-	{
-		fFirstRun = true;
-		if (!Config.Startup.NoSplash && !Application.NoSplash)
-		{
-			Game.VideoPlayer.PlayVideo(C4CFN_Splash);
-		}
-	}
-#endif
-
-	// make sure loader is drawn after splash
 	::GraphicsSystem.EnableLoaderDrawing();
 
 	// clear any previous
@@ -374,4 +360,10 @@ bool C4Startup::SetStartScreen(const char *szScreen)
 		eLastDlgID = SDID_About;
 	else return false;
 	return true;
+}
+
+void C4Startup::OnKeyboardLayoutChanged()
+{
+	// forward message to current dialog
+	if (pCurrDlg) pCurrDlg->OnKeyboardLayoutChanged();
 }

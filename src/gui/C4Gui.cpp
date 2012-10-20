@@ -274,14 +274,14 @@ namespace C4GUI
 		             y0 = cgo.TargetY + rcBounds.y + iTopOff,
 		                  x1 = cgo.TargetX + rcBounds.x + rcBounds.Wdt - 1,
 		                       y1 = cgo.TargetY + rcBounds.y + rcBounds.Hgt - 1;
-		if (fDrawTop) lpDDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y0,(float)x1,(float)y0, C4GUI_BorderColor1 | dwAlpha);
-		if (fDrawLeft) lpDDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y0,(float)x0,(float)y1, C4GUI_BorderColor1 | dwAlpha);
-		if (fDrawTop) lpDDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y0+1),(float)(x1-1),(float)(y0+1), C4GUI_BorderColor2 | dwAlpha);
-		if (fDrawLeft) lpDDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y0+1),(float)(x0+1),(float)(y1-1), C4GUI_BorderColor2 | dwAlpha);
-		lpDDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y1,(float)x1,(float)y1, C4GUI_BorderColor3 | dwAlpha);
-		lpDDraw->DrawLineDw(cgo.Surface, (float)x1,(float)y0,(float)x1,(float)y1, C4GUI_BorderColor3 | dwAlpha);
-		lpDDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y1-1),(float)(x1-1),(float)(y1-1), C4GUI_BorderColor1 | dwAlpha);
-		lpDDraw->DrawLineDw(cgo.Surface, (float)(x1-1),(float)(y0+1),(float)(x1-1),(float)(y1-1), C4GUI_BorderColor1 | dwAlpha);
+		if (fDrawTop) pDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y0,(float)x1,(float)y0, C4GUI_BorderColor1 | dwAlpha);
+		if (fDrawLeft) pDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y0,(float)x0,(float)y1, C4GUI_BorderColor1 | dwAlpha);
+		if (fDrawTop) pDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y0+1),(float)(x1-1),(float)(y0+1), C4GUI_BorderColor2 | dwAlpha);
+		if (fDrawLeft) pDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y0+1),(float)(x0+1),(float)(y1-1), C4GUI_BorderColor2 | dwAlpha);
+		pDraw->DrawLineDw(cgo.Surface, (float)x0,(float)y1,(float)x1,(float)y1, C4GUI_BorderColor3 | dwAlpha);
+		pDraw->DrawLineDw(cgo.Surface, (float)x1,(float)y0,(float)x1,(float)y1, C4GUI_BorderColor3 | dwAlpha);
+		pDraw->DrawLineDw(cgo.Surface, (float)(x0+1),(float)(y1-1),(float)(x1-1),(float)(y1-1), C4GUI_BorderColor1 | dwAlpha);
+		pDraw->DrawLineDw(cgo.Surface, (float)(x1-1),(float)(y0+1),(float)(x1-1),(float)(y1-1), C4GUI_BorderColor1 | dwAlpha);
 	}
 
 	void Element::DrawBar(C4TargetFacet &cgo, DynBarFacet &rFacets)
@@ -457,13 +457,11 @@ namespace C4GUI
 		// only if owned
 		if (!fActive) return;
 		// dbg: some cursor...
-		//lpDDraw->DrawFrame(lpDDraw->lpBack, x-5,y-5,x+5,y+5,2);
+		//pDraw->DrawFrame(pDraw->lpBack, x-5,y-5,x+5,y+5,2);
 
 		int32_t iOffsetX = -GfxR->fctMouseCursor.Wdt/2;
 		int32_t iOffsetY = -GfxR->fctMouseCursor.Hgt/2;
 		GfxR->fctMouseCursor.Draw(cgo.Surface,x+iOffsetX,y+iOffsetY,0);
-		if (::MouseControl.IsHelp())
-			GfxR->fctMouseCursor.Draw(cgo.Surface,x+iOffsetX+5,y+iOffsetY-5,29);
 		// ToolTip
 		if (fDrawToolTip && pMouseOverElement)
 		{
@@ -475,7 +473,7 @@ namespace C4GUI
 			}
 		}
 		// drag line
-		//if (LDown) lpDDraw->DrawLine(cgo.Surface, LDownX, LDownY, x,y, 4);
+		//if (LDown) pDraw->DrawLine(cgo.Surface, LDownX, LDownY, x,y, 4);
 	}
 
 	void CMouse::ReleaseElements()
@@ -542,8 +540,8 @@ namespace C4GUI
 		Mouse.x = tx+twdt/2;
 		Mouse.y = ty+thgt/2;
 		// calculate zoom
-		float fZoomX = float(Config.Graphics.ResX) / twdt;
-		float fZoomY = float(Config.Graphics.ResY) / thgt;
+		float fZoomX = float(Application.GetConfigWidth()) / twdt;
+		float fZoomY = float(Application.GetConfigHeight()) / thgt;
 		fZoom = Min<float>(fZoomX, fZoomY);
 		// set size - calcs client area as well
 		SetBounds(C4Rect(tx,ty,twdt,thgt));
@@ -675,7 +673,7 @@ namespace C4GUI
 	{
 		while (pActiveDlg) pActiveDlg->Close(fWithOK);
 	}
-#ifdef _WIN32
+#ifdef USE_WIN32_WINDOWS
 	Dialog *Screen::GetDialog(HWND hWindow)
 	{
 		// get dialog with matching handle
@@ -687,7 +685,7 @@ namespace C4GUI
 		return NULL;
 	}
 #endif
-	Dialog *Screen::GetDialog(CStdWindow * pWindow)
+	Dialog *Screen::GetDialog(C4Window * pWindow)
 	{
 		// get dialog with matching window
 		Dialog *pDlg;
@@ -709,7 +707,7 @@ namespace C4GUI
 	void Screen::RenderMouse(C4TargetFacet &cgo)
 	{
 		// draw mouse cursor
-		Mouse.Draw(cgo, (Mouse.IsMouseStill() && Mouse.IsActiveInput()) || ::MouseControl.IsHelp());
+		Mouse.Draw(cgo, Mouse.IsMouseStill() && Mouse.IsActiveInput());
 	}
 
 	void Screen::Draw(C4TargetFacet &cgo, bool fDoBG)
@@ -724,7 +722,7 @@ namespace C4GUI
 					::GraphicsSystem.pLoaderScreen->fctBackground.DrawFullScreen(cgo);
 				else
 					// loader not yet loaded: black BG
-					lpDDraw->DrawBoxDw(cgo.Surface, 0,0, cgo.Wdt+1, cgo.Hgt+1, 0x00000000);
+					pDraw->DrawBoxDw(cgo.Surface, 0,0, cgo.Wdt+1, cgo.Hgt+1, 0x00000000);
 			}
 		}
 		// draw contents (if GUI-gfx are loaded, which is assumed in GUI-drawing-functions)
@@ -735,14 +733,6 @@ namespace C4GUI
 		}
 		// draw mouse cursor
 		if (!Application.isEditor) RenderMouse(cgo);
-	}
-
-	bool Screen::Execute()
-	{
-		// process messages
-		if (!Application.FlushMessages())
-			return false;
-		return true;
 	}
 
 	bool Screen::KeyAny()
@@ -817,27 +807,6 @@ namespace C4GUI
 		float fZoom = pForDlg ? 1.0f : GetZoom(); // Developer mode dialogs are currently drawn unzoomed
 		float fX = float(iPxX) / fZoom;
 		float fY = float(iPxY) / fZoom;
-		// help mode and button pressed: Abort help and discard button
-		if (::MouseControl.IsHelp())
-		{
-			switch (iButton)
-			{
-			case C4MC_Button_None:
-				// just movement
-				break;
-			case C4MC_Button_LeftDown:
-			case C4MC_Button_RightDown:
-				// special for left/right down: Just ignore them, but don't stop help yet
-				// help should be stopped on button-up, so these won't be processed
-				iButton = C4MC_Button_None;
-				break;
-			default:
-				// buttons stop help
-				::MouseControl.AbortHelp();
-				iButton = C4MC_Button_None;
-				break;
-			}
-		}
 		// forward to mouse
 		Mouse.Input(iButton, fX, fY, dwKeyParam);
 		// dragging
@@ -1017,10 +986,10 @@ namespace C4GUI
 			if (y < cgo.Y+cgo.TargetY+tHgt+5) tY = Min<int32_t>(y+5, cgo.TargetY+cgo.Hgt-tHgt); else tY = y-tHgt-5;
 			tX = BoundBy<int32_t>(x-tWdt/2, cgo.TargetX+cgo.X, cgo.TargetX+cgo.Wdt-tWdt);
 			// draw tooltip box
-			lpDDraw->DrawBoxDw(cgo.Surface, tX,tY,tX+tWdt-1,tY+tHgt-2, C4GUI_ToolTipBGColor);
-			lpDDraw->DrawFrameDw(cgo.Surface, tX,tY,tX+tWdt-1,tY+tHgt-1, C4GUI_ToolTipFrameColor);
+			pDraw->DrawBoxDw(cgo.Surface, tX,tY,tX+tWdt-1,tY+tHgt-2, C4GUI_ToolTipBGColor);
+			pDraw->DrawFrameDw(cgo.Surface, tX,tY,tX+tWdt-1,tY+tHgt-1, C4GUI_ToolTipFrameColor);
 			// draw tooltip
-			lpDDraw->TextOut(sText.getData(), *pUseFont, 1.0f, cgo.Surface, tX+3,tY+1, C4GUI_ToolTipColor, ALeft);
+			pDraw->TextOut(sText.getData(), *pUseFont, 1.0f, cgo.Surface, tX+3,tY+1, C4GUI_ToolTipColor, ALeft);
 			// while there's a tooltip, redraw the bg, because it might overlap
 			::GraphicsSystem.InvalidateBg();
 		}

@@ -5,158 +5,136 @@
 	Melts iron ore to metal, using some sort of fuel.
 --*/
 
-
+#include Library_Structure
+#include Library_Ownable
 #include Library_Producer
 
-public func Construction()
+// does not need power
+func PowerNeed() { return 0; }
+
+public func Construction(object creator)
 {
-	SetProperty("MeshTransformation",Trans_Rotate(RandomX(-40,20),0,1,0));
-	//queue = [[Metal, nil]];
-	return _inherited(...);;
+	
+	//SetProperty("MeshTransformation",Trans_Rotate(RandomX(-40,20),0,1,0));
+	SetAction("Default");
+	AddTimer("CollectionZone", 1);	
+	return _inherited(creator, ...);
 }
 
 /*-- Production --*/
 
-public func CanProduceItem(id item_id)
-{
-	if (item_id == Metal)
-		return true;	
-	return false;
-}
+private func IgnoreKnowledge() { return true; }
 
-public func NeedsRawMaterial(id rawmat_id)
+private func IsProduct(id product_id)
 {
-	if (rawmat_id == Coal || rawmat_id == Wood || rawmat_id == Ore)
+	return product_id->~IsFoundryProduct();
+}
+private func ProductionTime(id toProduce) { return 290; }
+
+public func NeedRawMaterial(id rawmat_id)
+{
+	if (rawmat_id->~IsFuel() || rawmat_id == Ore || rawmat_id == Nugget)
 		return true;
 	return false;
 }
 
-public func IsProducing()
+
+public func OnProductionStart(id product)
 {
-	if (GetEffect("Smelting", this))
-		return true;
-	return false;
-}
-
-private func Produce(id item_id)
-{
-	// Check if material is available.
-	if (item_id == Metal)
-		if (!FindContents(Ore))
-			return false;
-	// Check if fuel is available, TODO: oil
-	if (ContentsCount(Wood) < 2 &&  !FindContents(Coal))
-		return false;
-	// If already busy, wait a little.
-	if (IsProducing())
-		return false;
-	// Start production.	
-	AddEffect("Smelting",this,1,1,this);
-	Sound("FurnaceStart.ogg");
-	AddEffect("IntSoundDelay",this,1,1,this);
-	return true;
-}
-
-private func ProductionCosts(id item_id)
-{
-	if (item_id == Metal)
-		return [[Ore, 1],[Coal, 1]];
-
-	return _inherited(item_id, ...);
-}
-
-local cast = 0;
-
-protected func Collection()
-{
-	Sound("Clonk.ogg");
+	AddEffect("Smelting", this, 100, 1, this);
+	Sound("FurnaceStart");
 	return;
 }
 
-public func FxSmeltingStart(object target, num, int temporary)
+public func OnProductionHold(id product)
 {
-	FindContents(Ore)->RemoveObject();
-
-	//Use coal as firing material
-	var coal = FindContents(Coal);
-	if(coal)
-	{
-		coal->RemoveObject();
-		return;
-	}
-
-	//Use wood as firing material
-	if(ContentsCount(Wood) >= 2)
-	{
-		FindContents(Wood)->RemoveObject();
-		FindContents(Wood)->RemoveObject();
-		return;
-	}
+	return;
 }
 
-public func FxSmeltingTimer(object target, num, int timer)
+public func OnProductionFinish(id product)
 {
-	Message(Format("Smelting %d",timer));
-	//Visuals
-	//Fire
-	CreateParticle("Fire",10,14,RandomX(-1,1),RandomX(-1,1),RandomX(25,50),RGB(255,255,255), this);
+	RemoveEffect("Smelting", this);
+	return;
+}	
 
-	//Smoke
-	CreateParticle("ExploSmoke",9,-35,RandomX(-1,1),-7 + RandomX(-2,2),RandomX(30,125),RGBa(255,255,255,50));
-	CreateParticle("ExploSmoke",16,-33,RandomX(-1,1),-7 + RandomX(-2,2),RandomX(30,90),RGBa(255,255,255,50));
+// Timer, check for objects to collect in the designated collection zone
+func CollectionZone()
+{
+	if (GetCon() < 100) return;
 
+	for (var object in FindObjects(Find_InRect(16 - 45 * GetDir(),3,13,13), Find_OCF(OCF_Collectible), Find_NoContainer(), Find_Layer(GetObjectLayer())))
+		Collect(object);
+}
+
+func Collection()
+{
+	Sound("Clonk");
+	return;
+}
+
+public func FxSmeltingTimer(object target, proplist effect, int time)
+{
+	//Message(Format("Smelting %d",timer));
+	// Fire in the furnace.
+	CreateParticle("Fire",-10*GetCalcDir(),20,RandomX(-1,1),RandomX(-1,1),RandomX(25,50),RGB(255,255,255), this);
+
+	// Smoke from the pipes.
+	CreateParticle("ExploSmoke", -9*GetCalcDir(), -31, RandomX(-2,1), -7 + RandomX(-2,2), RandomX(60,125), RGBa(255,255,255,50));
+	CreateParticle("ExploSmoke", -16*GetCalcDir(), -27, RandomX(-1,2), -7 + RandomX(-2,2), RandomX(30,90), RGBa(255,255,255,50));
 	
-	if(timer == 244)
-	{
-		//Pour
-		SetMeshMaterial("MetalFlow",1);
-	}
+	// Furnace sound after some time.
+	if (time == 30)
+		Sound("FurnaceLoop", false, 100, nil, +1);
+
+	// Pour after some time.
+	if(time == 244)
+		SetMeshMaterial("MetalFlow", 1);
 
 	//Molten metal hits cast... Sizzling sound
-	if(timer == 256) Sound("Sizzle.ogg");
+	if (time == 256)
+		Sound("Sizzle");
 
-	if(timer > 244 && timer < 290)
-	{
-		CreateParticle("Fire",-17,14,-1 + RandomX(-1,1), 2+ RandomX(-1,1),RandomX(5,15),RGB(255,255,255));
-	}
+	// Fire from the pouring exit.
+	if (Inside(time, 244, 290))
+		CreateParticle("Fire",17*GetCalcDir(),19,-1 + RandomX(-1,1), 2+ RandomX(-1,1),RandomX(5,15),RGB(255,255,255));
 
-	if(timer == 290)
+	if (time == 290)
 	{
-		SetMeshMaterial("Metal",1);
-		cast = 1;
-		AddEffect("EjectMetal",this, 1, 1, this);
-		Sound("FurnaceLoop.ogg",false,100,nil,-1);
-		Sound("FurnaceStop.ogg");
+		SetMeshMaterial("Metal", 1);
+		Sound("FurnaceLoop", false ,100, nil, -1);
+		Sound("FurnaceStop");
 		return -1;
 	}
+	return 1;
 }
 
-public func FxEjectMetalTimer(object target, num, int timer)
+public func OnProductEjection(object product)
 {
-	if(timer > 24)
-	{
-		var metal = CreateObject(Metal, -20, 16);
-		metal->SetSpeed(0,-17);
-		metal->SetR(30 - Random(59));
-		metal->Enter(this);
-		Sound("Pop.ogg");
-		cast = 0;
-		return -1;
-	}
+	product->SetPosition(GetX() + 18 * GetCalcDir(), GetY() + 16);
+	product->SetSpeed(0, -17);
+	product->SetR(30 - Random(59));
+	Sound("Pop");
+	return;
 }
 
-public func FxIntSoundDelayTimer(object target, num, int timer)
-{
-	if(timer >= 100)
-	{
-		Sound("FurnaceLoop.ogg",false,100,nil,+1);
-		return -1;
-	}
-}
+local ActMap = {
+		Default = {
+			Prototype = Action,
+			Name = "Default",
+			Procedure = DFA_NONE,
+			Directions = 2,
+			FlipDir = 1,
+			Length = 1,
+			Delay = 0,
+			FacetBase = 1,
+			NextAction = "Default",
+		},
+};
 
 func Definition(def) {
 	SetProperty("PictureTransformation", Trans_Mul(Trans_Translate(2000,0,7000),Trans_Rotate(-20,1,0,0),Trans_Rotate(30,0,1,0)), def);
 }
-
-local Touchable = 2;
 local Name = "$Name$";
+local Description = "$Description$";
+local BlastIncinerate = 100;
+local HitPoints = 100;

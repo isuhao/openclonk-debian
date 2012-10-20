@@ -51,10 +51,10 @@ public:
 	}
 
 	C4Value operator[](int32_t iElem) const { return GetItem(iElem); }
-	C4Value &operator[](int32_t iElem);
+	C4Value &operator[](int32_t iElem); // interface for the engine, asserts that 0 <= index < MaxSize
 
 	void Reset();
-	void SetItem(int32_t iElemNr, const C4Value &Value);
+	void SetItem(int32_t iElemNr, const C4Value &Value); // interface for script
 	void SetSize(int32_t inSize); // (enlarge only!)
 
 	void Denumerate(C4ValueNumbers *);
@@ -76,11 +76,12 @@ public:
 	void SetSlice(int32_t startIndex, int32_t endIndex, const C4Value &Val);
 
 	void Sort(class C4SortObject &rSort);
+	void SortStrings();
 
 private:
 	// Reference counter
 	unsigned int iRefCnt;
-	int32_t iSize;
+	int32_t iSize, iCapacity;
 	C4Value* pData;
 };
 

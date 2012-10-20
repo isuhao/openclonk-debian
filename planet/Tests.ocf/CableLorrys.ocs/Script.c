@@ -16,6 +16,7 @@ protected func Initialize()
 	var c3 = CreateObject(CableCrossing, 585, 415);
 	var c4 = CreateObject(CableCrossing, 555, 385);
 	var cabin = CreateObject(WoodenCabin, 490, 390);
+	CreateObject(LiftTower, 935, 360);
 
 	CreateObject(CableLine)->SetConnectedObjects(workshop, c1);
 	CreateObject(CableLine)->SetConnectedObjects(c1, c2);
@@ -24,6 +25,8 @@ protected func Initialize()
 	CreateObject(CableLine)->SetConnectedObjects(c4, cabin);
 
 	CreateObject(Lorry, 835, 360);
+
+	CreateConstruction(Elevator, 160, 390, NO_OWNER, 100, true)->CreateShaft(150);
 
 	// Forest on the left side of the map, with sawmill.
 /*	for (var i = 0; i < 20; i++)

@@ -1,0 +1,2 @@
+TxtHandsFull=Hands are full!
+TxtPutDown=Put %s down

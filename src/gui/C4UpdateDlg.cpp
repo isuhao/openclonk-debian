@@ -20,15 +20,13 @@
  * See clonk_trademark_license.txt for full license.
  */
 // dialogs for update, and the actual update application code
+// is only compiled WITH_AUTOMATIC_UPDATE
 
 #include "C4Include.h"
 
-// Don't compile this class if automatic update is disabled
-#ifdef WITH_AUTOMATIC_UPDATE
-
 #include "C4UpdateDlg.h"
-#include "C4DownloadDlg.h"
 
+#include "C4DownloadDlg.h"
 #include <C4Log.h>
 
 #ifdef _WIN32
@@ -296,7 +294,7 @@ bool C4UpdateDlg::ApplyUpdate(const char *strUpdateFile, bool fDeleteUpdate, C4G
 
 bool C4UpdateDlg::IsValidUpdate(const char *szVersion)
 {
-	StdStrBuf strVersion; strVersion.Format("%d.%d.%d.%d", C4XVER1, C4XVER2, C4XVER3, C4XVER4);
+	StdStrBuf strVersion; strVersion.Format("%d.%d.%d", C4XVER1, C4XVER2, C4XVER3);
 	if (szVersion == NULL || strlen(szVersion) == 0) return false;
 	return strcmp(szVersion,strVersion.getData()) != 0;
 }
@@ -382,6 +380,3 @@ bool C4UpdateDlg::CheckForUpdates(C4GUI::Screen *pScreen, bool fAutomatic)
 	// Done (and no update has been done)
 	return false;
 }
-
-
-#endif // WITH_AUTOMATIC_UPDATE

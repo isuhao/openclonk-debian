@@ -28,7 +28,7 @@
 #include <C4Include.h>
 #include <C4MusicSystem.h>
 
-#include <StdWindow.h>
+#include <C4Window.h>
 #include <C4MusicFile.h>
 #include <C4Application.h>
 #include <C4Random.h>
@@ -42,14 +42,9 @@
 #include <SDL.h>
 #endif
 
-// helper
-const char *SGetRelativePath(const char *strPath)
-{
-	const char *strEXEPath = Config.AtExePath("");
-	while (*strEXEPath == *strPath) { strEXEPath++; strPath++; }
-	return strPath;
-}
-
+#if defined(USE_OPEN_AL) && !defined(__APPLE__)
+#include <AL/alut.h>
+#endif
 
 C4MusicSystem::C4MusicSystem():
 		Songs(NULL),
@@ -132,10 +127,24 @@ bool C4MusicSystem::InitializeMOD()
 #elif defined(USE_OPEN_AL)
 	alcDevice = alcOpenDevice(NULL);
 	if (!alcDevice)
+	{
+		LogF("Sound system: OpenAL create context error");
 		return false;
+	}
 	alcContext = alcCreateContext(alcDevice, NULL);
 	if (!alcContext)
+	{
+		LogF("Sound system: OpenAL create context error");
 		return false;
+	}
+#ifndef __APPLE__
+	if (!alutInitWithoutContext(NULL, NULL))
+	{
+		LogF("Sound system: ALUT init error");
+		return false;
+	}
+#endif
+	MODInitialized = true;
 	return true;
 #endif
 	return false;
@@ -153,6 +162,9 @@ void C4MusicSystem::DeinitializeMOD()
 	Mix_CloseAudio();
 	SDL_Quit();
 #elif defined(USE_OPEN_AL)
+#ifndef __APPLE__
+	alutExit();
+#endif
 	alcDestroyContext(alcContext);
 	alcCloseDevice(alcDevice);
 	alcContext = NULL;
@@ -197,7 +209,7 @@ bool C4MusicSystem::InitForScenario(C4Group & hGroup)
 		MusicDir.Take(Game.ScenarioFile.GetFullName());
 		LoadDir(MusicDir.getData());
 		// log
-		LogF(LoadResStr("IDS_PRC_LOCALMUSIC"), SGetRelativePath(MusicDir.getData()));
+		LogF(LoadResStr("IDS_PRC_LOCALMUSIC"), MusicDir.getData());
 	}
 	// check for music folders in group set
 	C4Group *pMusicFolder = NULL;
@@ -215,7 +227,7 @@ bool C4MusicSystem::InitForScenario(C4Group & hGroup)
 		MusicDir.Append(C4CFN_Music);
 		LoadDir(MusicDir.getData());
 		// log
-		LogF(LoadResStr("IDS_PRC_LOCALMUSIC"), SGetRelativePath(MusicDir.getData()));
+		LogF(LoadResStr("IDS_PRC_LOCALMUSIC"), MusicDir.getData());
 	}
 	// no music?
 	if (!SongCount) return false;

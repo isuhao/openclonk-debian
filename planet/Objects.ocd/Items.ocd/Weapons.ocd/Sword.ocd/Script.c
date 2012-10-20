@@ -2,9 +2,11 @@
 
 #include Library_MeleeWeapon
 
-private func Hit()
+static const Sword_Standard_StrikingLength = 15; // in frames
+
+func Hit()
 {
-	Sound("WoodHit"); //TODO Some metal sond
+	Sound("LightMetalHit?");
 }
 
 public func Initialize()
@@ -25,11 +27,6 @@ public func GetCarryTransform()
 	return Trans_Rotate(90, 0, 1, 0);
 }
 
-
-public func IsTool() { return 1; }
-
-public func IsToolProduct() { return 1; }
-
 local magic_number;
 local carry_bone;
 public func ControlUse(object clonk, int x, int y)
@@ -45,7 +42,7 @@ public func ControlUse(object clonk, int x, int y)
 
 	var arm = "R";
 	carry_bone = "pos_hand2";
-	if(clonk->GetItemPos(this) == 1)
+	if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 1)
 	{
 		arm = "L";
 		carry_bone = "pos_hand1";
@@ -56,14 +53,11 @@ public func ControlUse(object clonk, int x, int y)
 	var downwards_stab = false;
 	
 	// figure out the kind of attack to use
-	var length=15;
+	var length = Sword_Standard_StrikingLength;
 	if(clonk->IsWalking())
 	{
-		//length=20;
-		/*if(!GetEffect("SwordStrikeSpeedUp", clonk) && !slow)
-			AddEffect("SwordStrikeSpeedUp", clonk, 1, 5, this);*/
-		if(!GetEffect("SwordStrikeStop", clonk, 0))
-			AddEffect("SwordStrikeStop", clonk, 2, 50, this);
+		if(!GetEffect("SwordStrikeStop", clonk))
+			AddEffect("SwordStrikeStop", clonk, 2, length, this);
 	} else
 	if(clonk->IsJumping())
 	{
@@ -73,11 +67,14 @@ public func ControlUse(object clonk, int x, int y)
 		
 		if(!slow && !GetEffect("DelayTranslateVelocity", clonk))
 		{
-			//TranslateVelocity(clonk, Angle(0, 0, x,y), 0, 300, 1);
+			// check whether the player aims below the Clonk
 			var a=Angle(0, 0, x,y);
-			if(Inside(a, 35+90, 35+180))
+			var x_dir = Sin(a, 60);
+			
+			if(Inside(a, 35+90, 35+180)) // the player aims downwards
+			if((BoundBy(x_dir, -1, 1) == BoundBy(clonk->GetXDir(), -1, 1)) || (clonk->GetXDir() == 0)) // the player aims into the direction the Clonk is already jumping
 			{
-				clonk->SetXDir(Sin(a, 60));
+				clonk->SetXDir(x_dir);
 				clonk->SetYDir(-Cos(a, 60));
 				AddEffect("DelayTranslateVelocity", clonk, 2, 3, nil, Library_MeleeWeapon);
 				
@@ -85,7 +82,11 @@ public func ControlUse(object clonk, int x, int y)
 				length = 50;
 				animation = Format("SwordSlash1.%s", arm);
 				downwards_stab = true;
+
 				if(GetEffect("Fall", clonk)) RemoveEffect("Fall", clonk);
+				
+				// visual effect
+				AddEffect("VisualJumpStrike", clonk, 1, 2, nil, Sword);
 			}
 		}
 	}
@@ -104,11 +105,41 @@ public func ControlUse(object clonk, int x, int y)
 	}
 	clonk->UpdateAttach();
 	
-	magic_number=((magic_number+1)%10) + (ObjectNumber()*10);
+	// this means that the sword can only hit an object every X frames
+	// change it to something that changes every strike if you want the sword to be able to hit the same enemy with different
+	// strikes regardless of the time in between
+	magic_number = ObjectNumber();
 	StartWeaponHitCheckEffect(clonk, length, 1);
 	
-	this->Sound(Format("WeaponSwing%d.ogg", 1+Random(3)), false, nil, nil, nil);
+	this->Sound("WeaponSwing?", false, nil, nil, nil);
 	return true;
+}
+
+func FxVisualJumpStrikeStart(target, effect, temp)
+{
+	if(temp) return;
+	effect.x_add = 20;
+	if(target->GetXDir() < 0) effect.x_add *= -1;
+	effect.visual = CreateObject(Sword_JumpEffect, 0, 0, nil);
+	effect.visual->Point({x = target->GetX() + effect.x_add, y = target->GetY() + 10}, {x = target->GetX() + effect.x_add, y = target->GetY() + 10});
+}
+
+func FxVisualJumpStrikeTimer(target, effect, time)
+{
+	if(!target->~IsJumping())
+	{
+		effect.visual->FadeOut();
+		effect.visual = nil;
+		return -1;
+	}
+	effect.visual->Point(nil, {x = target->GetX() + effect.x_add, y = target->GetY() + 10});
+}
+
+func FxVisualJumpStrikeStop(target, effect, reason, temp)
+{
+	if(temp) return;
+	if(!effect.visual) return;
+	effect.visual->FadeOut();
 }
 
 func OnWeaponHitCheckStop(clonk)
@@ -117,22 +148,28 @@ func OnWeaponHitCheckStop(clonk)
 	clonk->UpdateAttach();
 	if(GetEffect("SwordStrikeSpeedUp", clonk))
 		RemoveEffect("SwordStrikeSpeedUp", clonk);
-	//if(GetEffect("DelayTranslateVelocity", clonk))
-	//	RemoveEffect("DelayTranslateVelocity", clonk);
+
 	if(clonk->IsJumping())
 	{
 		if(!GetEffect("Fall", clonk))
 			AddEffect("Fall",clonk,1,1,clonk);
 	}
+	
+	if(GetEffect("SwordStrikeStop", clonk))
+		RemoveEffect("SwordStrikeStop", clonk);
+	
 	return;
 }
 
+// called when the strike expired before end of length (aborted)
 func WeaponStrikeExpired()
 {
-	//if(Contained())
-	//	this->ScheduleCall(this, "ControlUseStart", 1, 0, Contained(), 0, 0);
-	if(GetEffect("SwordStrikeStop", Contained()))
-		RemoveEffect("SwordStrikeStop", Contained());
+
+}
+
+func SwordDamage(int shield)
+{
+	return ((100-shield)*9*1000 / 100);
 }
 
 func CheckStrike(iTime)
@@ -172,7 +209,7 @@ func CheckStrike(iTime)
 			// don't hit objects twice
 			if(!GetEffect(effect_name, obj))
 			{
-				AddEffect(effect_name, obj, 1, 60 /* arbitrary */, 0, 0);
+				AddEffect(effect_name, obj, 1, Sword_Standard_StrikingLength, nil, 0);
 				
 				if(GetEffect(sword_name, obj))
 				{
@@ -182,7 +219,7 @@ func CheckStrike(iTime)
 				else
 				{
 					//Log("first hit overall");
-					AddEffect(sword_name, obj, 1, 40, 0, 0);
+					AddEffect(sword_name, obj, 1, 40, nil, 0);
 				}
 
 				
@@ -192,7 +229,7 @@ func CheckStrike(iTime)
 					continue;
 					
 				// fixed damage (9)
-				var damage=((100-shield)*9*1000 / 100);
+				var damage = SwordDamage(shield);
 				ProjectileHit(obj, damage, ProjectileHit_no_query_catch_blow_callback | ProjectileHit_exact_damage | ProjectileHit_no_on_projectile_hit_callback, FX_Call_EngGetPunched);
 				
 				// object has not been deleted?
@@ -215,11 +252,11 @@ func CheckStrike(iTime)
 						x=1;
 						p="Slice1";
 					} 
-//					CreateParticle(p, AbsX(obj->GetX())+RandomX(-1,1), AbsY(obj->GetY())+RandomX(-1,1), 0, 0, 100, RGB(255,255,255), obj);
+					CreateParticle(p, AbsX(obj->GetX())+RandomX(-1,1), AbsY(obj->GetY())+RandomX(-1,1), 0, 0, 100, RGB(255,255,255), obj);
 				}
 				
 				// sound and done. We can only hit one target
-				Sound(Format("WeaponHit%d.ogg", 1+Random(3)), false);
+				Sound("WeaponHit?", false);
 				break;
 			}
 		}
@@ -229,19 +266,19 @@ func CheckStrike(iTime)
 
 func FxSwordStrikeStopStart(pTarget, effect, iTemp)
 {
-	pTarget->PushActionSpeed("Walk", (pTarget.ActMap.Walk.Speed)/100);
 	if(iTemp) return;
+	pTarget->PushActionSpeed("Walk", (pTarget.ActMap.Walk.Speed)/100);
 }
 
 func FxSwordStrikeStopStop(pTarget, effect, iCause, iTemp)
 {
-	pTarget->PopActionSpeed("Walk");
 	if(iTemp) return;
+	pTarget->PopActionSpeed("Walk");
 }
 
 func FxSwordStrikeStopTimer(pTarget, effect)
 {
-	return 1;
+	return -1;
 }
 
 func FxSwordStrikeSpeedUpStart(pTarget, effect, iTemp)
@@ -263,7 +300,7 @@ func FxSwordStrikeSpeedUpStop(pTarget, effect, iCause, iTemp)
 	if(iTemp) return;
 	if(!pTarget->GetAlive()) return;
 	
-	AddEffect("SwordStrikeSlow", pTarget, 1, 5, 0, Sword, effect.Time);
+	AddEffect("SwordStrikeSlow", pTarget, 1, 5, nil, Sword, effect.Time);
 }
 
 func FxSwordStrikeSlowStart(pTarget, effect, iTemp, iTime)
@@ -283,11 +320,15 @@ func FxSwordStrikeSlowStop(pTarget, effect, iCause, iTemp)
 	pTarget->PopActionSpeed("Walk");
 }
 
+public func IsWeapon() { return true; }
+public func IsArmoryProduct() { return true; }
+
 func Definition(def) {
-	SetProperty("Collectible", 1, def);
-	SetProperty("Name", "$Name$", def);
-	SetProperty("Description", "$Description$", def);
 	SetProperty("PictureTransformation",Trans_Rotate(20, 0, 0, 1),def);
 }
+
+local Name = "$Name$";
+local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
 local Rebuy = true;

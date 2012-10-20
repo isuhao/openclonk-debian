@@ -27,7 +27,6 @@
 
 #include "C4Network2.h"
 #include "C4Network2Stats.h"
-
 #include "C4Viewport.h"
 #include "C4GameOptions.h"
 #include <C4Game.h>
@@ -67,13 +66,15 @@ void C4Network2ClientDlg::UpdateText()
 		// get client (may be NULL for local info)
 		C4Network2Client *pNetClient = pClient->getNetClient();
 		// show some info
-		StdCopyStrBuf strActivated(LoadResStr(pClient->isActivated() ? "IDS_MSG_ACTIVE" : "IDS_MSG_INACTIVE"));
-		StdCopyStrBuf strLocal(LoadResStr(pClient->isLocal() ? "IDS_MSG_LOCAL" : "IDS_MSG_REMOTE"));
-		StdCopyStrBuf strHost(LoadResStr(pClient->isHost() ? "IDS_MSG_HOST" : "IDS_MSG_CLIENT"));
-		AddLineFmt(LoadResStr("IDS_NET_CLIENT_INFO_FORMAT"),
-		           strActivated.getData(), strLocal.getData(), strHost.getData(),
-		           pClient->getName(), iClientID,
-		           ::Network.isHost() && pNetClient && !pNetClient->isReady() ? " (!ack)" : "");
+		StdCopyStrBuf strInfo;
+		if (!pClient->isActivated()) { strInfo.Append(LoadResStr("IDS_MSG_INACTIVE")); strInfo.Append(" "); }
+		if (pClient->isLocal()) { strInfo.Append(LoadResStr("IDS_MSG_LOCAL")); strInfo.Append(" "); }
+		strInfo.AppendFormat("%s %s (ID #%d)%s",
+			LoadResStr(pClient->isHost() ? "IDS_MSG_HOST" : "IDS_MSG_CLIENT"),
+			pClient->getName(),
+			iClientID,
+			::Network.isHost() && pNetClient && !pNetClient->isReady() ? " (!ack)" : "");
+		AddLine(strInfo.getData());
 		// show addresses
 		int iCnt;
 		if ((iCnt=pNetClient->getAddrCnt()))
@@ -121,7 +122,7 @@ void C4Network2ClientDlg::UpdateText()
 // C4Network2ClientListBox::ClientListItem
 
 C4Network2ClientListBox::ClientListItem::ClientListItem(class C4Network2ClientListBox *pForDlg, int iClientID) // ctor
-		: ListItem(pForDlg, iClientID), pStatusIcon(NULL), pName(NULL), pPing(NULL), pActivateBtn(NULL), pKickBtn(NULL)
+		: ListItem(pForDlg, iClientID), pStatusIcon(NULL), pName(NULL), pPing(NULL), pActivateBtn(NULL), pKickBtn(NULL), last_sound_time(0)
 {
 	// get associated client
 	const C4Client *pClient = GetClient();
@@ -233,6 +234,21 @@ void C4Network2ClientListBox::ClientListItem::Update()
 			break;
 		}
 	}
+	// sound icon?
+	if (last_sound_time)
+	{
+		time_t dt = time(NULL) - last_sound_time;
+		if (dt >= SoundIconShowTime)
+		{
+			// stop showing sound icon
+			last_sound_time = 0;
+		}
+		else
+		{
+			// time not up yet: show sound icon
+			icoStatus = C4GUI::Ico_Sound;
+		}
+	}
 	// network OK - control ready?
 	if (!pForDlg->IsStartup() && (icoStatus == C4GUI::Ico_Ready))
 	{
@@ -249,6 +265,22 @@ void C4Network2ClientListBox::ClientListItem::Update()
 const C4Client *C4Network2ClientListBox::ClientListItem::GetClient() const
 {
 	return Game.Clients.getClientByID(iClientID);
+}
+
+C4Network2ClientListBox::ClientListItem *C4Network2ClientListBox::GetClientListItem(int32_t client_id)
+{
+	// find list item that is not the connection item
+	// search through listbox
+	for (C4GUI::Element *list_item = GetFirst(); list_item; list_item = list_item->GetNext())
+	{
+		// only playerlistitems in this box
+		ListItem *list_item2 = static_cast<ListItem *>(list_item);
+		if (list_item2->GetClientID() == client_id)
+			if (list_item2->GetConnectionID() == -1)
+				return static_cast<ClientListItem *>(list_item2);
+	}
+	// nothing found
+	return NULL;
 }
 
 void C4Network2ClientListBox::ClientListItem::OnButtonActivate(C4GUI::Control *pButton)
@@ -271,6 +303,14 @@ void C4Network2ClientListBox::ClientListItem::OnButtonKick(C4GUI::Control *pButt
 		::Network.Vote(VT_Kick, true, iClientID);
 	else
 		Game.Clients.CtrlRemove(GetClient(), LoadResStr(pForDlg->IsStartup() ? "IDS_MSG_KICKFROMSTARTUPDLG" : "IDS_MSG_KICKFROMCLIENTLIST"));
+}
+
+void C4Network2ClientListBox::ClientListItem::SetSoundIcon()
+{
+	// remember time for reset
+	last_sound_time = time(NULL);
+	// force icon
+	Update();
 }
 
 
@@ -451,6 +491,13 @@ void C4Network2ClientListBox::Update()
 	}
 }
 
+void C4Network2ClientListBox::SetClientSoundIcon(int32_t client_id)
+{
+	// sound icon on client element
+	ClientListItem *item = GetClientListItem(client_id);
+	if (item) item->SetSoundIcon();
+}
+
 
 // --------------------------------------------------
 // C4Network2ClientListDlg
@@ -501,6 +548,11 @@ bool C4Network2ClientListDlg::Toggle()
 	if (pInstance) { pInstance->Close(true); return true; }
 	// toggle on!
 	return ::pGUI->ShowRemoveDlg(pInstance = new C4Network2ClientListDlg());
+}
+
+void C4Network2ClientListDlg::OnSound(class C4Client *singer)
+{
+	if (singer) pListBox->SetClientSoundIcon(singer->getID());
 }
 
 
@@ -795,19 +847,19 @@ void C4Chart::DrawElement(C4TargetFacet &cgo)
 		int iYLegendDraw = (th - iSeriesCount*Q)/2 + ty;
 		while ((pSeries = pDisplayGraph->GetSeries(iSeries++)))
 		{
-			lpDDraw->TextOut(pSeries->GetTitle(), rFont, 1.0f, cgo.Surface, tx+tw, iYLegendDraw, pSeries->GetColorDw() | 0xff000000, ALeft, true);
+			pDraw->TextOut(pSeries->GetTitle(), rFont, 1.0f, cgo.Surface, tx+tw, iYLegendDraw, pSeries->GetColorDw() | 0xff000000, ALeft, true);
 			iYLegendDraw += Q;
 		}
 	}
 	// safety: too small?
 	if (tw < 10 || th < 10) return;
 	// draw axis
-	lpDDraw->DrawLineDw(cgo.Surface, tx, ty+th, tx+tw-1, ty+th, C4RGB(0x91, 0x91, 0x91));
-	lpDDraw->DrawLineDw(cgo.Surface, tx+tw-1, ty+th, tx+tw-1-AxisArrowLen, ty+th-AxisArrowThickness, C4RGB(0x91, 0x91, 0x91));
-	lpDDraw->DrawLineDw(cgo.Surface, tx+tw-1, ty+th, tx+tw-1-AxisArrowLen, ty+th+AxisArrowThickness, C4RGB(0x91, 0x91, 0x91));
-	lpDDraw->DrawLineDw(cgo.Surface, tx, ty, tx, ty+th, C4RGB(0x91, 0x91, 0x91));
-	lpDDraw->DrawLineDw(cgo.Surface, tx, ty, tx-AxisArrowThickness, ty+AxisArrowLen, C4RGB(0x91, 0x91, 0x91));
-	lpDDraw->DrawLineDw(cgo.Surface, tx, ty, tx+AxisArrowThickness, ty+AxisArrowLen, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx, ty+th, tx+tw-1, ty+th, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx+tw-1, ty+th, tx+tw-1-AxisArrowLen, ty+th-AxisArrowThickness, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx+tw-1, ty+th, tx+tw-1-AxisArrowLen, ty+th+AxisArrowThickness, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx, ty, tx, ty+th, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx, ty, tx-AxisArrowThickness, ty+AxisArrowLen, C4RGB(0x91, 0x91, 0x91));
+	pDraw->DrawLineDw(cgo.Surface, tx, ty, tx+AxisArrowThickness, ty+AxisArrowLen, C4RGB(0x91, 0x91, 0x91));
 	tw -= AxisArrowLen + AxisArrowIndent;
 	th -= AxisArrowLen + AxisArrowIndent; ty += AxisArrowLen + AxisArrowIndent;
 	// do axis numbering
@@ -819,17 +871,17 @@ void C4Chart::DrawElement(C4TargetFacet &cgo)
 	for (; iTime <= iMaxTime; iTime += iXAxisSteps)
 	{
 		iX = tx + tw * (iTime-iMinTime) / dt;
-		lpDDraw->DrawLineDw(cgo.Surface, iX, ty+th+1, iX, ty+th+AxisMarkerLen, C4RGB(0x91, 0x91, 0x91));
+		pDraw->DrawLineDw(cgo.Surface, iX, ty+th+1, iX, ty+th+AxisMarkerLen, C4RGB(0x91, 0x91, 0x91));
 		sbuf.Format("%d", (int) iTime);
-		lpDDraw->TextOut(sbuf.getData(), rFont, 1.0f, cgo.Surface, iX, ty+th+AxisMarkerLen, 0xff7f7f7f, ACenter, false);
+		pDraw->TextOut(sbuf.getData(), rFont, 1.0f, cgo.Surface, iX, ty+th+AxisMarkerLen, 0xff7f7f7f, ACenter, false);
 	}
 	iVal = int( ((iMinVal-(iMinVal>0))/iYAxisSteps+(iMinVal>0))*iYAxisSteps );
 	for (; iVal <= iMaxVal; iVal += iYAxisSteps)
 	{
 		iY = ty+th - int((iVal-iMinVal) / dv * th);
-		lpDDraw->DrawLineDw(cgo.Surface, tx-AxisMarkerLen, iY, tx-1, iY, C4RGB(0x91, 0x91, 0x91));
+		pDraw->DrawLineDw(cgo.Surface, tx-AxisMarkerLen, iY, tx-1, iY, C4RGB(0x91, 0x91, 0x91));
 		sbuf.Format("%d", (int) iVal);
-		lpDDraw->TextOut(sbuf.getData(), rFont, 1.0f, cgo.Surface, tx-AxisMarkerLen, iY-rFont.GetLineHeight()/2, 0xff7f7f7f, ARight, false);
+		pDraw->TextOut(sbuf.getData(), rFont, 1.0f, cgo.Surface, tx-AxisMarkerLen, iY-rFont.GetLineHeight()/2, 0xff7f7f7f, ARight, false);
 	}
 	// draw graph series(es)
 	int iSeries = 0;
@@ -843,7 +895,7 @@ void C4Chart::DrawElement(C4TargetFacet &cgo)
 			iTime = iMinTime + dt*iX/tw;
 			if (!Inside(iTime, iThisMinTime, iThisMaxTime)) continue;
 			int iY2 = int((-pSeries->GetValue(iTime) + iMinVal) * th / dv) + ty+th;
-			if (fAnyVal) lpDDraw->DrawLineDw(cgo.Surface, (float) (tx+iX-1), (float) iY, (float) (tx+iX), (float) iY2, pSeries->GetColorDw());
+			if (fAnyVal) pDraw->DrawLineDw(cgo.Surface, (float) (tx+iX-1), (float) iY, (float) (tx+iX), (float) iY2, pSeries->GetColorDw());
 			iY = iY2;
 			fAnyVal = true;
 		}

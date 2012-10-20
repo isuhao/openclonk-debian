@@ -66,7 +66,7 @@ global func PlayerControl(int plr, int ctrl, id spec_id, int x, int y, int stren
 				}
 				else if (release == true)
 				{
-					cursor->GetMenu()->Select(dx,dy,ctrl == CON_GUIClick2);
+					cursor->GetMenu()->~OnMouseClick(dx,dy,ctrl == CON_GUIClick2);
 					return false;
 				}
 			}		
@@ -204,7 +204,6 @@ global func Control2Effect(int plr, int ctrl, int x, int y, int strength, bool r
 	
 	// Count down from EffectCount, in case effects get deleted
 	var i = GetEffectCount("*Control*", this), iEffect;
-	var res;
 	while (i--)
 		{
 		iEffect = GetEffect("*Control*", this, i);
@@ -465,23 +464,42 @@ global func ObjectComLetGo(int vx, int vy)
 	return true;
 }
 
+/* Mouse Hovering */
 
-/* Drag & Drop */
-
-global func MouseDragDrop(int plr, object source, object target)
+// Engine callback when the mouse hovers over an object (entering) or stops hovering over an object (leaving).
+// Either leaving, entering or both are set. They can be nil, but never both at the same time.
+// dragged is an object being drag(&not dropped yet)
+global func MouseHover(int player, object leaving, object entering, object dragged)
 {
-	//Log("MouseDragDrop(%d, %v, %v)", plr, source, target);
-	var src_drag = source->~MouseDrag(plr);
-	if (!src_drag) return false;
-	if (target)
-	{
-		if (!target->~MouseDrop(plr, src_drag)) return false;
-	}
-	if (source) source->~MouseDragDone(src_drag, target);
+	// Leaving the hovering zone should be processed first.
+	if(leaving)
+		leaving->~OnMouseOut(player, dragged);
+	// Then process entering a new hovering zone. 
+	if(entering)
+		entering->~OnMouseOver(player, dragged);
 	return true;
 }
 
+/* Drag & Drop */
 
+// Engine callback on drag&drop: gives the player, the dragged obect and the object which is being dropped(can be nil).
+global func MouseDragDrop(int plr, object source, object target)
+{
+	//Log("MouseDragDrop(%d, %s, %s)", plr, source->GetName(), target->GetName());
+	var src_drag = source->~OnMouseDrag(plr);
+	if (!src_drag) 
+		return false;
+	
+	// If there is drop target, check whether it accepts the drop.
+	if (target)
+		if (!target->~OnMouseDrop(plr, src_drag))
+			return false;
+
+	// Notify the drop object it succeeded.
+	if (source)
+		source->~OnMouseDragDone(src_drag, target);
+	return true;
+}
 
 /* Debug */
 

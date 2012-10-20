@@ -1,2 +1,3 @@
 Name=Axe
-Description=Press [Use] to chop down a tree.
+Description=Tool of a woodcutter.
+UsageHelp=Use to chop down a tree.
