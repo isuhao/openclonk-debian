@@ -1,0 +1,2 @@
+version=3
+http://hg.openclonk.org/openclonk/archive/ openclonk-release-([\d\.]+)-src.tar.gz
