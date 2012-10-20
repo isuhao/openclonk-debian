@@ -8,9 +8,12 @@ protected func Construction()
 
 protected func Hit()
 {
-	Sound("MetalHit*");
+	Sound("GeneralHit?");
 	return 1;
 }
+
+public func IsFoundryProduct() { return true; }
+public func GetFuelNeed() { return 100; }
 
 local Name = "$Name$";
 local Description = "$Description$";

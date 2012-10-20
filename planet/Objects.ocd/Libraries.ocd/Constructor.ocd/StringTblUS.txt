@@ -1,0 +1,6 @@
+TxtConstructions=Construction: %s
+TxtBlocked=Construction blocked by %s
+TxtNoSiteHere=Can't create the construction site here!
+TxtNeeds=Construction needs 
+Name=Hammer
+Description=Press [Use] to construct a building.

@@ -1,4 +1,4 @@
 repo: 12d107aa8a32eae40261ade63fea2aa2125db677
-node: 14ab9fe1345a0752f7a1a834358dba66cc8f24b3
-branch: stable-5.2
-tag: release-5.2.2
+node: 650764f7ebaa9e271248e23312f59715c102fde6
+branch: default
+tag: release-5.3.1

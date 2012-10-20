@@ -23,11 +23,9 @@
  */
 
 #include <C4Include.h>
-#include <utility>
-
 #include <C4Network2.h>
-#include <C4Version.h>
 
+#include <C4Version.h>
 #include <C4Log.h>
 #include <C4Application.h>
 #include <C4Console.h>
@@ -369,7 +367,7 @@ bool C4Network2::DoLobby()
 		ChangeGameStatus(GS_Lobby, 0);
 
 	// determine lobby type
-	bool fFullscreenLobby = !Console.Active && (lpDDraw->GetEngine() != GFXENGN_NOGFX);
+	bool fFullscreenLobby = !Console.Active && (pDraw->GetEngine() != GFXENGN_NOGFX);
 
 	if (!fFullscreenLobby)
 	{
@@ -672,6 +670,7 @@ void C4Network2::Clear()
 	delete pVoteDialog; pVoteDialog = NULL;
 	fPausedForVote = false;
 	iLastOwnVoting = 0;
+	Votes.Clear();
 	// don't clear fPasswordNeeded here, it's needed by InitClient
 }
 
@@ -1022,7 +1021,7 @@ void C4Network2::DrawStatus(C4TargetFacet &cgo)
 		Stat.Append("| - none -");
 
 	// draw
-	lpDDraw->TextOut(Stat.getData(), ::GraphicsResource.FontRegular, 1.0, cgo.Surface,cgo.X + 20,cgo.Y + 50);
+	pDraw->TextOut(Stat.getData(), ::GraphicsResource.FontRegular, 1.0, cgo.Surface,cgo.X + 20,cgo.Y + 50);
 }
 
 bool C4Network2::InitNetIO(bool fNoClientID, bool fHost)
@@ -2528,7 +2527,7 @@ void C4Network2::Vote(C4ControlVoteType eType, bool fApprove, int32_t iData)
 		if (time(NULL) < (time_t) (iLastOwnVoting + C4NetMinVotingInterval))
 		{
 			Log(LoadResStr("IDS_TEXT_YOUCANONLYSTARTONEVOTINGE"));
-			if (eType == VT_Kick || eType == VT_Cancel)
+			if ((eType == VT_Kick && iData == Game.Clients.getLocalID()) || eType == VT_Cancel)
 				OpenSurrenderDialog(eType, iData);
 			return;
 		}
@@ -2601,7 +2600,8 @@ void C4Network2::EndVote(C4ControlVoteType eType, bool fApprove, int32_t iData)
 			pVoteDialog = NULL;
 		}
 	// Did we try to kick ourself? Ask if we'd like to surrender
-	if (!fApprove && (eType == VT_Kick || eType == VT_Cancel) && iOrigin == Game.Clients.getLocalID())
+	bool fCancelVote = (eType == VT_Kick && iData == Game.Clients.getLocalID()) || eType == VT_Cancel;
+	if (!fApprove && fCancelVote && iOrigin == Game.Clients.getLocalID())
 		OpenSurrenderDialog(eType, iData);
 	// Check if the dialog should be opened
 	OpenVoteDialog();

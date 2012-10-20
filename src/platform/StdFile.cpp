@@ -544,18 +544,13 @@ bool EraseFile(const char *szFilename)
 #endif
 }
 
-bool EraseFiles(const char *szFilePath)
-{
-	return ForEachFile(szFilePath,&EraseFile) > 0;
-}
-
 #ifndef _WIN32
 bool CopyFile(const char *szSource, const char *szTarget, bool FailIfExists)
 {
-	int fds = open (szSource, O_RDONLY);
+	int fds = open (szSource, O_RDONLY | O_CLOEXEC);
 	if (!fds) return false;
 	struct stat info; fstat(fds, &info);
-	int fdt = open (szTarget, O_WRONLY | O_CREAT | (FailIfExists? O_EXCL : O_TRUNC), info.st_mode);
+	int fdt = open (szTarget, O_CLOEXEC | O_WRONLY | O_CREAT | (FailIfExists? O_EXCL : O_TRUNC), info.st_mode);
 	if (!fdt)
 	{
 		close (fds);
@@ -868,12 +863,7 @@ bool CreateItem(const char *szItemname)
 	// Success
 	return true;
 }
-#ifdef _WIN32
-bool EraseItems(const char *szItemPath)
-{
-	return ForEachFile(szItemPath,&EraseItem) > 0;
-}
-#endif
+
 bool CopyItem(const char *szSource, const char *szTarget, bool fResetAttributes)
 {
 	// Check for identical source and target

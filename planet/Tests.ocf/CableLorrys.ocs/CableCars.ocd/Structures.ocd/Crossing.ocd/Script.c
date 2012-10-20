@@ -11,7 +11,7 @@ local rotation = 0;
 protected func Initialize()
 {
 	  SetAction("Wait");
-	  SetGraphics(0, GetID(), 1, GFXOV_MODE_Base);
+	  SetGraphics(nil, GetID(), 1, GFXOV_MODE_Base);
 	  return _inherited(...);
 }
 
@@ -76,3 +76,4 @@ local ActMap = {
 };
 
 local Name = "$Name$";
+local BlastIncinerate = 50;

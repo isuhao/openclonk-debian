@@ -2,7 +2,7 @@
 
 protected func Hit()
 {
-	Sound("CrystalHit*");
+	Sound("CrystalHit?");
 }
 
 protected func Construction()
@@ -10,6 +10,7 @@ protected func Construction()
 	var graphic = Random(5);
 	if(graphic)
 		SetGraphics(Format("%d",graphic));
+	AddTimer("Check", 30);
 }
 
 protected func Check()

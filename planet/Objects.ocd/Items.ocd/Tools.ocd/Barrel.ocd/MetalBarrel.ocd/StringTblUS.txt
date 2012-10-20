@@ -1,2 +1,2 @@
-Name=Wooden Barrel
-Description=You can transport liquids in a wooden barrel.
+Name=Metal Barrel
+Description=Solid container for transporting hazardous liquids like acid.

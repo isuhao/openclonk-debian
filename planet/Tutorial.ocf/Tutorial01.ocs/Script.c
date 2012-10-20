@@ -101,40 +101,40 @@ global func FxTutorialIntro3Stop()
 
 global func FxTutorialScaleTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(650, 990, 140, 90)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(650, 990, 140, 90)))
 	{
 		while (GetEffect("TutorialIntro*"))
 			RemoveEffect("TutorialIntro*");
 		guide->ClearGuideMessage();
 		guide->AddGuideMessage("$MsgTutScale$");
-		AddEffect("TutorialHangle", 0, 100, 18);
+		AddEffect("TutorialHangle", nil, 100, 18);
 		return -1;
 	}
 }
 
 global func FxTutorialHangleTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(820, 940, 190, 140)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(820, 940, 190, 140)))
 	{
 		guide->AddGuideMessage("$MsgTutHangle$");
-		AddEffect("TutorialSwim", 0, 100, 18);
+		AddEffect("TutorialSwim", nil, 100, 18);
 		return -1;
 	}
 }
 
 global func FxTutorialSwimTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(1120, 1030, 140, 60)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1120, 1030, 140, 60)))
 	{
 		guide->AddGuideMessage("$MsgTutSwim$");
-		AddEffect("TutorialDig", 0, 100, 18);
+		AddEffect("TutorialDig", nil, 100, 18);
 		return -1;
 	}
 }
 
 global func FxTutorialDigTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(1530, 1040, 130, 60)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1530, 1040, 130, 60)))
 	{
 		return -1;
 	}
@@ -149,19 +149,20 @@ global func FxTutorialDigStop()
 
 global func FxShovelGetTimer(object target, effect, int timer)
 {
-	if(target->Contained() != nil)
+	if (target->Contained() != nil)
 	{
 		if (GetEffect("TutorialDig"))
 			RemoveEffect("TutorialDig");
 		guide->AddGuideMessage("$MsgTutTools$");
-		AddEffect("TutorialChest", 0, 100, 18);
+		AddEffect("TutorialChest", nil, 100, 18);
+		AddEffect("TutorialFlint", nil, 100, 18);
 		return -1;
 	}
 }
 
 global func FxTutorialChestTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(1750, 1030, 130, 80)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1750, 1030, 130, 80)))
 	{
 		guide->AddGuideMessage("$MsgTutChest$");
 		return -1;
@@ -170,18 +171,18 @@ global func FxTutorialChestTimer(object target, effect, int timer)
 
 global func FxLoamGetTimer(object target, effect, int timer)
 {
-	if(target->Contained()->GetID() != Chest)
+	if (!target->Contained() || target->Contained()->GetID() != Chest)
 	{
 		guide->AddGuideMessage("$MsgTutLoam$");
 		RemoveEffect("TutorialChest");
-		AddEffect("TutorialFlint", 0, 100, 18);
+		AddEffect("TutorialFlint", nil, 100, 18);
 		return -1;
 	}
 }
 
 global func FxTutorialFlintTimer(object target, effect, int timer)
 {
-	if(FindObject(Find_ID(Clonk), Find_InRect(1990, 1020, 130, 90)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1990, 1020, 130, 90)))
 	{
 		guide->AddGuideMessage("$MsgTutFlint$");
 		return -1;
@@ -211,8 +212,8 @@ protected func OnGuideMessageShown(int plr, int index)
 	// Show inventory slots.
 	if (index == 9)
 	{
-		TutArrowShowGUIPos(248 + GUI_ObjectSelector->GetDefHeight() / 2, -16 - GUI_ObjectSelector->GetDefHeight() / 2, 180, 60);
-		TutArrowShowGUIPos(341 + GUI_ObjectSelector->GetDefHeight() / 2, -16 - GUI_ObjectSelector->GetDefHeight() / 2, 180, 60);
+		TutArrowShowGUIPos(78 - GUI_ObjectSelector->GetDefHeight() / 2, 153 + GUI_ObjectSelector->GetDefHeight() / 2, 270, 60);
+		TutArrowShowGUIPos(78 - GUI_ObjectSelector->GetDefHeight() / 2, 225 + GUI_ObjectSelector->GetDefHeight() / 2, 270, 60);
 	}
 	return;
 }
@@ -228,13 +229,13 @@ protected func OnGuideMessageRemoved(int plr, int index)
 global func FxClonkRestoreTimer(object target, effect, int time)
 {
 	// Respawn to new location if reached bow & arrow chest.
-	if(FindObject(Find_ID(Clonk), Find_InRect(1120, 1030, 140, 60)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1120, 1030, 140, 60)))
 	{
 		effect.var1 = 1240;
 		effect.var2 = 1070;		
 	}
 	// Respawn to new location if reached brick climb.
-	if(FindObject(Find_ID(Clonk), Find_InRect(1990, 1020, 130, 90)))
+	if (FindObject(Find_ID(Clonk), Find_InRect(1990, 1020, 130, 90)))
 	{
 		effect.var1 = 2010;
 		effect.var2 = 1020;		

@@ -25,8 +25,8 @@
 
 #include <C4Include.h>
 #include <C4Log.h>
-#include <C4AulDebug.h>
 
+#include <C4AulDebug.h>
 #include <C4Console.h>
 #include <C4GameLobby.h>
 #include <C4Game.h>
@@ -36,7 +36,7 @@
 #include <C4GraphicsSystem.h>
 #include <C4Config.h>
 #include <C4Components.h>
-#include <StdWindow.h>
+#include <C4Window.h>
 
 #ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>
@@ -113,7 +113,7 @@ bool LogSilent(const char *szMessage, bool fConsole)
 		char *pDest = TimeMessage.getMData() + 11;
 
 		// copy rest of message, skip tags
-		CMarkup Markup(false);
+		C4Markup Markup(false);
 		while (*pSrc)
 		{
 			Markup.SkipTags(&pSrc);

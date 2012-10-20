@@ -1,6 +1,6 @@
 /*
 	Pickaxe
-	Author: Ringwaul
+	Author: Randrian/Ringwaul
 
 	A useful but tedious tool for breaking through rock without
 	explosives.
@@ -30,9 +30,9 @@ protected func Initialize()
 	swingtime=0;
 }
 
-private func Hit()
+private func Hit(x, y)
 {
-	Sound("RockHit");
+	StonyObjectHit(x, y);
 	return 1;
 }
 
@@ -88,21 +88,29 @@ protected func DoSwing(object clonk, int ix, int iy)
 	{
 		++iDist;
 	}
-
-	var x = Sin(180-angle,iDist-8);
-	var y = Cos(180-angle,iDist-8);
+		
 	var x2 = Sin(180-angle,iDist);
 	var y2 = Cos(180-angle,iDist);
+	var is_solid = GBackSolid(x2,y2);
+	
+	// alternatively hit certain objects
+	var target_obj = FindObject(Find_AtPoint(x2, y2), Find_Func("CanBeHitByPickaxe"));
+	
+	// notify the object that it has been hit
+	if(target_obj)
+		target_obj->~OnHitByPickaxe(this, clonk);
 
-	if(GBackSolid(x2,y2))
+	BlastFree(GetX()+x2,GetY()+y2,5,GetController());
+		
+	// special effects only ifhit something
+	if(is_solid || target_obj)
 	{
-//		Message("Hit %s", MaterialName(GetMaterial(x2,y2))); //for debug
 
 		var mat = GetMaterial(x2,y2);
 		var tex = GetTexture(x2,y2);
 		
-		// special effects
-		if(GetMaterialVal("DigFree","Material",mat))
+
+		if(is_solid && GetMaterialVal("DigFree","Material",mat))
 		{
 			var clr = GetAverageTextureColor(tex);
 			var a = 80;
@@ -111,12 +119,10 @@ protected func DoSwing(object clonk, int ix, int iy)
 		else
 		{
 			CastParticles("Spark",RandomX(3,9),35,x2*9/10,y2*9/10,10,30,RGB(255,255,150),RGB(255,255,200));
-			Sound("Clang*");
-		}
-
-		// dig out resources too! Don't just remove landscape pixels
-		BlastFree(GetX()+x2,GetY()+y2,5,GetController());
+			Sound("Clang?");
+		}			
 	}
+
 }
 
 func FxIntPickaxeTimer(clonk, effect, time)
@@ -143,7 +149,7 @@ func FxIntPickaxeTimer(clonk, effect, time)
 
 protected func ControlUseCancel(object clonk, int ix, int iy)
 {
-  Reset(clonk);
+	Reset(clonk);
 	return true;
 }
 
@@ -163,4 +169,5 @@ public func IsToolProduct() { return true; }
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Rebuy = true;

@@ -27,6 +27,7 @@
 #include "C4ObjectList.h"
 #include "C4Control.h"
 #include "C4Rect.h"
+#include <vector>
 
 #ifdef WITH_DEVELOPER_MODE
 #include <gtk/gtk.h>
@@ -39,22 +40,30 @@ public:
 	~C4EditCursor();
 protected:
 	bool fAltWasDown;
+	bool fShiftWasDown;
 	int32_t Mode;
 	float X,Y,X2,Y2;
 	bool Hold,DragFrame,DragLine;
 	C4Object *Target,*DropTarget;
-#ifdef _WIN32
+	struct ObjselItemDt {
+		C4EditCursor* EditCursor;
+		C4Object* Object;
+#if defined(USE_WIN32_WINDOWS)
+		UINT_PTR ItemId;
+#elif defined(WITH_DEVELOPER_MODE)
+		GtkWidget* MenuItem;
+#endif
+	};
+	std::vector<ObjselItemDt> itemsObjselect;
+#ifdef USE_WIN32_WINDOWS
 	HMENU hMenu;
-#else
-#ifdef WITH_DEVELOPER_MODE
+#elif defined(WITH_DEVELOPER_MODE)
 	GtkWidget* menuContext;
-
 	GtkWidget* itemDelete;
 	GtkWidget* itemDuplicate;
 	GtkWidget* itemGrabContents;
 	GtkWidget* itemProperties;
 #endif
-#endif // _WIN32
 	C4ObjectList Selection;
 public:
 	void Default();
@@ -71,11 +80,13 @@ public:
 	bool OpenPropTools();
 	bool Delete();
 	void GrabContents();
-	bool LeftButtonUp();
-	bool LeftButtonDown(bool fControl);
-	bool RightButtonUp();
-	bool RightButtonDown(bool fControl);
-	bool Move(float iX, float iY, WORD wKeyFlags);
+	bool LeftButtonUp(DWORD dwKeyState);
+	bool LeftButtonDown(DWORD dwKeyState);
+	bool RightButtonUp(DWORD dwKeyState);
+	bool RightButtonDown(DWORD dwKeyState);
+	bool KeyDown(C4KeyCode KeyCode, DWORD dwKeyState);
+	bool KeyUp(C4KeyCode KeyCode, DWORD dwKeyState);
+	bool Move(float iX, float iY, DWORD dwKeyState);
 	bool Init();
 	bool EditingOK();
 	C4ObjectList &GetSelection() { return Selection; }
@@ -88,8 +99,8 @@ protected:
 	void ApplyToolPicker();
 	void ToolFailure();
 	void PutContents();
-	void UpdateDropTarget(WORD wKeyFlags);
-	bool DoContextMenu();
+	void UpdateDropTarget(DWORD dwKeyState);
+	bool DoContextMenu(DWORD dwKeyState);
 	void ApplyToolFill();
 	void ApplyToolRect();
 	void ApplyToolLine();
@@ -99,11 +110,14 @@ protected:
 	void MoveSelection(C4Real iXOff, C4Real iYOff);
 	void EMMoveObject(enum C4ControlEMObjectAction eAction, C4Real tx, C4Real ty, C4Object *pTargetObj, const C4ObjectList *pObjs = NULL, const char *szScript = NULL);
 	void EMControl(enum C4PacketType eCtrlType, class C4ControlPacket *pCtrl);
+	void DoContextObjsel(C4Object *, bool clear);
+	void ObjselectDelItems();
 
 #ifdef WITH_DEVELOPER_MODE
 	static void OnDelete(GtkWidget* widget, gpointer data);
 	static void OnDuplicate(GtkWidget* widget, gpointer data);
 	static void OnGrabContents(GtkWidget* widget, gpointer data);
+	static void OnObjselect(GtkWidget* widget, gpointer data);
 #endif
 };
 

@@ -22,15 +22,14 @@ protected func InitializePlayer(int plr)
 	var clonk = GetCrew(plr);
 	clonk->CreateContents(Shovel);
 	var lorry = CreateObject(Lorry, clonk->GetX(), clonk->GetY(), plr);
-	lorry->CreateContents(CableReel, 4);
 	lorry->CreateContents(Pipe, 2);
 	return;
 }
 
 private func DoEnvironment()
 {
-	CreateObject(Environment_Clouds);
+	Cloud->Place(30);
 	CreateObject(Environment_Celestial);
 	CreateObject(Environment_Time);
-	Sound("BirdsLoop.ogg",true,100,nil,+1);
+	Sound("BirdsLoop",true,100,nil,+1);
 }

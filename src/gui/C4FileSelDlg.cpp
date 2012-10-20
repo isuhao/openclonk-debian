@@ -25,7 +25,7 @@
 
 #include <C4GraphicsResource.h> // only for single use of ::GraphicsResource.fctOKCancel below...
 #include <C4Version.h>
-#include <StdDDraw2.h>
+#include <C4Draw.h>
 
 #ifdef _WIN32
 #ifndef _WIN32_IE
@@ -515,7 +515,7 @@ void C4PortraitSelDlg::ListItem::DrawElement(C4TargetFacet &cgo)
 		if (!fctImage.Surface)
 		{
 			// not loaded yet
-			lpDDraw->TextOut(LoadResStr("IDS_PRC_INITIALIZE"), ::GraphicsResource.MiniFont, 1.0f, cgo.Surface, cgoPicture.X+cgoPicture.Wdt/2, cgoPicture.Y+(cgoPicture.Hgt-::GraphicsResource.MiniFont.GetLineHeight())/2, C4GUI_StatusFontClr, ACenter, false);
+			pDraw->TextOut(LoadResStr("IDS_PRC_INITIALIZE"), ::GraphicsResource.MiniFont, 1.0f, cgo.Surface, cgoPicture.X+cgoPicture.Wdt/2, cgoPicture.Y+(cgoPicture.Hgt-::GraphicsResource.MiniFont.GetLineHeight())/2, C4GUI_StatusFontClr, ACenter, false);
 		}
 		else
 		{
@@ -523,7 +523,7 @@ void C4PortraitSelDlg::ListItem::DrawElement(C4TargetFacet &cgo)
 		}
 	}
 	// draw filename
-	lpDDraw->TextOut(sFilenameLabelText.getData(), *pUseFont, 1.0f, cgo.Surface, cgoPicture.X+rcBounds.Wdt/2, cgoPicture.Y+cgoPicture.Hgt, C4GUI_MessageFontClr, ACenter, false);
+	pDraw->TextOut(sFilenameLabelText.getData(), *pUseFont, 1.0f, cgo.Surface, cgoPicture.X+rcBounds.Wdt/2, cgoPicture.Y+cgoPicture.Hgt, C4GUI_MessageFontClr, ACenter, false);
 }
 
 
@@ -564,7 +564,7 @@ void C4PortraitSelDlg::LoaderThread::Execute()
 // C4PortraitSelDlg
 
 C4PortraitSelDlg::C4PortraitSelDlg(C4FileSel_BaseCB *pSelCallback)
-		: C4FileSelDlg(Config.General.ExePath.getData(), FormatString(LoadResStr("IDS_MSG_SELECT"), LoadResStr("IDS_TYPE_PORTRAIT")).getData(), pSelCallback, false)
+		: C4FileSelDlg(Config.General.SystemDataPath, FormatString(LoadResStr("IDS_MSG_SELECT"), LoadResStr("IDS_TYPE_PORTRAIT")).getData(), pSelCallback, false)
 {
 	char path[_MAX_PATH+1];
 	// add common picture locations
@@ -574,7 +574,7 @@ C4PortraitSelDlg::C4PortraitSelDlg(C4FileSel_BaseCB *pSelCallback)
 	AddLocation(strLocation.getData(), path);
 	SCopy(Config.General.SystemDataPath, path, _MAX_PATH); TruncateBackslash(path);
 	strLocation.Format("%s %s", C4ENGINECAPTION, LoadResStr("IDS_TEXT_PROGRAMDIRECTORY"));
-	AddCheckedLocation(strLocation.getData(), Config.General.ExePath.getData());
+	AddCheckedLocation(strLocation.getData(), path);
 #ifdef _WIN32
 	wchar_t wpath[MAX_PATH+1];
 	if (SHGetSpecialFolderPathW(NULL, wpath, CSIDL_PERSONAL, false)) AddCheckedLocation(LoadResStr("IDS_TEXT_MYDOCUMENTS"), StdStrBuf(wpath).getData());

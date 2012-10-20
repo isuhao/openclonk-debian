@@ -156,7 +156,7 @@ bool C4MapFolderData::Load(C4Group &hGroup, C4ScenarioListLoader::Folder *pScenL
 			C4FacetSurface fctDump; bool fSuccess=false;
 			if (fctDump.Create(pScen->rcOverlayPos.Wdt, pScen->rcOverlayPos.Hgt, C4FCT_Full, C4FCT_Full))
 			{
-				lpDDraw->Blit(fctBackgroundPicture.Surface,
+				pDraw->Blit(fctBackgroundPicture.Surface,
 				              (float) pScen->rcOverlayPos.x, (float) pScen->rcOverlayPos.y,
 				              (float) pScen->rcOverlayPos.Wdt, (float) pScen->rcOverlayPos.Hgt,
 				              fctDump.Surface,
@@ -939,7 +939,11 @@ bool C4ScenarioListLoader::SubFolder::LoadCustom(C4Group &rGrp, bool fNameLoaded
 {
 	// default icon fallback
 	if (!fIconLoaded)
-		fctIcon.Set(C4Startup::Get()->Graphics.fctScenSelIcons.GetSection(C4StartupScenSel_DefaultIcon_Folder));
+	{
+		if(WildcardMatch(C4CFN_Savegames, GetFilename(sFilename.getData()))) iIconIndex = C4StartupScenSel_DefaultIcon_SavegamesFolder;
+		else iIconIndex = C4StartupScenSel_DefaultIcon_Folder;
+		fctIcon.Set(C4Startup::Get()->Graphics.fctScenSelIcons.GetSection(iIconIndex));	
+	}
 	// folder index
 	iFolderIndex = C4F.Head.Index;
 	return true;
@@ -1169,7 +1173,7 @@ bool C4ScenarioListLoader::Load(const StdStrBuf &sRootFolder)
 	// Load regular game data if no explicit path specified
 	if(!sRootFolder.getData())
 		for(C4Reloc::iterator iter = Reloc.begin(); iter != Reloc.end(); ++iter)
-			pRootFolder->Merge(iter->getData());
+			pRootFolder->Merge(iter->strBuf.getData());
 	bool fSuccess = pRootFolder->LoadContents(this, NULL, &sRootFolder, false, false);
 	EndActivity();
 	return fSuccess;
@@ -1373,7 +1377,21 @@ C4StartupScenSelDlg::C4StartupScenSelDlg(bool fNetwork) : C4StartupDlg(LoadResSt
 	pSheetBook->AddElement(pScenSelProgressLabel);
 
 	// right side of book: Displaying current selection
-	pSelectionInfo = new C4GUI::TextWindow(caBook.GetFromRight(iBookPageWidth), C4StartupScenSel_TitlePictureWdt+2*C4StartupScenSel_TitleOverlayMargin, C4StartupScenSel_TitlePictureHgt+2*C4StartupScenSel_TitleOverlayMargin,
+	C4Rect bounds = caBook.GetFromRight(iBookPageWidth);
+	const int32_t AvailWidth = bounds.Wdt;
+	const int32_t AvailHeight = 2 * bounds.Hgt / 5;
+	int32_t PictureWidth, PictureHeight;
+	if(AvailWidth * C4StartupScenSel_TitlePictureHgt < AvailHeight * C4StartupScenSel_TitlePictureWdt)
+	{
+		PictureWidth = C4StartupScenSel_TitlePictureWdt * AvailWidth / C4StartupScenSel_TitlePictureWdt;
+		PictureHeight = C4StartupScenSel_TitlePictureHgt * AvailWidth / C4StartupScenSel_TitlePictureWdt;
+	}
+	else
+	{
+		PictureWidth = C4StartupScenSel_TitlePictureWdt * AvailHeight / C4StartupScenSel_TitlePictureHgt;
+		PictureHeight = C4StartupScenSel_TitlePictureHgt * AvailHeight / C4StartupScenSel_TitlePictureHgt;
+	}
+	pSelectionInfo = new C4GUI::TextWindow(bounds, PictureWidth+2*C4StartupScenSel_TitleOverlayMargin, PictureHeight+2*C4StartupScenSel_TitleOverlayMargin,
 	                                       C4StartupScenSel_TitlePicturePadding, 100, 4096, NULL, true, &C4Startup::Get()->Graphics.fctScenSelTitleOverlay, C4StartupScenSel_TitleOverlayMargin);
 	pSelectionInfo->SetDecoration(false, false, &C4Startup::Get()->Graphics.sfctBookScroll, true);
 	pSheetBook->AddElement(pSelectionInfo);

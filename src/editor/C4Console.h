@@ -30,7 +30,7 @@
 #include "C4ObjectListDlg.h"
 #include "C4EditCursor.h"
 
-#include <StdWindow.h>
+#include <C4Window.h>
 
 const int C4CNS_ModePlay = 0,
           C4CNS_ModeEdit = 1,
@@ -43,13 +43,6 @@ const int C4CNS_ModePlay = 0,
 #define IDM_VIEWPORT_NEW1 10400
 #define IDM_VIEWPORT_NEW2 10500
 
-#ifdef WITH_DEVELOPER_MODE
-#include <StdGtkWindow.h>
-typedef CStdGtkWindow C4ConsoleBase;
-#else
-typedef CStdWindow C4ConsoleBase;
-#endif
-
 class C4Console: public C4ConsoleGUI
 {
 public:
@@ -58,8 +51,8 @@ public:
 	void Default();
 	virtual void Clear();
 	virtual void Close();
-	using C4ConsoleBase::Init;
-	virtual CStdWindow * Init(CStdApp * app);
+	using C4Window::Init;
+	virtual C4Window * Init(C4AbstractApp * app);
 	void Execute();
 	void ClearPointers(C4Object *pObj);
 	bool Message(const char *szMessage, bool fQuery=false);
@@ -99,15 +92,9 @@ public:
 	C4ObjectListDlg ObjectListDlg;
 	C4EditCursor    EditCursor;
 
-	int ScriptCounter;
 	int FrameCounter;
 	int Time,FPS;
-#if defined(USE_X11) && !defined(WITH_DEVELOPER_MODE)
-	virtual void HandleMessage (XEvent &);
-#endif
 };
-
-#define C4ConsoleWindowClassname "C4Console"
 
 extern C4Console      Console;
 

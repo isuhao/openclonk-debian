@@ -1,6 +1,6 @@
 /*-- Lorry --*/
 
-#include Library_ItemContainer
+#include Library_ElevatorControl
 
 local content_menu;
 
@@ -10,9 +10,10 @@ protected func Construction()
 	SetProperty("MeshTransformation",Trans_Rotate(13,0,1,0));
 }
 
-public func IsLorry() { return 1; }
-
-public func IsToolProduct() { return 1; }
+public func IsLorry() { return true; }
+public func IsVehicle() { return true; }
+public func IsContainer() { return true; }
+public func IsToolProduct() { return true; }
 
 local drive_anim;
 local tremble_anim;
@@ -24,6 +25,7 @@ protected func Initialize()
 
 	iRotWheels = 0;
 	iTremble = 0;
+	AddTimer("TurnWheels", 1);
 }
 
 /*-- Movement --*/
@@ -47,20 +49,30 @@ private func MaxContentsCount()
 	return 50;
 }
 
-private func MenuOnInteraction() { return false; }
-private func MenuOnControlUse() { return true; }
-private func MenuOnControlUseAlt() { return false; }
-
 protected func RejectCollect(id object_id, object obj)
 {
+	// objects can still be collected
 	if (ContentsCount() < MaxContentsCount())
 	{
 		Sound("Clonk");
 		return false;
 	}
+	
+	// the object cannot be collected, notify carrier?
 	if (obj->Contained())
-		return Message("$TxtLorryisfull$");
-	return _inherited(...);
+		Message("$TxtLorryisfull$");
+	else
+	{
+		// if not carried, objects slide over the lorry
+		if(Abs(obj->GetXDir()) > 5)
+		{
+			obj->SetYDir(-2);
+			obj->SetRDir(0);
+			Sound("SoftHit*");
+		}
+	}
+	// reject collection
+	return true;
 }
 
 // Automatic unloading in buildings.

@@ -1,5 +1,5 @@
 [DefCore]
-id=Lorry
+id=CableLorry
 Version=5,2,0,1
 Category=C4D_Vehicle
 ContactCalls=1
@@ -18,9 +18,4 @@ Collection=-12,-8,24,10
 GrabPutGet=C4D_GrabGet|C4D_GrabPut
 Rotate=30
 UprightAttach=0
-TimerCall=TurnWheels
-Timer=1
 BorderBound=1
-
-[Physicals]
-Float=200

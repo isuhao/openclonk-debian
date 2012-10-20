@@ -22,126 +22,10 @@
 #ifndef INC_StdMesh
 #define INC_StdMesh
 
+#include <StdMeshMath.h>
 #include <StdMeshMaterial.h>
 
 class StdCompiler;
-
-// OGRE mesh
-
-struct StdMeshVector
-{
-	float x, y, z;
-
-	static StdMeshVector Zero();
-	static StdMeshVector UnitScale();
-	static StdMeshVector Translate(float dx, float dy, float dz);
-	static StdMeshVector Cross(const StdMeshVector& lhs, const StdMeshVector& rhs);
-};
-
-struct StdMeshVertex
-{
-	// Match GL_T2F_N3F_V3F
-	float u, v;
-	float nx, ny, nz;
-	float x, y, z;
-
-	//void Normalize();
-};
-
-struct StdMeshQuaternion
-{
-	float w;
-	// union
-	// {
-	//   struct { float x, y, z; };
-	//   StdMeshVector v;
-	// };
-	float x, y, z;
-
-	static StdMeshQuaternion Zero();
-	static StdMeshQuaternion AngleAxis(float theta, const StdMeshVector& axis);
-
-	float LenSqr() const { return w*w+x*x+y*y+z*z; }
-	void Normalize();
-
-	static StdMeshQuaternion Nlerp(const StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs, float w);
-	//static StdMeshQuaternion Slerp(const StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs, float w);
-};
-
-struct StdMeshTransformation
-{
-	StdMeshVector scale;
-	StdMeshQuaternion rotate;
-	StdMeshVector translate;
-
-	static StdMeshTransformation Zero();
-	static StdMeshTransformation Identity();
-	static StdMeshTransformation Inverse(const StdMeshTransformation& transform);
-	static StdMeshTransformation Translate(float dx, float dy, float dz);
-	static StdMeshTransformation Scale(float sx, float sy, float sz);
-	static StdMeshTransformation Rotate(float angle, float rx, float ry, float rz);
-
-	// TODO: Might add path parameter if necessary
-	static StdMeshTransformation Nlerp(const StdMeshTransformation& lhs, const StdMeshTransformation& rhs, float w);
-	//static  StdMeshQuaternion Slerp(const StdMeshTransformation& lhs, const StdMeshTransformation& rhs, float w);
-};
-
-class StdMeshMatrix
-{
-public:
-	static StdMeshMatrix Zero();
-	static StdMeshMatrix Identity();
-	static StdMeshMatrix Inverse(const StdMeshMatrix& mat);
-	static StdMeshMatrix Translate(float dx, float dy, float dz);
-	static StdMeshMatrix Scale(float sx, float sy, float sz);
-	static StdMeshMatrix Rotate(float angle, float rx, float ry, float rz);
-	static StdMeshMatrix Transform(const StdMeshTransformation& transform);
-	static StdMeshMatrix TransformInverse(const StdMeshTransformation& transform);
-
-	float& operator()(int i, int j) { return a[i][j]; }
-	float operator()(int i, int j) const { return a[i][j]; }
-
-	float Determinant() const;
-
-private:
-	// 3x3 orthogonal + translation in last column
-	float a[3][4];
-};
-
-StdMeshMatrix operator*(const StdMeshMatrix& lhs, const StdMeshMatrix& rhs);
-StdMeshMatrix operator*(float lhs, const StdMeshMatrix& rhs);
-StdMeshMatrix operator*(const StdMeshMatrix& lhs, float rhs);
-StdMeshMatrix& operator*=(StdMeshMatrix& lhs, const StdMeshMatrix& rhs);
-StdMeshMatrix operator+(const StdMeshMatrix& lhs, const StdMeshMatrix& rhs);
-StdMeshQuaternion operator-(const StdMeshQuaternion& rhs);
-StdMeshQuaternion operator*(const StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs);
-StdMeshQuaternion& operator*=(StdMeshQuaternion& lhs, float rhs);
-StdMeshQuaternion operator*(const StdMeshQuaternion& lhs, float rhs);
-StdMeshQuaternion operator*(float lhs, const StdMeshQuaternion& rhs);
-StdMeshQuaternion& operator+=(StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs);
-StdMeshQuaternion operator+(const StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs);
-StdMeshQuaternion operator-(const StdMeshQuaternion& lhs, const StdMeshQuaternion& rhs);
-StdMeshTransformation operator*(const StdMeshTransformation& lhs, const StdMeshTransformation& rhs);
-
-StdMeshVector operator-(const StdMeshVector& rhs);
-StdMeshVector& operator+=(StdMeshVector& lhs, const StdMeshVector& rhs);
-StdMeshVector operator+(const StdMeshVector& lhs, const StdMeshVector& rhs);
-StdMeshVector operator*(const StdMeshVector& lhs, const StdMeshVector& rhs);
-StdMeshVector& operator*=(StdMeshVector& lhs, float rhs);
-StdMeshVector operator*(const StdMeshVector& lhs, float rhs);
-StdMeshVector operator*(float lhs, const StdMeshVector& rhs);
-StdMeshVector operator/(const StdMeshVector& lhs, const StdMeshVector& rhs);
-StdMeshVector operator/(float lhs, const StdMeshVector& rhs);
-StdMeshVector operator/(const StdMeshVector& lhs, float rhs);
-
-StdMeshVector operator*(const StdMeshMatrix& lhs, const StdMeshVector& rhs); // does not apply translation part
-StdMeshVector operator*(const StdMeshQuaternion& lhs, const StdMeshVector& rhs);
-
-StdMeshVertex& operator+=(StdMeshVertex& lhs, const StdMeshVertex& rhs);
-StdMeshVertex operator+(const StdMeshVertex& lhs, const StdMeshVertex& rhs);
-StdMeshVertex operator*(float lhs, const StdMeshVertex& rhs);
-StdMeshVertex operator*(const StdMeshVertex& lhs, float rhs);
-StdMeshVertex operator*(const StdMeshMatrix& lhs, const StdMeshVertex& rhs);
 
 class StdMeshBone
 {
@@ -243,6 +127,7 @@ public:
 		std::vector<StdMeshVertexBoneAssignment> BoneAssignments;
 	};
 
+	const std::vector<Vertex>& GetVertices() const { return Vertices; }
 	const Vertex& GetVertex(size_t i) const { return Vertices[i]; }
 	size_t GetNumVertices() const { return Vertices.size(); }
 
@@ -254,7 +139,7 @@ public:
 private:
 	StdSubMesh();
 
-	std::vector<Vertex> Vertices;
+	std::vector<Vertex> Vertices; // Empty if we use shared vertices
 	std::vector<StdMeshFace> Faces;
 
 	const StdMeshMaterial* Material;
@@ -270,8 +155,12 @@ class StdMesh
 public:
 	~StdMesh();
 
+	typedef StdSubMesh::Vertex Vertex;
+
 	const StdSubMesh& GetSubMesh(size_t i) const { return SubMeshes[i]; }
 	size_t GetNumSubMeshes() const { return SubMeshes.size(); }
+
+	const std::vector<Vertex>& GetSharedVertices() const { return SharedVertices; }
 
 	const StdMeshBone& GetBone(size_t i) const { return *Bones[i]; }
 	size_t GetNumBones() const { return Bones.size(); }
@@ -291,6 +180,8 @@ private:
 
 	StdMesh(const StdMesh& other); // non-copyable
 	StdMesh& operator=(const StdMesh& other); // non-assignable
+
+	std::vector<Vertex> SharedVertices;
 
 	std::vector<StdSubMesh> SubMeshes;
 	std::vector<StdMeshBone*> Bones; // Master Bone Table
@@ -314,11 +205,12 @@ public:
 		FO_NearestToFarthest
 	};
 
-	StdSubMeshInstance(const StdSubMesh& submesh);
+	StdSubMeshInstance(class StdMeshInstance& instance, const StdSubMesh& submesh, float completion);
+	void LoadFacesForCompletion(class StdMeshInstance& instance, const StdSubMesh& submesh, float completion);
 
 	// Get vertex of instance, with current animation applied. This needs to
 	// go elsewhere if/when we want to calculate this on the hardware.
-	const StdMeshVertex* GetVertices() const { return &Vertices[0]; }
+	const std::vector<StdMeshVertex>& GetVertices() const { return Vertices; }
 	size_t GetNumVertices() const { return Vertices.size(); }
 
 	// Get face of instance. The instance faces are the same as the mesh faces,
@@ -344,7 +236,7 @@ protected:
 	// a) recompute Vertex positions each frame or
 	// b) compute them on the GPU
 	std::vector<StdMeshVertex> Vertices;
-	std::vector<StdMeshFace> Faces;
+	std::vector<StdMeshFace> Faces; // TODO: Indices could also be stored on GPU in a vbo (element index array). Should be done in a next step if at all.
 
 	const StdMeshMaterial* Material;
 
@@ -367,6 +259,9 @@ protected:
 	std::vector<Pass> PassData;
 	FaceOrdering CurrentFaceOrdering; // NoSave
 
+	// TODO: GLuint texenv_list; // NoSave, texture environment setup could be stored in a display list (w/ and w/o ClrMod). What about PlayerColor?
+	// TODO: GLuint vbo; // NoSave, replacing vertices list -- can be mapped into memory for writing. Should be moved to StdMesh once we apply skeletal transformation on the GPU.
+
 private:
 	StdSubMeshInstance(const StdSubMeshInstance& other); // noncopyable
 	StdSubMeshInstance& operator=(const StdSubMeshInstance& other); // noncopyable
@@ -377,14 +272,15 @@ class StdMeshInstance
 	friend class StdMeshMaterialUpdate;
 	friend class StdMeshUpdate;
 public:
-	StdMeshInstance(const StdMesh& mesh);
+	StdMeshInstance(const StdMesh& mesh, float completion = 1.0f);
 	~StdMeshInstance();
 
 	typedef StdSubMeshInstance::FaceOrdering FaceOrdering;
 
-	//FaceOrdering GetFaceOrdering() const { return CurrentFaceOrdering; }
-	void SetFaceOrdering(FaceOrdering ordering);
-	void SetFaceOrderingForClrModulation(uint32_t clrmod);
+	enum AttachMeshFlags {
+		AM_None        = 0,
+		AM_DrawBefore  = 1 << 0
+	};
 
 	// Provider for animation position or weight.
 	class ValueProvider
@@ -525,27 +421,6 @@ public:
 		};
 	};
 
-	AnimationNode* PlayAnimation(const StdStrBuf& animation_name, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight);
-	AnimationNode* PlayAnimation(const StdMeshAnimation& animation, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight);
-	void StopAnimation(AnimationNode* node);
-
-	AnimationNode* GetAnimationNodeByNumber(unsigned int number);
-	AnimationNode* GetRootAnimationForSlot(int slot);
-	// child bone transforms are dirty (saves matrix inversion for unanimated attach children).
-	// Set new value providers for a node's position or weight - cannot be in
-	// class AnimationNode since we need to mark BoneTransforms dirty.
-	void SetAnimationPosition(AnimationNode* node, ValueProvider* position);
-	void SetAnimationWeight(AnimationNode* node, ValueProvider* weight);
-
-	// Update animations; call once a frame
-	// dt is used for texture animation, skeleton animation is updated via value providers
-	void ExecuteAnimation(float dt);
-
-	enum AttachMeshFlags {
-		AM_None        = 0,
-		AM_DrawBefore  = 1 << 0
-	};
-
 	class AttachedMesh
 	{
 		friend class StdMeshInstance;
@@ -600,6 +475,33 @@ public:
 	typedef std::vector<AttachedMesh*> AttachedMeshList;
 	typedef AttachedMeshList::const_iterator AttachedMeshIter;
 
+	//FaceOrdering GetFaceOrdering() const { return CurrentFaceOrdering; }
+	void SetFaceOrdering(FaceOrdering ordering);
+	void SetFaceOrderingForClrModulation(uint32_t clrmod);
+
+	const std::vector<StdMeshVertex>& GetSharedVertices() const { return SharedVertices; }
+	size_t GetNumSharedVertices() const { return SharedVertices.size(); }
+
+	// Set completion of the mesh. For incompleted meshes not all faces will be available.
+	void SetCompletion(float completion);
+	float GetCompletion() const { return Completion; }
+
+	AnimationNode* PlayAnimation(const StdStrBuf& animation_name, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight);
+	AnimationNode* PlayAnimation(const StdMeshAnimation& animation, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight);
+	void StopAnimation(AnimationNode* node);
+
+	AnimationNode* GetAnimationNodeByNumber(unsigned int number);
+	AnimationNode* GetRootAnimationForSlot(int slot);
+	// child bone transforms are dirty (saves matrix inversion for unanimated attach children).
+	// Set new value providers for a node's position or weight - cannot be in
+	// class AnimationNode since we need to mark BoneTransforms dirty.
+	void SetAnimationPosition(AnimationNode* node, ValueProvider* position);
+	void SetAnimationWeight(AnimationNode* node, ValueProvider* weight);
+
+	// Update animations; call once a frame
+	// dt is used for texture animation, skeleton animation is updated via value providers
+	void ExecuteAnimation(float dt);
+
 	// Create a new instance and attach it to this mesh. Takes ownership of denumerator
 	AttachedMesh* AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation = StdMeshMatrix::Identity(), uint32_t flags = AM_None);
 	// Attach an instance to this instance. Takes ownership of denumerator. If own_child is true deletes instance on detach.
@@ -649,8 +551,13 @@ protected:
 
 	AnimationNodeList::iterator GetStackIterForSlot(int slot, bool create);
 	bool ExecuteAnimationNode(AnimationNode* node);
+	void ApplyBoneTransformToVertices(const std::vector<StdSubMesh::Vertex>& mesh_vertices, std::vector<StdMeshVertex>& instance_vertices);
 
 	const StdMesh* Mesh;
+
+	float Completion; // NoSave
+
+	std::vector<StdMeshVertex> SharedVertices;
 
 	AnimationNodeList AnimationNodes; // for simple lookup of animation nodes by their unique number
 	AnimationNodeList AnimationStack; // contains top level nodes only, ordered by slot number

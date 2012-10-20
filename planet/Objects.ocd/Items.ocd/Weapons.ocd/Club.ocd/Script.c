@@ -4,27 +4,59 @@
 
 private func Hit()
 {
-	Sound("WoodHit");
+	Sound("WoodHit?");
 }
 
 public func GetCarryMode() { return CARRY_HandBack; }
 
-public func GetCarrySpecial(clonk) { if(fAiming) return "pos_hand2"; }
+public func GetCarrySpecial(clonk)
+{
+	if(fAiming)
+	{
+		if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 1)
+			return "pos_hand1";
+		else
+			return "pos_hand2";
+	}
+}
 
 local animation_set;
 
 func Initialize()
 {
-	animation_set = {
+	ClubChangeHandAnims("R");
+}
+
+private func ClubChangeHandAnims(string hand)
+{
+	if(hand == "R")
+	{
+	//Changes which (R/L) animation is used
+		animation_set = {
 		AimMode         = AIM_Weight,
-		AnimationAim    = "BatAimArms",
-		AnimationAim2   = "BatAim2Arms",
+		AnimationAim    = Format("BatAimArms.R",hand),
+		AnimationAim2   = Format("BatAim2Arms.R",hand),
 		AimTime         = 35*3,
-		AnimationShoot  = "BatStrikeArms",
-		AnimationShoot2 = "BatStrike2Arms",
+		AnimationShoot  = Format("BatStrikeArms.R",hand),
+		AnimationShoot2 = Format("BatStrike2Arms.R",hand),
 		ShootTime       = 35/2,
 		ShootTime2      = (35/2)*6/19, // At 6/19 of the shooting animation
 	};
+	}
+	else
+	{
+		//Changes which (R/L) animation is used
+		animation_set = {
+		AimMode         = AIM_Weight,
+		AnimationAim    = "BatAimArms.L",
+		AnimationAim2   = "BatAim2Arms.L",
+		AimTime         = 35*3,
+		AnimationShoot  = "BatStrikeArms.L",
+		AnimationShoot2 = "BatStrike2Arms.L",
+		ShootTime       = 35/2,
+		ShootTime2      = (35/2)*6/19, // At 6/19 of the shooting animation
+	};
+	}
 }
 
 public func GetAnimationSet() { return animation_set; }
@@ -35,6 +67,11 @@ local fAiming;
 
 public func ControlUseStart(object clonk, int x, int y)
 {
+	if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 0)
+		ClubChangeHandAnims("R");
+	else
+		ClubChangeHandAnims("L");
+
 	// cooldown?
 	if(!CanStrikeWithWeapon(clonk)) return true;
 	
@@ -157,7 +194,6 @@ func DoStrike(clonk, angle)
 		if(obj->GetOCF() & OCF_Alive)
 		{
 			var damage=5*1000;
-			var f=ApplyShieldFactor(clonk, obj, damage);
 			ApplyWeaponBash(obj, 400, angle);
 			obj->DoEnergy(-damage, true, FX_Call_EngGetPunched, clonk->GetOwner());
 		}
@@ -173,7 +209,7 @@ func DoStrike(clonk, angle)
 			obj->SetXDir((obj->GetXDir(100) + Sin(angle, speed)) / 2, div);
 			obj->SetYDir((obj->GetYDir(100) - Cos(angle, speed)) / 2, div);
 		}
-		AddEffect(en, obj, 1, 15, 0);
+		AddEffect(en, obj, 1, 15, nil);
 		found=true;
 		break;
 	}
@@ -182,9 +218,8 @@ func DoStrike(clonk, angle)
 		RemoveEffect("DuringClubShoot", clonk);
 }
 
-public func IsTool() { return 1; }
-
-public func IsToolProduct() { return 1; }
+public func IsWeapon() { return true; }
+public func IsArmoryProduct() { return true; }
 
 func Definition(def) {
 	SetProperty("PictureTransformation",Trans_Rotate(-30,0,0,1),def);
@@ -193,4 +228,5 @@ func Definition(def) {
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Rebuy = true;

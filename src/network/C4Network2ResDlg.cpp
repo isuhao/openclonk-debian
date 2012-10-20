@@ -20,13 +20,13 @@
 // resource display list box
 
 #include "C4Include.h"
+#include "C4Network2Dialogs.h"
+
 #include "C4GameLobby.h"
 #include "C4FullScreen.h"
-
 #include "C4Network2.h"
 #include "C4PlayerInfo.h"
 #include "C4Network2Players.h"
-#include "C4Network2Dialogs.h"
 #include <C4GraphicsResource.h>
 
 // ----------- C4Network2ResDlg::ListItem ----------------------------------------------------------------
@@ -105,7 +105,7 @@ void C4Network2ResDlg::ListItem::LocalSaveResource(bool fDoOverwrite)
 	if (!pRes) return;
 	const char *szResFile = pRes->getFile();
 	StdCopyStrBuf strErrCopyFile(LoadResStr("IDS_NET_ERR_COPYFILE"));
-	if (!SEqual2(szResFile, Config.Network.WorkPath))
+	if (!pRes->isTempFile())
 	{
 		GetScreen()->ShowMessage(LoadResStr("IDS_NET_ERR_COPYFILE_LOCAL"), strErrCopyFile.getData(), C4GUI::Ico_Error);
 		return;
@@ -146,9 +146,8 @@ bool C4Network2ResDlg::ListItem::IsSavePossible()
 	bool fCanSave = false;
 	C4Network2Res::Ref pRes = GetRefRes();
 	if (!pRes) return false;
-	// check for local filename
-	const char *szResFile = pRes->getFile();
-	if (SEqual2(szResFile, Config.Network.WorkPath))
+	// temp files from network folder only
+	if (pRes->isTempFile())
 	{
 		// check type
 		C4Network2ResType eType = pRes->getType();

@@ -33,12 +33,14 @@ autotools/missing
 configure
 intermediate
 build*
+CMakeScripts
 CMakeFiles
 CMakeCache.txt
 planet/CMakeFiles
 planet/CMakeCache.txt
 CPackConfig.cmake
 CPackSourceConfig.cmake
+*.rule
 
 # Documentation
 *.pyc
@@ -51,6 +53,7 @@ docs/doku.pot
 docs/Functions.txt
 
 # Visual studio files
+openclonk.opensdf
 deps/
 planet/Release
 planet/RelWithDebInfo
@@ -77,6 +80,8 @@ fmod.dll
 cmake_install.cmake
 clonk.sln
 clonk.ilk
+openclonk.sln
+openclonk.ilk
 *.vcproj
 *.vcxproj
 *.vcxproj.filters
@@ -124,3 +129,4 @@ clonk.cbp
 # MacOSX saved searches
 *.savedSearch
 planet/OpenClonk.bat
+planet/openclonk.sln

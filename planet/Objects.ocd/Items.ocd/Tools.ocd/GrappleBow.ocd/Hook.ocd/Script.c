@@ -44,7 +44,7 @@ public func Launch(int angle, int str, object shooter, object bow)
 	SetXDir(xdir);
 	SetYDir(ydir);
 	SetR(angle);
-	Sound("ArrowShoot*.ogg");
+	Sound("ArrowShoot?");
 	
 	AddEffect("InFlight", this, 1, 1, this);
 }
@@ -59,7 +59,7 @@ private func Stick()
 {
 	if (GetEffect("InFlight",this))
 	{
-		Sound("ArrowHitGround.ogg");
+		Sound("ArrowHitGround");
 	
 		RemoveEffect("InFlight",this);
 	
@@ -152,7 +152,7 @@ public func Entrance(object container)
 
 public func OnRopeBreak()
 {
-	RemoveEffect(0, clonk, fx_hook);
+	RemoveEffect(nil, clonk, fx_hook);
 	RemoveObject();
 	return;
 }
@@ -319,7 +319,7 @@ public func FxIntGrappleControlTimer(object target, fxnum, int time)
 		var angle = rope->GetClonkAngle();
 		var off = rope->GetClonkOff();
 //    off = [0,0];
-    var pos = rope->GetClonkPos();
+    //var pos = rope->GetClonkPos();
     //target->SetPosition(pos[0], pos[1], nil, Rope_Precision);
     target.MyAngle = angle;
     //angle = 0;

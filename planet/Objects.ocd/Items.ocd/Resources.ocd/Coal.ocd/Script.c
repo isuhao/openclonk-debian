@@ -7,15 +7,18 @@ protected func Construction()
 		SetGraphics(Format("%d",graphic));
 }
 
-protected func Hit()
+protected func Hit(x, y)
 {
-	Sound("RockHit*");
+	StonyObjectHit(x,y);
+	return true;
 }
 
-public func IsFuel() { return 1; }
-public func GetFuelAmount() { return 80; }
+public func IsFuel() { return true; }
+public func GetFuelAmount() { return 100; }
 
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
 local Rebuy = true;
+local BlastIncinerate = 5;
+local ContactIncinerate = 1;

@@ -26,12 +26,14 @@
 
 */
 
-local selected, crew, hotkey, myobject, actiontype, subselector, position;
+local selected, crew, hotkey, myobject, actiontype, subselector, position, modus;
+local extra; // function to call and desc for extra-types
 
 static const ACTIONTYPE_INVENTORY = 0;
 static const ACTIONTYPE_VEHICLE = 1;
 static const ACTIONTYPE_STRUCTURE = 2;
 static const ACTIONTYPE_SCRIPT = 3;
+static const ACTIONTYPE_EXTRA = 4;
 
 private func HandSize() { return 400; }
 private func IconSize() { return 500; }
@@ -47,10 +49,9 @@ protected func Construction()
 	subselector = nil;
 	
 	// parallaxity
-	this["Parallaxity"] = [0,0];
-	
+	this.Parallaxity = [0,0];	
 	// visibility
-	this["Visibility"] = VIS_None;
+	this.Visibility = VIS_None;	
 }
 
 protected func Destruction()
@@ -69,7 +70,8 @@ public func MouseSelectionAlt(int plr)
 {
 	if(!myobject) return;
 	
-	var desc = myobject->GetProperty("Description");
+	var desc = myobject.UsageHelp;
+	if(!desc) desc = myobject.Description; // fall back to general description
 	
 	// close other messages...
 	crew->OnDisplayInfoMessage();
@@ -140,13 +142,18 @@ public func MouseSelection(int plr)
 	{
 		if(myobject->~IsInteractable(crew))
 		{
-			myobject->Interact(crew);
+			myobject->Interact(crew, modus);
 			return true;
 		}
 	}
+	if(actiontype == ACTIONTYPE_EXTRA)
+	{
+		if(extra)
+			extra.Object->Call(extra.Fn, crew);
+	}
 }
 
-public func MouseDragDone(obj, object target)
+public func OnMouseDragDone(obj, object target)
 {
 	// not on landscape
 	if(target) return;
@@ -168,7 +175,7 @@ public func MouseDragDone(obj, object target)
 	}
 }
 
-public func MouseDrag(int plr)
+public func OnMouseDrag(int plr)
 {
 	if(plr != GetOwner()) return false;
 	
@@ -178,7 +185,7 @@ public func MouseDrag(int plr)
 	return false;
 }
 
-public func MouseDrop(int plr, obj)
+public func OnMouseDrop(int plr, obj)
 {
 	if(plr != GetOwner()) return false;
 	if(GetType(obj) != C4V_C4Object) return false;
@@ -253,7 +260,7 @@ public func MouseDrop(int plr, obj)
 
 
 
-public func Clear()
+public func Disable()
 {
 	myobject = nil;
 	actiontype = -1;
@@ -271,9 +278,9 @@ public func ClearMessage()
 		CustomMessage("",subselector,GetOwner());
 }
 
-public func SetObject(object obj, int type, int pos, int hot)
+public func SetObject(object obj, int type, int pos, int hot, int number, proplist xtra)
 {
-	this["Visibility"] = VIS_Owner;
+	this.Visibility = VIS_Owner;
 
 	// remove effect that checks whether the object to which this selector
 	// refers to is still existant because now this selector gets a new
@@ -284,22 +291,33 @@ public func SetObject(object obj, int type, int pos, int hot)
 	actiontype = type;
 	myobject = obj;
 	hotkey = hot;
+	modus = number;
 	
+	// extra stuff
+	if(xtra)
+		extra = xtra;
+	else
+		extra = nil;
+	
+	// Set mousedrag for inventory objects
+	if (actiontype == ACTIONTYPE_INVENTORY)
+		this.MouseDrag = MD_DragSource | MD_DropTarget;
+		
 	if(!myobject)
 	{
 		SetGraphics("None");
 		SetGraphics(nil,nil,1);
 		SetName(Format("$TxtSlot$",pos+1));
-		this["MouseDragImage"] = nil;
+		this.MouseDragImage = nil;
 		if(subselector)
 			subselector->RemoveObject();
 	}
 	else
 	{
-		SetGraphics();
-		SetGraphics(nil,nil,1,GFXOV_MODE_ObjectPicture, 0, 0, myobject);
+		SetGraphics("Slot", GUI_ObjectSelector);
+		SetGraphics(nil,nil,1,GFXOV_MODE_ObjectPicture, nil, 0, myobject);
 		SetName(Format("$TxtSelect$",myobject->GetName()));
-		this["MouseDragImage"] = myobject;
+		this.MouseDragImage = myobject;
 
 		// if object has extra slot, show it
 		if(myobject->~HasExtraSlot())
@@ -383,17 +401,26 @@ public func UpdateSelectionStatus()
 	// determine...
 	var sel = 0;
 
-	// script...
-	if(actiontype == ACTIONTYPE_SCRIPT)
+	if(actiontype == ACTIONTYPE_EXTRA)
 	{
-		var metainfo = myobject->~GetInteractionMetaInfo(crew);
+		if(extra)
+		{
+			SetGraphics(extra.IconName,extra.IconID,2,GFXOV_MODE_IngamePicture);
+			this.Tooltip = extra.Description;
+		}
+	}
+
+	// script...
+	else if(actiontype == ACTIONTYPE_SCRIPT)
+	{
+		var metainfo = myobject->~GetInteractionMetaInfo(crew, modus);
 		if(metainfo)
 		{
 			SetGraphics(metainfo["IconName"],metainfo["IconID"],2,GFXOV_MODE_IngamePicture);
 			SetObjDrawTransform(IconSize(),0,-16000,0,IconSize(),20000, 2);
 			
 			var desc = metainfo["Description"];
-			if(desc) SetName(desc);
+			if(desc) this.Tooltip = desc;
 			
 			if(metainfo["Selected"])
 				SetObjDrawTransform(1200,0,0,0,1200,0,1);
@@ -429,12 +456,12 @@ public func UpdateSelectionStatus()
 		if(actiontype == ACTIONTYPE_VEHICLE)
 		{
 			SetGraphics("LetGo",GetID(),2,GFXOV_MODE_Base);
-			SetName(Format("$TxtUnGrab$",myobject->GetName()));
+			this.Tooltip = Format("$TxtUnGrab$",myobject->GetName());
 		}
 		else if(actiontype == ACTIONTYPE_STRUCTURE)
 		{
 			SetGraphics("Exit",GetID(),2,GFXOV_MODE_Base);
-			SetName(Format("$TxtExit$",myobject->GetName()));
+			this.Tooltip = Format("$TxtExit$",myobject->GetName());
 		}
 	}
 	else
@@ -450,18 +477,18 @@ public func UpdateSelectionStatus()
 			if(!(myobject->Contained()))
 			{
 				SetGraphics("Grab",GetID(),2,GFXOV_MODE_Base);
-				SetName(Format("$TxtGrab$",myobject->GetName()));
+				this.Tooltip = Format("$TxtGrab$",myobject->GetName());
 			}
 			else
 			{
 				SetGraphics("Exit",GetID(),2,GFXOV_MODE_Base);
-				SetName(Format("$TxtPushOut$",myobject->GetName()));
+				this.Tooltip = Format("$TxtPushOut$",myobject->GetName());
 			}
 		}
 		if(actiontype == ACTIONTYPE_STRUCTURE)
 		{
 			SetGraphics("Enter",GetID(),2,GFXOV_MODE_Base);
-			SetName(Format("$TxtEnter$",myobject->GetName()));
+			this.Tooltip = Format("$TxtEnter$",myobject->GetName());
 		}
 	}
 	SetObjDrawTransform(IconSize(),0,-16000,0,IconSize(),20000, 2);

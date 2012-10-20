@@ -5,7 +5,7 @@
  * Copyright (c) 2005-2006, 2008-2009  Günther Brammer
  * Copyright (c) 2006-2008  Matthes Bender
  * Copyright (c) 2006  Florian Groß
- * Copyright (c) 2009  Nicolas Hake
+ * Copyright (c) 2009, 2011  Nicolas Hake
  * Copyright (c) 2010  Armin Burgmeier
  * Copyright (c) 2010  Benjamin Herr
  * Copyright (c) 2011  Tobias Zwick
@@ -39,11 +39,17 @@
 #include <C4Log.h>
 #include <C4GraphicsResource.h>
 #include <C4RankSystem.h>
+#include "gui/C4MouseControl.h"
 #include <cctype>
 #include <algorithm>
 
 // font clrs
 const uint32_t ClrPlayerItem   = 0xff000000;
+
+// Arbitrary cut-off value for player color value. This avoids pitch black
+// colors which look ugly. Note that this limit is only applied in the UI,
+// it's still possible to edit the Player.txt by hand.
+const uint32_t PlayerColorValueLowBound = 64;
 
 // ----- C4Utilities
 
@@ -1026,6 +1032,262 @@ void C4StartupPlrSelDlg::ResortCrew()
 	pPlrListBox->SortElements(&CrewSortFunc, &SortData);
 }
 
+// ------------------------------------------------
+// --- Player color HSV chooser
+class C4StartupPlrColorPickerDlg : public C4GUI::Dialog
+{
+public:
+	C4StartupPlrColorPickerDlg(C4PlayerInfoCore *plrcore);
+
+protected:
+	// Event handler
+	virtual void OnClosed(bool commit);
+
+private:
+	class Picker : public C4GUI::Control
+	{
+	public:
+		Picker(const C4Rect &bounds);
+
+		// Set/retrieve current color value
+		void SetColor(uint32_t rgb);
+		uint32_t GetColor() const;
+	
+	protected:
+		// Event handlers, overridden from C4GUI::Control
+		virtual void DrawElement(C4TargetFacet &cgo);
+		virtual void MouseInput(C4GUI::CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam);
+		virtual void DoDragging(C4GUI::CMouse &rMouse, int32_t iX, int32_t iY, DWORD dwKeyParam);
+	
+	private:
+		C4FacetSurface hsFacet, vFacet; // chooser backgrounds
+		C4Rect hsPickerRect, vPickerRect;
+		C4GUI::Picture *flagPreview, *crewPreview;
+		uint32_t hsv; // current color
+
+		bool HandleMouseDown(int32_t x, int32_t y);
+		void UpdateVFacet(uint32_t h, uint32_t s);
+		void UpdatePreview();
+	};
+
+	C4PlayerInfoCore *plrcore;
+	Picker *picker;
+
+	static uint32_t HSV2RGB(uint32_t hsv)
+	{
+		float h = GetRedValue(hsv) / 255.f * 6.f;
+		float s = GetGreenValue(hsv) / 255.f;
+		float v = GetBlueValue(hsv) / 255.f;
+
+		float chroma = s * v;
+		float x = chroma * (1.f - std::abs(std::fmod(h, 2.f) - 1.f));
+
+		float r = 0;
+		float g = 0;
+		float b = 0;
+
+		switch (static_cast<int>(h))
+		{
+		case 0: case 6:
+			r = chroma; g = x; break;
+		case 1:
+			r = x; g = chroma; break;
+		case 2:
+			g = chroma; b = x; break;
+		case 3:
+			g = x; b = chroma; break;
+		case 4:
+			b = chroma; r = x; break;
+		case 5:
+			b = x; r = chroma; break;
+		}
+		r += v-chroma;
+		g += v-chroma;
+		b += v-chroma;
+
+		return RGBA(r * 255.f, g * 255.f, b * 255.f, hsv >> 24);
+	}
+	static uint32_t RGB2HSV(uint32_t rgb)
+	{
+		float r = GetRedValue(rgb) / 255.f;
+		float g = GetGreenValue(rgb) / 255.f;
+		float b = GetBlueValue(rgb) / 255.f;
+
+		float min = std::min(r, std::min(g, b));
+		float max = std::max(r, std::max(g, b));
+
+		float chroma = max - min;
+	
+		float hue = 0;
+		if (r == max)
+			hue = std::fmod((g-b) / chroma, 6.f);
+		else if (g == max)
+			hue = (b-r) / chroma + 2.f;
+		else
+			hue = (r-g) / chroma + 4.f;
+
+		float h = hue / 6.f;
+		float s = max == 0 ? 0.f : chroma / max;
+		float v = max;
+
+		return RGBA(h * 255.f, s * 255.f, v * 255.f, rgb >> 24);
+	}
+};
+
+C4StartupPlrColorPickerDlg::C4StartupPlrColorPickerDlg(C4PlayerInfoCore *plrcore)
+	: Dialog(400, 296 + C4GUI_ButtonAreaHgt, LoadResStr("IDS_DLG_PLAYERCOLORSELECTION"), false), plrcore(plrcore)
+{
+	C4GUI::ComponentAligner caMain(GetClientRect(), 0, 1, true);
+
+	picker = new Picker(caMain.GetFromTop(280));
+	picker->SetColor(plrcore->PrefColorDw);
+	AddElement(picker);
+
+	// buttons
+	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(C4GUI_ButtonAreaHgt), 0, 0);
+	caButtonArea = C4GUI::ComponentAligner(caButtonArea.GetCentered(2*128 + 4*8, C4GUI_ButtonAreaHgt), 8, 8);
+	C4GUI::Button *cancelButton = new C4GUI::CancelButton(caButtonArea.GetFromRight(128));
+	C4GUI::Button *okButton = new C4GUI::OKButton(caButtonArea.GetFromRight(128));
+	AddElement(okButton);
+	AddElement(cancelButton);
+}
+
+void C4StartupPlrColorPickerDlg::OnClosed(bool commit)
+{
+	// Write chosen color back to player core
+	if (commit)
+		plrcore->PrefColorDw = picker->GetColor();
+}
+
+C4StartupPlrColorPickerDlg::Picker::Picker(const C4Rect &bounds)
+	: Control(bounds)
+{
+	C4GUI::ComponentAligner caMain(bounds, 8, 8, true);
+	caMain.ExpandBottom(-(caMain.GetInnerHeight() - 256));
+	hsPickerRect = caMain.GetFromLeft(256);
+	vPickerRect = caMain.GetFromLeft(16);
+	vPickerRect.Hgt = 256 - PlayerColorValueLowBound;
+
+	C4Facet &flagPreviewPic = ::GraphicsResource.fctFlagClr;
+	int preview_width = std::min(flagPreviewPic.Wdt, caMain.GetInnerWidth());
+	flagPreview = new C4GUI::Picture(caMain.GetFromTop(flagPreviewPic.GetHeightByWidth(preview_width), preview_width), true);
+	flagPreview->SetFacet(flagPreviewPic);
+	AddElement(flagPreview);
+
+	C4Facet &crewPreviewPic = ::GraphicsResource.fctCrewClr;
+	preview_width = std::min(crewPreviewPic.Wdt, caMain.GetInnerWidth());
+	crewPreview = new C4GUI::Picture(caMain.GetFromTop(crewPreviewPic.GetHeightByWidth(preview_width), preview_width), true);
+	crewPreview->SetFacet(crewPreviewPic);
+	AddElement(crewPreview);
+	
+	// Pre-draw the H+S chooser background, it never changes anyway
+	hsFacet.Create(256, 256);
+	hsFacet.Surface->Lock();
+	for (int y = 0; y < 256; ++y)
+		for (int x = 0; x < 256; ++x)
+			hsFacet.Surface->SetPixDw(x, y, HSV2RGB(C4RGB(x, 255-y, 255)));
+	hsFacet.Surface->Unlock();
+
+	vFacet.Create(16, 256 - PlayerColorValueLowBound);
+	UpdateVFacet(255, 255);
+}
+
+void C4StartupPlrColorPickerDlg::Picker::UpdateVFacet(uint32_t h, uint32_t s)
+{
+	// Draw the V chooser background according to current H+S values
+	vFacet.Surface->Lock();
+	for (int y = 0; y < 256 - PlayerColorValueLowBound; ++y)
+		for (int x = 0; x < vFacet.Wdt; ++x)
+			vFacet.Surface->SetPixDw(x, y, HSV2RGB(C4RGB(h, s, 255-y)));
+	vFacet.Surface->Unlock();
+}
+
+void C4StartupPlrColorPickerDlg::Picker::UpdatePreview()
+{
+	flagPreview->SetDrawColor(HSV2RGB(hsv));
+	crewPreview->SetDrawColor(HSV2RGB(hsv));
+}
+
+void C4StartupPlrColorPickerDlg::Picker::SetColor(uint32_t rgb)
+{
+	hsv = RGB2HSV(rgb);
+	UpdateVFacet(GetRedValue(hsv), GetGreenValue(hsv));
+	UpdatePreview();
+}
+
+uint32_t C4StartupPlrColorPickerDlg::Picker::GetColor() const
+{
+	return HSV2RGB(hsv);
+}
+
+void C4StartupPlrColorPickerDlg::Picker::DrawElement(C4TargetFacet &cgo)
+{
+	// H+S chooser background
+	C4Facet cgoPicker(cgo.Surface, cgo.TargetX + hsPickerRect.x, cgo.TargetY + hsPickerRect.y, hsPickerRect.Wdt, hsPickerRect.Hgt);
+	hsFacet.Draw(cgoPicker.Surface, cgoPicker.X, cgoPicker.Y);
+	// H+S cursor
+	cgoPicker.Wdt = cgoPicker.Hgt = 5;
+	cgoPicker.X += GetRedValue(hsv) - cgoPicker.Wdt / 2;
+	cgoPicker.Y += 255 - GetGreenValue(hsv) - cgoPicker.Hgt / 2;
+	pDraw->DrawLineDw(cgoPicker.Surface, cgoPicker.X, cgoPicker.Y, cgoPicker.X + cgoPicker.Wdt, cgoPicker.Y + cgoPicker.Hgt, C4RGB(0, 0, 0));
+	pDraw->DrawLineDw(cgoPicker.Surface, cgoPicker.X + cgoPicker.Wdt, cgoPicker.Y, cgoPicker.X, cgoPicker.Y + cgoPicker.Hgt, C4RGB(0, 0, 0));
+
+	// V chooser background
+	cgoPicker.Set(cgo.Surface, cgo.TargetX + vPickerRect.x, cgo.TargetY + vPickerRect.y, vPickerRect.Wdt, vPickerRect.Hgt);
+	vFacet.Draw(cgoPicker.Surface, cgoPicker.X, cgoPicker.Y);
+	// V cursor
+	cgoPicker.Wdt = cgoPicker.Hgt = 7;
+	cgoPicker.X -= cgoPicker.Wdt / 2 + 1;
+	cgoPicker.Y += 255 - GetBlueValue(hsv) - cgoPicker.Hgt / 2;
+	for (int i = 0; i < cgoPicker.Hgt / 2 + 1; ++i)
+		pDraw->DrawLineDw(cgoPicker.Surface, cgoPicker.X + i, cgoPicker.Y + i, cgoPicker.X + i, cgoPicker.Y + cgoPicker.Hgt - i, C4RGB(255, 255, 255));
+}
+
+bool C4StartupPlrColorPickerDlg::Picker::HandleMouseDown(int32_t x, int32_t y)
+{
+	// Check if mouse was over a picker
+	if (hsPickerRect.Contains(x, y))
+	{
+		int h = x - hsPickerRect.x;
+		int s = 255 - (y - hsPickerRect.y);
+		hsv = C4RGB(h, s, GetBlueValue(hsv));
+		UpdateVFacet(h, s);
+		UpdatePreview();
+		return true;
+	}
+	else if (vPickerRect.Contains(x, y))
+	{
+		int v = 255 - (y - vPickerRect.y);
+		hsv = (hsv & 0xFFFFFF00) | v;
+		UpdatePreview();
+		return true;
+	}
+	return false;
+}
+
+void C4StartupPlrColorPickerDlg::Picker::MouseInput(C4GUI::CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam)
+{
+	Control::MouseInput(rMouse, iButton, iX, iY, dwKeyParam);
+
+	if (rMouse.pDragElement) return;
+	if (rMouse.IsLDown())
+	{
+		if (HandleMouseDown(iX, iY))
+		{
+			rMouse.pDragElement = this;
+			C4GUI::GUISound("Command");
+		}
+		else
+		{
+			rMouse.pDragElement = NULL;
+		}
+	}
+}
+
+void C4StartupPlrColorPickerDlg::Picker::DoDragging(C4GUI::CMouse &rMouse, int32_t iX, int32_t iY, DWORD dwKeyParam)
+{
+	HandleMouseDown(iX, iY);
+}
 
 /* ---- Player property dlg ---- */
 
@@ -1084,70 +1346,75 @@ C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerL
 	AddElement(pNameEdit);
 	SetFocus(pNameEdit, false);
 	caMain.ExpandTop(-BetweenElementDist);
+
+	int32_t iControlPicSize = C4GUI::ArrowButton::GetDefaultHeight(); // GetGridCell(0,3,0,1,-1,-1,false,2)
+	int32_t label_hgt = pSmallFont->GetLineHeight();
+
 	// place color label
-	AddElement(new C4GUI::Label(FormatString("%s:", LoadResStr("IDS_CTL_COLOR")).getData(), caMain.GetFromTop(pSmallFont->GetLineHeight()), ALeft, C4StartupFontClr, pSmallFont, false));
-	// place color controls
-	C4GUI::ComponentAligner caColorArea(caMain.GetFromTop(C4GUI::ArrowButton::GetDefaultHeight()), 2, 0);
+	C4GUI::ComponentAligner caColorArea(caMain.GetFromTop(iControlPicSize + BetweenElementDist + label_hgt), 2, 0);
+	C4GUI::ComponentAligner caPictureArea(caColorArea.GetFromRight(iControlPicSize, iControlPicSize + BetweenElementDist + label_hgt), 2,0);
 	caColorArea.ExpandLeft(2);
+	AddElement(new C4GUI::Label(FormatString("%s:", LoadResStr("IDS_CTL_COLOR")).getData(), caColorArea.GetFromTop(label_hgt), ALeft, C4StartupFontClr, pSmallFont, false));
+	caColorArea.ExpandTop(-BetweenElementDist);
+	// place picture label
+	AddElement(new C4GUI::Label(LoadResStr("IDS_CTL_PICTURE"), caPictureArea.GetFromTop(label_hgt), ALeft, C4StartupFontClr, pSmallFont, false));
+	caPictureArea.ExpandTop(-BetweenElementDist);
+	// place color controls
 	C4GUI::Button *pBtn; const char *szTip;
 	szTip = LoadResStr("IDS_DLGTIP_PLAYERCOLORS");
 	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Left, caColorArea.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnClrChangeLeft));
 	pBtn->SetToolTip(szTip);
 	C4Facet &rfctClrPreviewPic = ::GraphicsResource.fctFlagClr; //C4Startup::Get()->Graphics.fctCrewClr; //::GraphicsResource.fctCrewClr;
-	pClrPreview = new C4GUI::Picture(caColorArea.GetFromLeft(rfctClrPreviewPic.GetWidthByHeight(caColorArea.GetHeight())), true);
+	pClrPreview = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::IconButton>(C4GUI::Ico_None, caColorArea.GetFromLeft(rfctClrPreviewPic.GetWidthByHeight(caColorArea.GetHeight())), 'C', &C4StartupPlrPropertiesDlg::OnClrChangeCustom);
 	pClrPreview->SetFacet(rfctClrPreviewPic);
 	AddElement(pClrPreview);
 	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Right, caColorArea.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnClrChangeRight));
 	pBtn->SetToolTip(szTip);
-	szTip = LoadResStr("IDS_DLGTIP_PLAYERCOLORSTGB");
-	int32_t iSliderYDiff = (caColorArea.GetHeight() - 3*C4GUI_ScrollBarHgt) / 2;
-	pClrSliderR = new C4GUI::ScrollBar(caColorArea.GetFromTop(C4GUI_ScrollBarHgt), true, new C4GUI::ParCallbackHandler<C4StartupPlrPropertiesDlg, int32_t>(this, &C4StartupPlrPropertiesDlg::OnClrSliderRChange));
-	pClrSliderR->SetDecoration(&C4Startup::Get()->Graphics.sfctBookScrollR, false);
-	pClrSliderR->SetToolTip(szTip);
-	caColorArea.ExpandTop(-iSliderYDiff);
-	pClrSliderG = new C4GUI::ScrollBar(caColorArea.GetFromTop(C4GUI_ScrollBarHgt), true, new C4GUI::ParCallbackHandler<C4StartupPlrPropertiesDlg, int32_t>(this, &C4StartupPlrPropertiesDlg::OnClrSliderGChange));
-	pClrSliderG->SetDecoration(&C4Startup::Get()->Graphics.sfctBookScrollG, false);
-	pClrSliderG->SetToolTip(szTip);
-	caColorArea.ExpandTop(-iSliderYDiff);
-	pClrSliderB = new C4GUI::ScrollBar(caColorArea.GetFromTop(C4GUI_ScrollBarHgt), true, new C4GUI::ParCallbackHandler<C4StartupPlrPropertiesDlg, int32_t>(this, &C4StartupPlrPropertiesDlg::OnClrSliderBChange));
-	pClrSliderB->SetDecoration(&C4Startup::Get()->Graphics.sfctBookScrollB, false);
-	pClrSliderB->SetToolTip(szTip);
-	AddElement(pClrSliderR);
-	AddElement(pClrSliderG);
-	AddElement(pClrSliderB);
 	if (!C4P.PrefColorDw) C4P.PrefColorDw=0xff;
+	// Place picture controls
+	AddElement(pPictureBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::IconButton>(C4GUI::Ico_Player, caPictureArea.GetAll(), 'P' /* 2do */, &C4StartupPlrPropertiesDlg::OnPictureBtn));
+	pPictureBtn->SetToolTip(LoadResStr("IDS_DESC_SELECTAPICTUREANDORLOBBYI"));
+	UpdateBigIcon();
+	UpdatePlayerColor(true);
 	caMain.ExpandTop(-BetweenElementDist);
-	// place control and picture label
-	int32_t iControlPicSize = C4GUI::ArrowButton::GetDefaultHeight(); // GetGridCell(0,3,0,1,-1,-1,false,2)
-	C4GUI::ComponentAligner caControlArea(caMain.GetFromTop(iControlPicSize + pSmallFont->GetLineHeight() + BetweenElementDist), 0,0, false);
-	C4GUI::ComponentAligner caPictureArea(caControlArea.GetFromRight(iControlPicSize), 0,0, false);
-	AddElement(new C4GUI::Label(FormatString("%s:", LoadResStr("IDS_CTL_CONTROL")).getData(), caControlArea.GetFromTop(pSmallFont->GetLineHeight()), ALeft, C4StartupFontClr, pSmallFont, false));
-	AddElement(new C4GUI::Label(LoadResStr("IDS_CTL_PICTURE"), caPictureArea.GetFromTop(pSmallFont->GetLineHeight()), ACenter, C4StartupFontClr, pSmallFont, false));
-	caControlArea.ExpandTop(-BetweenElementDist); caPictureArea.ExpandTop(-BetweenElementDist);
+	// place control label
+	C4GUI::ComponentAligner caControlArea(caMain.GetFromTop(iControlPicSize + label_hgt + BetweenElementDist), 0,0, false);
+	C4GUI::ComponentAligner caSkinArea(caControlArea.GetFromRight(iControlPicSize + label_hgt + BetweenElementDist), 0,0, false);
+	AddElement(new C4GUI::Label(FormatString("%s:", LoadResStr("IDS_CTL_CONTROL")).getData(), caControlArea.GetFromTop(label_hgt), ALeft, C4StartupFontClr, pSmallFont, false));
+	caControlArea.ExpandTop(-BetweenElementDist);
+	// place clonk style label
+	AddElement(new C4GUI::Label(LoadResStr("IDS_CTL_CLONKSKIN"), caSkinArea.GetFromTop(label_hgt), ALeft, C4StartupFontClr, pSmallFont, false));
+	caSkinArea.ExpandTop(-BetweenElementDist);
 	// place control controls
 	C4GUI::ComponentAligner caControl(caControlArea.GetFromTop(iControlPicSize), 2,0);
 	szTip = LoadResStr("IDS_DLGTIP_PLAYERCONTROL");
 	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Left, caControl.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnCtrlChangeLeft));
 	pBtn->SetToolTip(szTip);
-	int32_t ctrl_name_hgt = pSmallFont->GetLineHeight();
-	C4Rect ctrl_name_rect = caControl.GetFromBottom(ctrl_name_hgt); caControl.ExpandBottom(ctrl_name_hgt);
+	caControl.ExpandBottom(label_hgt); C4Rect ctrl_name_rect = caControl.GetFromBottom(label_hgt);
 	C4Facet &rfctCtrlPic = ::GraphicsResource.fctKeyboard; // UpdatePlayerControl() will alternatively set fctGamepad
 	AddElement(pCtrlImg = new C4GUI::Picture(caControl.GetFromLeft(rfctCtrlPic.GetWidthByHeight(caControl.GetHeight())), true));
 	pCtrlImg->SetToolTip(szTip);
 	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Right, caControl.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnCtrlChangeRight));
 	pBtn->SetToolTip(szTip);
 	caControl.ExpandLeft(-10);
-	AddElement(pMouseBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::IconButton>(C4GUI::Ico_MouseOff, caControl.GetFromLeft(caControl.GetHeight()), 'M' /* 2do */, &C4StartupPlrPropertiesDlg::OnCtrlChangeMouse));
-	pMouseBtn->SetToolTip(LoadResStr("IDS_DLGTIP_PLAYERCONTROLMOUSE"));
 	C4P.OldPrefControl = BoundBy<int32_t>(C4P.OldPrefControl, 0, C4MaxControlSet-1);
 	ctrl_name_lbl = new C4GUI::Label("CtrlName", ctrl_name_rect, ALeft, C4StartupFontClr, pSmallFont, false, false, true);
 	AddElement(ctrl_name_lbl);
 	UpdatePlayerControl();
-	// place picture button
-	AddElement(pPictureBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::IconButton>(C4GUI::Ico_Player, caPictureArea.GetAll(), 'P' /* 2do */, &C4StartupPlrPropertiesDlg::OnPictureBtn));
-	pPictureBtn->SetToolTip(LoadResStr("IDS_DESC_SELECTAPICTUREANDORLOBBYI"));
-	UpdateBigIcon();
-	UpdatePlayerColor(true);
+
+	C4GUI::ComponentAligner caSkin(caSkinArea.GetFromTop(iControlPicSize), 2,0);
+	szTip = LoadResStr("IDS_DLGTIP_PLAYERCREWSKIN");
+	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Left, caSkin.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnSkinChangeLeft));
+	pBtn->SetToolTip(szTip);
+	C4Facet rfctSkinPic = ::GraphicsResource.fctClonkSkin.GetPhase(0);
+	AddElement(pSkinImg = new C4GUI::Picture(caSkin.GetFromLeft(rfctSkinPic.GetWidthByHeight(caSkin.GetHeight())), true));
+	pSkinImg->SetToolTip(szTip);
+	pSkinImg->SetFacet(::GraphicsResource.fctClonkSkin.GetPhase(0));
+	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Right, caSkin.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnSkinChangeRight));
+	pBtn->SetToolTip(szTip);
+	caSkin.ExpandLeft(-10);
+	UpdatePlayerSkin();
+
 	caMain.ExpandTop(-BetweenElementDist);
 	// AutoStopControl: currently unused
 	// once we have an idea how many control schemes we have, we might revive this for selecting e.g. between "Mouse+Keyboard" and "Gamepad".
@@ -1191,14 +1458,8 @@ bool IsColorConflict(DWORD dwClr1, DWORD dwClr2);
 void C4StartupPlrPropertiesDlg::UpdatePlayerColor(bool fUpdateSliders)
 {
 	C4P.PrefColorDw = C4P.PrefColorDw | 0xFF000000; // Ensure full opacity
-	pClrPreview->SetDrawColor(C4P.PrefColorDw);
+	pClrPreview->SetColor(C4P.PrefColorDw);
 	pPictureBtn->SetColor(C4P.PrefColorDw);
-	if (fUpdateSliders)
-	{
-		pClrSliderR->SetScrollPos((C4P.PrefColorDw >> 16) & 0xff);
-		pClrSliderG->SetScrollPos((C4P.PrefColorDw >>  8) & 0xff);
-		pClrSliderB->SetScrollPos( C4P.PrefColorDw        & 0xff);
-	}
 }
 
 void C4StartupPlrPropertiesDlg::OnClrChangeLeft(C4GUI::Control *pBtn)
@@ -1206,6 +1467,11 @@ void C4StartupPlrPropertiesDlg::OnClrChangeLeft(C4GUI::Control *pBtn)
 	// previous standard color in list
 	C4P.PrefColor = C4P.PrefColor ? C4P.PrefColor - 1 : 11;
 	C4P.PrefColorDw = C4PlayerInfoCore::GetPrefColorValue(C4P.PrefColor);
+	UpdatePlayerColor(true);
+}
+void C4StartupPlrPropertiesDlg::OnClrChangeCustom(C4GUI::Control *pBtn)
+{
+	GetScreen()->ShowModalDlg(new C4StartupPlrColorPickerDlg(&C4P));
 	UpdatePlayerColor(true);
 }
 
@@ -1217,27 +1483,6 @@ void C4StartupPlrPropertiesDlg::OnClrChangeRight(C4GUI::Control *pBtn)
 	UpdatePlayerColor(true);
 }
 
-void C4StartupPlrPropertiesDlg::OnClrSliderRChange(int32_t iNewVal)
-{
-	// update red component of color
-	C4P.PrefColorDw = (C4P.PrefColorDw & 0xff00ffff) + (iNewVal<<16);
-	UpdatePlayerColor(false);
-}
-
-void C4StartupPlrPropertiesDlg::OnClrSliderGChange(int32_t iNewVal)
-{
-	// update green component of color
-	C4P.PrefColorDw = (C4P.PrefColorDw & 0xffff00ff) + (iNewVal<<8);
-	UpdatePlayerColor(false);
-}
-
-void C4StartupPlrPropertiesDlg::OnClrSliderBChange(int32_t iNewVal)
-{
-	// update blue component of color
-	C4P.PrefColorDw = (C4P.PrefColorDw & 0xffffff00) + iNewVal;
-	UpdatePlayerColor(false);
-}
-
 void C4StartupPlrPropertiesDlg::UpdatePlayerControl()
 {
 	C4PlayerControlAssignmentSet *control_set = Game.PlayerControlUserAssignmentSets.GetSetByName(C4P.PrefControl.getData());
@@ -1247,13 +1492,9 @@ void C4StartupPlrPropertiesDlg::UpdatePlayerControl()
 	if (control_set) fctCtrlPic = control_set->GetPicture();
 	pCtrlImg->SetFacet(fctCtrlPic);
 	if (control_set)
-		ctrl_name_lbl->SetText(control_set->GetName());
+		ctrl_name_lbl->SetText(control_set->GetGUIName());
 	else
 		ctrl_name_lbl->SetText("???");
-	// update mouse image
-	// button only available if selected control set offers mouse control
-	pMouseBtn->SetVisibility(control_set && control_set->HasMouse());
-	pMouseBtn->SetIcon((C4P.PrefMouse) ? C4GUI::Ico_MouseOn : C4GUI::Ico_MouseOff);
 }
 
 void C4StartupPlrPropertiesDlg::OnCtrlChangeLeft(C4GUI::Control *pBtn)
@@ -1280,11 +1521,22 @@ void C4StartupPlrPropertiesDlg::OnCtrlChangeRight(C4GUI::Control *pBtn)
 	UpdatePlayerControl();
 }
 
-void C4StartupPlrPropertiesDlg::OnCtrlChangeMouse(C4GUI::Control *pBtn)
+void C4StartupPlrPropertiesDlg::UpdatePlayerSkin()
 {
-	// toggle mouse usage
-	C4P.PrefMouse = !C4P.PrefMouse;
-	UpdatePlayerControl();
+	pSkinImg->SetFacet(::GraphicsResource.fctClonkSkin.GetPhase(C4P.PrefClonkSkin));
+}
+
+void C4StartupPlrPropertiesDlg::OnSkinChangeLeft(C4GUI::Control *pBtn)
+{
+	// previous skin in list
+	C4P.PrefClonkSkin = C4P.PrefClonkSkin ? C4P.PrefClonkSkin - 1 : 3;
+	UpdatePlayerSkin();
+}
+void C4StartupPlrPropertiesDlg::OnSkinChangeRight(C4GUI::Control *pBtn)
+{
+	// next skin in list
+	C4P.PrefClonkSkin = (C4P.PrefClonkSkin + 1) % 4;
+	UpdatePlayerSkin();
 }
 
 void C4StartupPlrPropertiesDlg::UserClose(bool fOK)

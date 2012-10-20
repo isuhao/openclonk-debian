@@ -33,7 +33,6 @@
 #include <C4GameSave.h>
 #include <C4Game.h>
 #include <C4MessageInput.h>
-#include <C4UserMessages.h>
 #include <C4Version.h>
 #include <C4Language.h>
 #include <C4Player.h>
@@ -57,11 +56,10 @@ C4Console::C4Console(): C4ConsoleGUI()
 {
 	Active = false;
 	Editing = true;
-	ScriptCounter=0;
 	FrameCounter=0;
 	fGameOpen=false;
 
-#ifdef _WIN32
+#ifdef USE_WIN32_WINDOWS
 	hWindow=NULL;
 #endif
 }
@@ -70,25 +68,7 @@ C4Console::~C4Console()
 {
 }
 
-#if defined(USE_X11) && !defined(WITH_DEVELOPER_MODE)
-void C4Console::HandleMessage (XEvent & e)
-{
-	// Parent handling
-	C4ConsoleBase::HandleMessage(e);
-
-	switch (e.type)
-	{
-	case FocusIn:
-		Application.Active = true;
-		break;
-	case FocusOut:
-		Application.Active = false;
-		break;
-	}
-}
-#endif // USE_X11
-
-CStdWindow * C4Console::Init(CStdApp * pApp)
+C4Window * C4Console::Init(C4AbstractApp * pApp)
 {
 	return C4ConsoleGUI::CreateConsoleWindow(pApp);
 }
@@ -103,7 +83,7 @@ bool C4Console::In(const char *szText)
 		// done
 		return true;
 	}
-	// begins with '#'? then it's a message. Route cia ProcessInput to allow #/sound
+	// begins with '#'? then it's a message. Route via ProcessInput to allow #/sound
 	if (*szText == '#')
 	{
 		::MessageInput.ProcessInput(szText + 1);
@@ -141,14 +121,6 @@ void C4Console::UpdateStatusBars()
 		StdStrBuf str;
 		str.Format("Frame: %i",FrameCounter);
 		C4ConsoleGUI::DisplayInfoText(CONSOLE_FrameCounter, str);
-	}
-	// Script counter
-	if (::GameScript.Counter!=ScriptCounter)
-	{
-		ScriptCounter=::GameScript.Counter;
-		StdStrBuf str;
-		str.Format("Script: %i",ScriptCounter);
-		C4ConsoleGUI::DisplayInfoText(CONSOLE_ScriptCounter, str);
 	}
 	// Time & FPS
 	if ((Game.Time!=Time) || (Game.FPS!=FPS))
@@ -194,8 +166,16 @@ bool C4Console::SaveScenario(const char * path)
 	// Open new scenario file
 	if (path)
 	{
+		// Close current scenario file
+		Game.ScenarioFile.Close();
+		// Copy current scenario file to target
+		if (!C4Group_CopyItem(Game.ScenarioFilename,path))
+		{
+			Message(FormatString(LoadResStr("IDS_CNS_SAVEASERROR"),path).getData());
+			return false;
+		}
 		SCopy(path, Game.ScenarioFilename);
-		SetCaption(GetFilename(Game.ScenarioFilename));
+		SetCaptionToFilename(Game.ScenarioFilename);
 		if (!Game.ScenarioFile.Open(Game.ScenarioFilename))
 		{
 			Message(FormatString(LoadResStr("IDS_CNS_SAVEASERROR"),Game.ScenarioFilename).getData());
@@ -263,11 +243,6 @@ bool C4Console::FileSaveAs(bool fSaveGame)
 	                OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY,
 	                true)) return false;
 	DefaultExtension(&filename,"ocs");
-	bool fOkay=true;
-	// Close current scenario file
-	if (!Game.ScenarioFile.Close()) fOkay=false;
-	// Copy current scenario file to target
-	if (!C4Group_CopyItem(Game.ScenarioFilename,filename.getData())) fOkay=false;
 	if (fSaveGame)
 		// Save game
 		return SaveGame(filename.getData());
@@ -370,7 +345,7 @@ void C4Console::Default()
 
 void C4Console::Clear()
 {
-	C4ConsoleBase::Clear();
+	C4Window::Clear();
 	EditCursor.Clear();
 	ToolsDlg.Clear();
 	PropertyDlgClose();
@@ -430,7 +405,7 @@ void C4Console::UpdateInputCtrl()
 {
 	ClearInput();
 	// add global and standard functions
-	std::list <char*> functions = ::ScriptEngine.GetFunctionNames(&::GameScript);
+	std::list <const char*> functions = ::ScriptEngine.GetFunctionNames(::GameScript.ScenPropList._getPropList());
 	SetInputFunctions(functions);
 }
 
@@ -520,7 +495,7 @@ void C4Console::ClearNetMenu()
 
 void C4Console::SetCaptionToFilename(const char* szFilename)
 {
-	SetCaption(GetFilename(szFilename));
+	SetTitle(GetFilename(szFilename));
 	C4ConsoleGUI::SetCaptionToFileName(szFilename);
 }
 
@@ -554,7 +529,7 @@ void C4Console::CloseGame()
 	if (!Active || !fGameOpen) return;
 	fGameOpen=false;
 	EnableControls(fGameOpen);
-	SetCaption(LoadResStr("IDS_CNS_CONSOLE"));
+	SetTitle(LoadResStr("IDS_CNS_CONSOLE"));
 }
 
 bool C4Console::TogglePause()
@@ -562,7 +537,7 @@ bool C4Console::TogglePause()
 	return Game.TogglePause();
 }
 
-#if !(defined(_WIN32) || defined(USE_COCOA) || defined(WITH_DEVELOPER_MODE))
+#if !(defined(USE_WIN32_WINDOWS) || defined(USE_COCOA) || defined(WITH_DEVELOPER_MODE))
 class C4ConsoleGUI::State: public C4ConsoleGUI::InternalState<class C4ConsoleGUI>
 {
 	public: State(C4ConsoleGUI *console): Super(console) {}
@@ -583,11 +558,11 @@ bool C4ConsoleGUI::ClearLog() {return 0;}
 void C4ConsoleGUI::ClearNetMenu() {}
 void C4ConsoleGUI::ClearPlayerMenu() {}
 void C4ConsoleGUI::ClearViewportMenu() {}
-CStdWindow * C4ConsoleGUI::CreateConsoleWindow(CStdApp*) {return 0;}
+C4Window * C4ConsoleGUI::CreateConsoleWindow(C4AbstractApp*) {return 0;}
 void C4ConsoleGUI::DisplayInfoText(C4ConsoleGUI::InfoTextType, StdStrBuf&) {}
 void C4ConsoleGUI::DoEnableControls(bool) {}
 bool C4ConsoleGUI::DoUpdateHaltCtrls(bool) {return 0;}
-bool C4ConsoleGUI::FileSelect(StdStrBuf *, char const*, unsigned int, bool) {return 0;}
+bool C4ConsoleGUI::FileSelect(StdStrBuf *, char const*, DWORD, bool) {return 0;}
 bool C4ConsoleGUI::Message(char const*, bool) {return 0;}
 void C4ConsoleGUI::Out(char const*) {}
 bool C4ConsoleGUI::PropertyDlgOpen() {return 0;}
@@ -596,7 +571,7 @@ void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection) {}
 void C4ConsoleGUI::RecordingEnabled() {}
 void C4ConsoleGUI::SetCaptionToFileName(char const*) {}
 void C4ConsoleGUI::SetCursor(C4ConsoleGUI::Cursor) {}
-void C4ConsoleGUI::SetInputFunctions(std::list<char*, std::allocator<char*> >&) {}
+void C4ConsoleGUI::SetInputFunctions(std::list<const char*>&) {}
 void C4ConsoleGUI::ShowAboutWithCopyright(StdStrBuf&) {}
 void C4ConsoleGUI::ToolsDlgInitMaterialCtrls(C4ToolsDlg*) {}
 bool C4ConsoleGUI::ToolsDlgOpen(C4ToolsDlg*) {return 0;}
@@ -615,7 +590,5 @@ void C4ToolsDlg::UpdateTextures() {}
 void C4ToolsDlg::UpdateToolCtrls() {}
 bool C4Viewport::ScrollBarsByViewPosition() {return 0;}
 bool C4Viewport::TogglePlayerLock() {return 0;}
-void CStdWindow::RequestUpdate() {}
-bool OpenURL(char const*) {return 0;}
 #include "C4ConsoleGUICommon.h"
 #endif

@@ -20,11 +20,13 @@ dnl Process this file with autoconf to produce a configure script.
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 AC_PREREQ([2.67])
-AC_INIT([clonk], [5])
+AC_INIT([clonk], [m4_esyscmd([sed -n 's/SET(C4XVER1\s\+\(.\+\))/\1/ p' Version.txt | tr -d '\n' | tr -d '\r'
+    ]).m4_esyscmd([sed -n 's/SET(C4XVER2\s\+\(.\+\))/\1/ p' Version.txt | tr -d '\n' | tr -d '\r'
+    ]).m4_esyscmd([sed -n 's/SET(C4XVER3\s\+\(.\+\))/\1/ p' Version.txt | tr -d '\n' | tr -d '\r'])])
 AC_COPYRIGHT([©2005-2011 Günther Brammer])
-AC_CONFIG_SRCDIR([/src/C4Game.cpp])
+AC_CONFIG_SRCDIR([/src/C4Include.h])
 AC_CONFIG_AUX_DIR([autotools])
-AC_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile])
 AC_CANONICAL_HOST
 dnl foreign to tell automake to shut up,
@@ -42,14 +44,14 @@ void f(struct D&&); int main() { return 0; }
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_PROG_RANLIB
+# Automake 1.12 breaks if this isn't run unconditionally
+AC_PROG_OBJCXX
 
 case $host in
   *-*-mingw32* | *-*-cygwin* | *-*-windows*)
     win32=true; osx=false;;
   *-*-darwin*)
-    win32=false; osx=true;
-    m4_ifdef([AC_PROG_OBJCXX], [AC_PROG_OBJCXX], [AC_MSG_ERROR([this configure script was created with an autoconf version older than 2.65 and does not support macosx.])])
-    ;;
+    win32=false; osx=true;;
   *)
     win32=false; osx=false;;
 esac
@@ -63,8 +65,7 @@ AM_CONDITIONAL(MACOSX, [test $osx = true])
 # various used headers
 dnl the whitespace is there to prevent AC_INCLUDES_DEFAULT
 AC_CHECK_HEADERS([stdint.h unistd.h poll.h sys/file.h sys/stat.h sys/types.h locale.h sys/socket.h signal.h langinfo.h sys/eventfd.h sys/timerfd.h sys/inotify.h], , , [[ ]])
-# Mingw does not ship with multimon.h
-AC_CHECK_HEADERS([multimon.h io.h direct.h share.h], [], [], [[#include <windows.h>]])
+AC_CHECK_HEADERS([io.h direct.h share.h natupnp.h], [], [], [[#include <windows.h>]])
 # iconv
 AX_ICONV
 # vasprintf is a GNU extension
@@ -139,7 +140,7 @@ AS_IF([test $with_gtk != no],[
   AC_DEFINE([WITH_GLIB], 1, [Glib])
   AC_DEFINE([WITH_DEVELOPER_MODE], 1, [Developer mode])
 ])
-AM_CONDITIONAL(DEVELOPER_MODE, [test $with_gtk != no])
+AM_CONDITIONAL(GTK, [test $with_gtk != no])
 
 # OpenAL
 AC_ARG_WITH([openal],
@@ -234,17 +235,24 @@ AC_CHECK_LIB(z, deflate, [
   AC_MSG_ERROR([libz not found.])
 ])
 
+# Check for librt
+AC_CHECK_LIB(rt, clock_gettime, [
+  LDADD="-lrt $LDADD"
+], [])
+
 # Check for libfreetype
 if test $enable_console = no; then
-  if test "$cross_compiling" = no; then
-    AC_CHECK_PROG(FREETYPE_CONFIG, freetype-config, freetype-config)
-  fi
-  if test $FREETYPE_CONFIG; then
-    AC_SUBST(FREETYPE_CFLAGS, [`$FREETYPE_CONFIG --cflags`])
-    AC_SUBST(FREETYPE_LIBS, [`$FREETYPE_CONFIG --libs`])
-  else
-    PKG_CHECK_MODULES(FREETYPE, freetype2)
-  fi
+  PKG_CHECK_MODULES(FREETYPE, freetype2, ,[
+    if test "$cross_compiling" = no; then
+      AC_CHECK_PROG(FREETYPE_CONFIG, freetype-config, freetype-config)
+    fi
+    if test $FREETYPE_CONFIG; then
+      AC_SUBST(FREETYPE_CFLAGS, [`$FREETYPE_CONFIG --cflags`])
+      AC_SUBST(FREETYPE_LIBS, [`$FREETYPE_CONFIG --libs`])
+    else
+      AC_MSG_ERROR([Freetype not found.])
+    fi
+  ])
   AC_DEFINE(HAVE_FREETYPE, 1, [Define to 1 if you have FreeType2.])
 fi
 
@@ -303,12 +311,27 @@ if test "$with_directx" = yes; then
   AC_DEFINE([USE_DIRECTX], 1, [DirectX graphics])
 fi
 
-AC_ARG_WITH([automatic-update],
-  [AS_HELP_STRING([--with-automatic-update],[enable support for automatic engine updates [default=yes]])],
-  , [with_automatic_update="yes"])
-if test "$with_automatic_update" = "yes"; then
+# UPnP
+AC_ARG_WITH([upnp],
+  [AS_HELP_STRING([--with-upnp],[compile with upnp support [default=no]])],
+  , [with_upnp=no])
+AS_IF([test $with_upnp = yes], [
+  AM_CONDITIONAL(NATUPNP, [test "$ac_cv_header_natupnp_h" = yes])
+  PKG_CHECK_MODULES(LIBUPNP, [libupnp], [have_libupnp=yes], [have_libupnp=no])
+], [
+  AM_CONDITIONAL(NATUPNP, [false])
+  have_libupnp=no
+])
+AM_CONDITIONAL(LIBUPNP, [test "$have_libupnp" = yes])
+
+# Automatic Update
+AC_ARG_ENABLE([autoupdate],
+  [AS_HELP_STRING([--disable-autoupdate],[support for automatic engine updates [default=yes]])],
+  , [enable_autoupdate="yes"])
+AS_IF([test "$enable_autoupdate" = yes], [
   AC_DEFINE([WITH_AUTOMATIC_UPDATE], 1, [Enable automatic update system])
-fi
+])
+AM_CONDITIONAL(AUTOUPDATE, [test "$enable_autoupdate" = yes])
 
 if test $win32 = false; then
   # pthread
@@ -320,10 +343,12 @@ if test $win32 = false; then
   AM_CONDITIONAL(USE_FMOD, false)
 else
   # Windows
-  for WIN32LIB in gdi32 comdlg32 winmm ws2_32
+  for WIN32LIB in gdi32 comdlg32 ws2_32
   do
     AC_CHECK_LIB([$WIN32LIB], main, [CLONK_LIBS="-l$WIN32LIB $CLONK_LIBS"], [AC_MSG_ERROR([$WIN32LIB not found.])])
   done
+
+  AC_CHECK_LIB([winmm], main, [LDADD="-lwinmm $LDADD"], [AC_MSG_ERROR([winmm not found.])])
 
   AC_CHECK_LIB([vfw32], main, [
     CLONK_LIBS="-lvfw32 $CLONK_LIBS"
@@ -341,8 +366,12 @@ else
   if test $WINDRES = no; then
     AC_MSG_ERROR([windres not found.])
   fi
+
+  # ASLR/DEP
+  LDADD="-Wl,--nxcompat -Wl,--dynamicbase $LDADD"
 fi
 
+AC_SUBST(LDADD)
 AC_SUBST(CLONK_LIBS)
 AC_SUBST(Z_LIBS)
 
@@ -360,11 +389,15 @@ AM_CONDITIONAL(RECENT_GCC, [test $RECENT_GCC = yes])
 AC_OUTPUT
 
 echo "Configuration:
+  CFLAGS:	$CFLAGS
+  CXXFLAGS:	$CXXFLAGS
   Debug:	$enable_debug
   Debugrec:	$enable_debugrec
   Pure console:	$enable_console
+  Autoupdate:	$enable_autoupdate
   DirectX:	$with_directx
   OpenGL:	$with_gl
+  Nat/LibUPnP:	$ac_cv_header_natupnp_h/$have_libupnp
   Sound:	$enable_sound
   SDL_Mixer:	$with_sdl_mixer
   OpenAL:	$with_openal

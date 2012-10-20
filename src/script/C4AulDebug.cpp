@@ -19,14 +19,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
 
 #include <C4Include.h>
+#include "C4AulDebug.h"
+
 #include <C4Version.h>
 #include <C4GameControl.h>
 #include <C4Game.h>
 #include <C4MessageInput.h>
 #include <C4Log.h>
 #include <C4Object.h>
-
-#include "C4AulDebug.h"
 #include "C4AulExec.h"
 
 #ifndef NOAULDEBUG
@@ -229,7 +229,9 @@ void C4AulDebug::ProcessLine(const StdStrBuf &Line)
 	else if (SEqualNoCase(szCmd, "EXC") || SEqualNoCase(szCmd, "E"))
 	{
 		C4AulScriptContext* context = pExec->GetContext(pExec->GetContextDepth()-1);
-		int32_t objectNum = context && context->Obj ? context->Obj->Number : C4ControlScript::SCOPE_Global;
+		int32_t objectNum = C4ControlScript::SCOPE_Global;
+		if (context && context->Obj && context->Obj->GetObject())
+			objectNum = context->Obj->GetObject()->Number;
 		::Control.DoInput(CID_Script, new C4ControlScript(szData, objectNum, true, true), CDT_Decide);
 	}
 	else if (SEqualNoCase(szCmd, "PSE"))
@@ -267,17 +269,18 @@ void C4AulDebug::ProcessLine(const StdStrBuf &Line)
 				break;
 		}
 
-		if (script)
+		if (script && script->GetScriptHost())
 		{
 			C4AulBCC* foundDebugChunk = NULL;
-			const char* scriptText = script->GetScript();
-			for (C4AulBCC* chunk = &script->Code[0]; chunk; chunk++)
+			C4ScriptHost * sh = script->GetScriptHost();
+			const char* scriptText = sh->GetScript();
+			for (C4AulBCC* chunk = &sh->Code[0]; chunk; chunk++)
 			{
 				switch (chunk->bccType)
 				{
 				case AB_DEBUG:
 					{
-					int lineOfThisOne = SGetLine(scriptText, script->PosForCode[chunk - &script->Code[0]]);
+					int lineOfThisOne = SGetLine(scriptText, sh->PosForCode[chunk - &sh->Code[0]]);
 					if (lineOfThisOne == line)
 					{
 						foundDebugChunk = chunk;

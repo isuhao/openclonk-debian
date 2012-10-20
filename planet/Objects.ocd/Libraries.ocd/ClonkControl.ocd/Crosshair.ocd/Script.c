@@ -44,7 +44,6 @@ public func FxMoveTimer()
 
 		var angle_diff = Normalize(target_angle - angle, -1800, 10);
 		if (angle_diff == 0) angle_diff = 1;
-		var dir = angle_diff / Abs(angle_diff);
 		
 		angle = angle + angle_diff * analog_strength / 100 / 8;
 	}
@@ -134,12 +133,6 @@ private func EnableKeyAimControls(bool enable)
 	SetPlayerControlEnabled(GetOwner(), CON_AimDown, enable);
 	SetPlayerControlEnabled(GetOwner(), CON_AimLeft, enable);
 	SetPlayerControlEnabled(GetOwner(), CON_AimRight, enable);
-	
-	// never disabled
-	/*SetPlayerControlEnabled(GetOwner(), CON_AimAxisUp, enable);
-	SetPlayerControlEnabled(GetOwner(), CON_AimAxisDown, enable);
-	SetPlayerControlEnabled(GetOwner(), CON_AimAxisLeft, enable);
-	SetPlayerControlEnabled(GetOwner(), CON_AimAxisRight, enable);*/
 }
 
 public func IsAiming()

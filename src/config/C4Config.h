@@ -43,6 +43,7 @@ public:
 	char LanguageEx[CFG_MaxString+1]; // full fallback list composed by frontend options (condensed comma separated list)
 	char Participants[CFG_MaxString+1];
 	int32_t  AlwaysDebug; // if set: turns on debugmode whenever engine is started
+	int32_t  OpenScenarioInGameMode; // When the program arguments include a scenario path, open the game regularly
 	char RXFontName[CFG_MaxString+1];
 	int32_t  RXFontSize;
 	char ConfigUserPath[CFG_MaxString + 1];
@@ -66,8 +67,7 @@ public:
 	static int GetLanguageSequence(const char *strSource, char *strTarget);
 	void DefaultLanguage();
 	bool CreateSaveFolder(const char *strDirectory, const char *strLanguageTitle);
-	void AdoptOldSettings();
-	void DeterminePaths(bool forceWorkingDirectory);
+	void DeterminePaths();
 	void CompileFunc(StdCompiler *pComp);
 
 private:
@@ -99,9 +99,9 @@ public:
 	int32_t UpperBoard;
 	int32_t ShowClock;
 	int32_t ResX,ResY;
+	int32_t WindowX,WindowY;
 	int32_t RefreshRate;	// monitor vertical refresh rate
-	int32_t GuiResX,GuiResY;
-	int32_t Windowed;
+	int32_t Windowed; // 0: fullscreen, 1: windowed, 2: fullscreen in game, windowed in menu
 	int32_t ShowAllResolutions;
 	int32_t ShowCrewNames; // show player name above clonks?
 	int32_t ShowCrewCNames; // show clonk names above clonks?
@@ -185,7 +185,6 @@ public:
 	int32_t HideMsgPlrNoTakeOver;
 	int32_t HideMsgNoOfficialLeague;
 	int32_t HideMsgIRCDangerous;
-	int32_t NoSplash;
 	int32_t AlphabeticalSorting; // if set, Folder.txt-sorting is ignored in scenario selection
 	int32_t LastPortraitFolderIdx;
 	void CompileFunc(StdCompiler *pComp);
@@ -265,7 +264,7 @@ public:
 	const char* GetSubkeyPath(const char *strSubkey);
 	void Default();
 	bool Save();
-	bool Load(bool forceWorkingDirectory = true, const char *szConfigFile = NULL);
+	bool Load(const char *szConfigFile = NULL);
 	bool Init();
 	bool Registered();
 	const char *AtExePath(const char *szFilename);
@@ -284,7 +283,7 @@ public:
 	bool RemoveModule(const char *szPath, char *szModules);
 	bool IsModule(const char *szPath, char *szModules);
 	bool AddModule(const char *szPath, char *szModules);
-	void GetConfigFileName(StdStrBuf &filename, bool forceWorkingDirectory, const char *szConfigFile);
+	void GetConfigFileName(StdStrBuf &filename, const char *szConfigFile);
 
 	static void ExpandEnvironmentVariables(char *strPath, size_t iMaxLen);
 };

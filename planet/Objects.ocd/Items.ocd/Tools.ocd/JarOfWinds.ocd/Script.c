@@ -10,6 +10,11 @@ local Amount;
 local MaxCap;
 local sound;
 
+func Hit()
+{
+	Sound("GlassHit?");
+}
+
 public func GetCarryMode(clonk) { return CARRY_BothHands; }
 public func GetCarryPhase() { return 600; }
 
@@ -43,7 +48,7 @@ protected func ControlUse(object pClonk, iX, iY)
 			FireWeapon(pClonk, iX, iY);
 			Amount=0;
 			AddEffect("JarReload",this,100,1,this);
-			Sound("WindCharge.ogg",false,nil,nil,1);
+			Sound("WindCharge",false,nil,nil,1);
 			sound=true;
 		}
 		
@@ -72,7 +77,7 @@ protected func Load()
 		{
 			if(!sound)
 			{
-				Sound("WindCharge.ogg",false,nil,nil,1);
+				Sound("WindCharge",false,nil,nil,1);
 				sound=true;
 			}
 			Amount += 2; //Air is sucked in.
@@ -101,8 +106,8 @@ protected func Load()
 
 protected func ChargeSoundStop()
 {
-	Sound("WindCharge.ogg",false,nil,nil,-1);
-	Sound("WindChargeStop.ogg");
+	Sound("WindCharge",false,nil,nil,-1);
+	Sound("WindChargeStop");
 	sound=false;
 }
 
@@ -111,28 +116,28 @@ private func FireWeapon(object pClonk,iX,iY)
 	var iAngle=Angle(0,0,iX,iY);
 	
 	ChargeSoundStop();
-	Sound("WindGust.ogg");
+	Sound("WindGust");
 
 	//Find Victims to push
 	for(var i=10; i<32; i++)
 	{
 		var R = RandomX(-20,20);
-		var SX = Sin(180 - Angle(0,0,iX,iY) + R,i);
-		var SY = Cos(180 - Angle(0,0,iX,iY) + R,i);
+		var SX = Sin(180 - iAngle + R,i);
+		var SY = Cos(180 - iAngle + R,i);
 		
 		if(!GBackSolid(SX,SY))
 		{
 			CreateParticle("Air",
 					SX,SY,
-					Sin(180 - Angle(0,0,iX,iY) + (R),(Amount / 2) + 25),
-					Cos(180 - Angle(0,0,iX,iY) + (R),(Amount / 2) + 25),
+					Sin(180 - iAngle + (R),(Amount / 2) + 25),
+					Cos(180 - iAngle + (R),(Amount / 2) + 25),
 					Max(i + 30, 90) + 75,
 					);
 		}
 	}
 	
-	var sinspeed = Sin(180 - Angle(0,0,iX,iY) + (R / 2),(Amount) + 15);
-	var cosspeed = Cos(180 - Angle(0,0,iX,iY) + (R / 2),(Amount) + 15);
+	var sinspeed = Sin(180 - iAngle + (R / 2),(Amount) + 15);
+	var cosspeed = Cos(180 - iAngle + (R / 2),(Amount) + 15);
 	
 	if(pClonk->GetAction() != "Walk")
 	{									//Makes the clonk firing it be pushed backwards a bit
@@ -144,9 +149,9 @@ private func FireWeapon(object pClonk,iX,iY)
 	
 	for( var obj in FindObjects(
 		Find_Or(
-			Find_Distance(10,Sin(180 - Angle(0,0,iX,iY),20),Cos(180 - Angle(0,0,iX,iY),20)),
-			Find_Distance(18,Sin(180 - Angle(0,0,iX,iY),40),Cos(180 - Angle(0,0,iX,iY),40)),
-			Find_Distance(25,Sin(180 - Angle(0,0,iX,iY),70),Cos(180 - Angle(0,0,iX,iY),70))
+			Find_Distance(10,Sin(180 - iAngle,20),Cos(180 - iAngle,20)),
+			Find_Distance(18,Sin(180 - iAngle,40),Cos(180 - iAngle,40)),
+			Find_Distance(25,Sin(180 - iAngle,70),Cos(180 - iAngle,70))
 				),
 		Find_Not(Find_Category(C4D_Structure)),
 		Find_Not(Find_Func("NoWindjarForce")),
@@ -165,7 +170,10 @@ private func FireWeapon(object pClonk,iX,iY)
 	}
 }
 
+func IsInventorProduct() { return true; }
+
 local Name = "$Name$";
 local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
 local Rebuy = true;

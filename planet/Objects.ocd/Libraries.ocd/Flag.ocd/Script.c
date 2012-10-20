@@ -1,31 +1,67 @@
-local Name = "$Name$";
-local Description = "$Description$";
+/*
+	The flagpoles mark the area a player owns.
+	It also serves as an energy transmitter.
+*/
 
 static const LibraryFlag_standard_radius = 200;
 static LibraryFlag_flag_list;
 
 local lflag;
 
-global func GetOwnerOfPosition(int x, int y)
+public func IsFlagpole(){return true;}
+
+func RefreshAllFlagLinks()
 {
-	if(GetType(LibraryFlag_flag_list) != C4V_Array) return NO_OWNER;
-	
-	var oldest = nil, oldest_time = 0;
-	
-	for(var flag in LibraryFlag_flag_list)
+	for(var f in LibraryFlag_flag_list)
 	{
-		var d = Distance(GetX() + x, GetY() + y, flag->GetX(), flag->GetY());
-		if(d > flag->GetFlagRadius()) continue; 
-		
-		if(oldest == nil || flag->GetFlagConstructionTime() < oldest_time)
-		{
-			oldest = flag;
-			oldest_time = flag->GetFlagConstructionTime();
-		}
+		f->ScheduleRefreshLinkedFlags();
 	}
 	
-	if(oldest == nil) return NO_OWNER;
-	return oldest->GetOwner();
+	// update power balance for power helpers after refreshing the linked flags
+	Schedule(nil, "Library_Flag->RefreshAllPowerHelpers()", 2, 0);
+	AddEffect("ScheduleRefreshAllPowerHelpers", nil, 1, 2, nil, Library_Flag);
+}
+
+func FxScheduleRefreshAllPowerHelpersTimer()
+{
+	Library_Flag->RefreshAllPowerHelpers();
+	return -1;
+}
+
+func RefreshAllPowerHelpers()
+{
+	// no power helpers created yet
+	if(GetType(Library_Power_power_compounds) != C4V_Array)
+		return;
+	
+	// special handling for neutral
+	var neutral = nil;
+	for(var obj in Library_Power_power_compounds)
+	{
+		if(!obj.neutral) continue;
+		neutral = obj;
+		break;
+	}
+	
+	if(neutral)
+	{
+		RefreshPowerHelper(neutral);
+	}
+	
+	// same for all helpers - delete / refresh
+	for(var i = GetLength(Library_Power_power_compounds); --i >= 0;)
+	{
+		var obj = Library_Power_power_compounds[i];
+		if(GetLength(obj.power_links) == 0 && GetLength(obj.sleeping_links) == 0)
+		{
+			obj->RemoveObject();
+			Library_Power_power_compounds[i] = Library_Power_power_compounds[GetLength(Library_Power_power_compounds) - 1];
+			SetLength(Library_Power_power_compounds, GetLength(Library_Power_power_compounds) - 1);
+			continue;
+		}
+		
+		obj->CheckPowerBalance();
+	}
 }
 
 func RedrawFlagRadius()
@@ -65,63 +101,11 @@ func RedrawFlagRadius()
 					draw=false;
 				}
 				//else inEnemy=true;
-				if(!Hostile(GetOwner(), f->GetOwner()))
+				if(IsAllied(GetOwner(), f->GetOwner()))
 					draw = false;
 			}
 		}
 		
-		// check allied flags
-		// don't draw inner border
-		/*
-		if(draw && GetLength(other_flags))
-		{
-			var own_flags = [];
-	
-			for(var f in LibraryFlag_flag_list)
-			{
-				if(f->GetOwner() != GetOwner()) continue;
-				if(f == this) continue;
-				own_flags[i++] = f;
-			}
-			
-			// sort own flags for age - insert sort okay here since probably 99% sorted already
-			for(var fi = 1; fi < GetLength(own_flags); ++fi)
-			{
-				var ft = own_flags[fi];
-				var t = ft->GetFlagConstructionTime();
-				for(var ci = fi-1; ci >= 0; ++ci)
-				{
-					if(own_flags[ci]->GetFlagConstructionTime() >= t) continue;
-					
-					// right position?
-					if(ci == fi-1) break;
-					
-					// move to the right
-					for(var mi = ci+1;mi<fi;++mi)
-						own_flags[mi+1] = own_flags[mi];
-					own_flags[ci] = ft;
-					break;
-				}
-			}
-			
-			//own_flags = FindObjects(Find_ID(FlagPole),Find_Exclude(target), Find_Owner(GetOwner()), Find_Distance(FLAG_DISTANCE ,x,y),Sort_Func("GetLifeTime"));	
-			if(GetLength(own_flags))
-			{
-				draw=false;
-				for(var f in other_flags)
-				{
-					for(var e in own_flags)
-					{
-						if(Distance(GetX()+x,GetY()+y,f->GetX(),f->GetY())<(FLAG_DISTANCE))
-						{
-							if(GetLifeTime()> f->GetLifeTime() && e->GetLifeTime() < f->GetLifeTime())
-							draw=true;
-						}		
-					}
-				}
-			}
-		} //if(draw)
-		*/
 		if(!draw)
 		{
 			if(marker_index < GetLength(lflag.range_markers))
@@ -143,63 +127,18 @@ func RedrawFlagRadius()
 		lflag.range_markers[marker_index] = marker;
 	}
 	
-	// uter Border
-	/*
-	for(var i=0; i<10; i++)
+	// there were unnecessary markers?
+	if(marker_index < GetLength(lflag.range_markers) - 1)
 	{
-		SetLength(outers,0);
-		var f=nil;
-		draw=true;
-		var x= Sin(i*36 - time, lflag.radius);
-		var y=-Cos(i*36 - time, lflag.radius);	
-		if(flags)
-			for(var f in flags)
-			{
-				if(Distance(GetX()+x,GetY()+y,f->GetX(),f->GetY())<FLAG_DISTANCE)
-				{
-					if(f->GetLifeTime() < target->GetLifeTime())
-					{	
-						outers[GetLength(outers)] = f;	
-					}
-					else
-						draw=false;
-				}
-			}
-		if(outers)
+		var old = marker_index;
+		while(++marker_index < GetLength(lflag.range_markers))
 		{
-			var newf=nil;
-			for(var f in outers)
-			{
-				var d=0;
-				if(f->GetLifeTime()>d)
-				{
-					d=f->GetLifeTime();
-					newf=f;
-				}
-			}
+			var marker = lflag.range_markers[marker_index];
+			marker->RemoveObject();
+			lflag.range_markers[marker_index] = nil;
 		}
-		if(!newf) continue;
-		var fl=nil;
-		fl = FindObjects(Find_ID(FlagPole),Find_Exclude(target), Find_Owner(GetOwner()), Find_Distance(FLAG_DISTANCE ,x,y),Sort_Func("GetLifeTime"));
-		if(fl[0] && draw && flags)
-		{
-			draw=false;
-			for(var f in flags)
-			{
-				for(var e in fl)
-				{
-					if(Distance(GetX()+x,GetY()+y,f->GetX(),f->GetY())<(FLAG_DISTANCE))
-					{
-						if(GetLifeTime()> f->GetLifeTime() && e->GetLifeTime() < f->GetLifeTime())
-						draw=true;
-					}		
-				}
-			}
-		}
-		if(!draw)	
-			continue;
-		CreateParticle("Magic",Sin(i*36 - time, FLAG_DISTANCE+1),-Cos(i*36 - time, FLAG_DISTANCE+1),0,0,10+Random(4),newf.color);
-	}*/
+		SetLength(lflag.range_markers, old + 1);
+	}
 }
 
 func RefreshOwnershipOfSurrounding()
@@ -213,28 +152,38 @@ func RefreshOwnershipOfSurrounding()
 		obj->~OnOwnerChange(old);
 	}
 }
-
-public func Construction()
+public func Initialize()
 {
-	if(GetType(LibraryFlag_flag_list) != C4V_Array)
-		LibraryFlag_flag_list = [];
+	// no falling down anymore
+	SetCategory(C4D_StaticBack);
 	
-	if(GetIndexOf(this, LibraryFlag_flag_list) == -1)
+	if(GetIndexOf(LibraryFlag_flag_list, this) == -1)
 		LibraryFlag_flag_list[GetLength(LibraryFlag_flag_list)] = this;
-	
-	lflag =
-	{
-		construction_time = FrameCounter(),
-		radius = LibraryFlag_standard_radius,
-		range_markers = []
-	};
-	
+
 	// redraw
 	RedrawAllFlagRadiuses();
 	
 	// ownership
 	RefreshOwnershipOfSurrounding();
 	
+	// linked flags - optimization for power system
+	RefreshAllFlagLinks();
+}
+
+public func Construction()
+{
+	if(GetType(LibraryFlag_flag_list) != C4V_Array)
+		LibraryFlag_flag_list = [];
+	
+	lflag =
+	{
+		construction_time = FrameCounter(),
+		radius = LibraryFlag_standard_radius,
+		range_markers = [],
+		linked_flags = [],
+		power_helper = nil
+	};
+		
 	return _inherited(...);
 }
 
@@ -257,8 +206,133 @@ public func Destruction()
 	// ownership
 	RefreshOwnershipOfSurrounding();
 	
+	// refresh all flag links
+	RefreshAllFlagLinks();
+	
 	return _inherited(...);
 }
+
+func ScheduleRefreshLinkedFlags()
+{
+	if(GetEffect("RefreshLinkedFlags", this)) return;
+	AddEffect("RefreshLinkedFlags", this, 1, 1, this);
+}
+
+func StopRefreshLinkedFlags()
+{
+	if(!GetEffect("RefreshLinkedFlags", this)) return;
+	RemoveEffect("RefreshLinkedFlags", this);
+}
+
+func FxRefreshLinkedFlagsTimer()
+{
+	this->RefreshLinkedFlags();
+	return -1;
+}
+
+func RefreshLinkedFlags()
+{
+	// failsafe - the array should exist
+	if(GetType(LibraryFlag_flag_list) != C4V_Array) return;
+	
+	var current = [];
+	var new = [this];
+	
+	var owner = GetOwner();
+	
+	while(GetLength(new))
+	{
+		for(var f in new) if(f != this) current[GetLength(current)] = f;
+		var old = new;
+		new = [];
+		
+		for(var oldflag in old)
+		for(var flag in LibraryFlag_flag_list)
+		{
+			if(!IsAllied(flag->GetOwner(), owner)) continue;
+			if(GetIndexOf(current, flag) != -1) continue;
+			if(flag == this) continue;
+			
+			if(ObjectDistance(oldflag, flag) > oldflag->GetFlagRadius() + flag->GetFlagRadius()) continue;
+			
+			new[GetLength(new)] = flag;
+		}
+	}
+	
+	lflag.linked_flags = current;
+	
+	// update flag links for all linked flags - no need for every flag to do that
+	// meanwhile, adjust power helper. Merge if necessary
+	// since we don't know whether flag links have been lost we will create a new power helper and possibly remove old ones
+	Library_Power->Init(); // make sure the power system is set up
+	var old = lflag.power_helper;
+	lflag.power_helper = CreateObject(Library_Power, 0, 0, NO_OWNER);
+	Library_Power_power_compounds[GetLength(Library_Power_power_compounds)] = lflag.power_helper;
+	
+	// list of helpers yet to merge
+	var to_merge = [old];
+	
+	// copy from me
+	
+	lflag.linked_flags = current;
+	for(var other in lflag.linked_flags)
+	{
+		other->CopyLinkedFlags(this, lflag.linked_flags);
+		
+		if(GetIndexOf(to_merge, other.lflag.power_helper) == -1)
+			to_merge[GetLength(to_merge)] = other.lflag.power_helper;
+		other.lflag.power_helper = lflag.power_helper;
+	}
+	
+	// for every object in to_merge check if it actually (still) belongs to the group
+	for(var h in to_merge)
+	{
+		if(h == nil)
+			continue;
+		RefreshPowerHelper(h);
+	}
+}
+
+func RefreshPowerHelper(h)
+{
+	// merge both power_links and sleeping_links
+	for(var o in h.power_links)
+	{
+		if(o == nil) continue; // possible
+		
+		var actual = Library_Power->GetPowerHelperForObject(o.obj);
+		if(actual == h) continue; // right one already
+		// remove from old and add to new
+		h->RemovePowerLink(o.obj, true);
+		actual->AddPowerLink(o.obj, o.amount, true);
+	}
+		
+	for(var i = GetLength(h.sleeping_links); --i >= 0;)
+	{
+		var o = h.sleeping_links[i];
+		var actual = Library_Power->GetPowerHelperForObject(o.obj);
+		if(actual == h) continue; // right one already
+		// remove from old one and add to new
+		actual.sleeping_links[GetLength(actual.sleeping_links)] = o;
+			
+		h.sleeping_links[i] = h.sleeping_links[GetLength(h.sleeping_links) - 1];
+		SetLength(h.sleeping_links, GetLength(h.sleeping_links) - 1);
+	}
+}
+
+public func CopyLinkedFlags(object from, array flaglist)
+{
+	lflag.linked_flags = flaglist[:];
+	for(var i = GetLength(lflag.linked_flags)-1; i >= 0; --i)
+		if(lflag.linked_flags[i] == this)
+			lflag.linked_flags[i] = from;
+	StopRefreshLinkedFlags();
+}
+
+public func GetPowerHelper(){return lflag.power_helper;}
+public func SetPowerHelper(object to){lflag.power_helper = to;}
+
+public func GetLinkedFlags(){return lflag.linked_flags;}
 
 private func ClearFlagMarkers()
 {
@@ -280,10 +354,16 @@ public func SetFlagRadius(int to)
 	return true;
 }
 
-global func RedrawAllFlagRadiuses()
+// reassign owner of flag markers for correct color
+func OnOwnerChange(old)
 {
-	for(var f in LibraryFlag_flag_list)
-		f->RedrawFlagRadius();
+	var new_owner = GetOwner();
+	for(var marker in lflag.range_markers)
+	{
+		if(!marker) continue;
+		marker->SetOwner(new_owner);
+		marker->ResetColor();
+	}
 }
 
 public func GetFlagRadius(){return lflag.radius;}
