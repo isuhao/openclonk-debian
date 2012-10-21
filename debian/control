@@ -5,6 +5,8 @@ Maintainer: Philipp Kern <pkern@debian.org>
 Build-Depends: debhelper (>= 9), cmake, libx11-dev, libxxf86vm-dev, libxrandr-dev, libxpm-dev, libglew-dev, libgl1-mesa-dev, libpng12-dev, libssl-dev, libsdl1.2-dev, libsdl-mixer1.2-dev, libgtk2.0-dev, libjpeg-dev, zlib1g-dev, libboost-dev
 Standards-Version: 3.9.3
 Homepage: http://www.openclonk.org
+VCS-Git: git://git.0x539.de/git/users/pkern/openclonk-debian.git
+VCS-Browser: http://git.0x539.de/?p=users/pkern/openclonk-debian.git;a=summary
 
 Package: openclonk
 Architecture: any
