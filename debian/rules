@@ -9,6 +9,12 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 override_dh_auto_configure:
 	dh_auto_configure -- -DWITH_AUTOMATIC_UPDATE=0
 
+override_dh_auto_install:
+	dh_auto_install
+	mv debian/openclonk/usr/share/applications/clonk.desktop \
+		debian/openclonk/usr/share/applications/openclonk.desktop
+	sed -i -e 's/=clonk/=openclonk/g' debian/openclonk/usr/share/applications/openclonk.desktop
+
 override_dh_strip:
 	dh_strip --dbg-package=openclonk-dbg
 
