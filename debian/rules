@@ -9,31 +9,6 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 override_dh_auto_configure:
 	dh_auto_configure -- -DWITH_AUTOMATIC_UPDATE=0
 
-override_dh_auto_build:
-	dh_auto_build
-
-override_dh_auto_install:
-	# OpenClonk does not support `make install' yet.
-	install -d "$(CURDIR)"/debian/tmp/usr/share/games/openclonk
-	install -d "$(CURDIR)"/debian/tmp/usr/lib/openclonk
-	# Pack the game files.
-	cp -r "$(CURDIR)"/planet "$(CURDIR)"/build/planet
-	build/c4group -v "$(CURDIR)"/build/planet/*.oc* -p
-	install -m 0644 "$(CURDIR)"/build/planet/*.oc* \
-		"$(CURDIR)"/debian/tmp/usr/share/games/openclonk
-	# Install the binaries.
-	install -d "$(CURDIR)"/debian/tmp/usr/games
-	install "$(CURDIR)"/build/clonk "$(CURDIR)"/debian/tmp/usr/lib/openclonk/
-	for datafile in "$(CURDIR)"/build/planet/*.oc*; do \
-		base="$$(basename $$datafile)"; \
-		ln -s ../../share/games/openclonk/$$base "$(CURDIR)"/debian/tmp/usr/lib/openclonk/; \
-	done
-	install "$(CURDIR)"/build/c4group "$(CURDIR)"/debian/tmp/usr/games
-	# Install the wrapper.
-	install "$(CURDIR)"/debian/openclonk.wrapper "$(CURDIR)"/debian/tmp/usr/games/openclonk
-	# Temporarily install a wrapper under the name of clonk.
-	install "$(CURDIR)"/debian/clonk.wrapper "$(CURDIR)"/debian/tmp/usr/games/clonk
-
 override_dh_strip:
 	dh_strip --dbg-package=openclonk-dbg
 
