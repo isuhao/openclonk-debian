@@ -109,13 +109,10 @@ private func UpdateShieldAngle(object clonk, int x, int y)
 	var angle=Normalize(Angle(0,0, x,y),-180);
 	angle=BoundBy(angle,-150,150);
 	
-	if(angle > 0) clonk->SetTurnForced(DIR_Right);
-	else clonk->SetTurnForced(DIR_Left);
-	
-	iAngle=angle;
-
+	iAngle = angle;
+		
 	var weight = 0;
-	if( Abs(iAngle) > 90) weight = 1000*( Abs(iAngle)-60 )/90;
+	if( Abs(angle) > 90) weight = 1000*( Abs(angle)-60 )/90;
 
 	var handLR;
 	if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 0)
@@ -129,7 +126,10 @@ private func UpdateShieldAngle(object clonk, int x, int y)
 
 	if(!GetEffect("IntShieldSuspend", clonk))
 	{
-		clonk->SetAnimationPosition(aim_anim,  Anim_Const(Abs(iAngle) * 11111/1000));
+		if(angle > 0) clonk->SetTurnForced(DIR_Right);
+		else clonk->SetTurnForced(DIR_Left);
+	
+		clonk->SetAnimationPosition(aim_anim,  Anim_Const(Abs(angle) * 11111/1000));
 		AdjustSolidMaskHelper();
 	}
 }
@@ -281,15 +281,16 @@ public func GetCarrySpecial(clonk) { return carry_bone; }
 public func GetCarryTransform(clonk, sec, back)
 {
 	if(aim_anim && !sec) return Trans_Mul(Trans_Rotate(180,0,0,1),Trans_Rotate(90,0,0,1));
-	if(aim_anim && sec) return Trans_Rotate(180,1,0,0);
+	if(aim_anim && sec) return Trans_Mul(Trans_Rotate(180,1,0,0), Trans_Rotate(90,0,0,1));
 
 	if(mTrans != nil) return mTrans;
 	if(!sec)
 	{
-		if(back) return Trans_Mul(Trans_Rotate(-90, 0, 0, 1),Trans_Translate(0,0,-400));
+		if(back) return Trans_Mul(Trans_Rotate(-90, 0, 0, 1),Trans_Translate(0,0,400));
 		return nil;
 	}
-	if(back) return Trans_Mul(Trans_Mul(Trans_Rotate(90, 0, 0, 1),Trans_Rotate(180, 0, 1)),Trans_Translate(0,0,-400));
+	
+	if(back) return Trans_Mul(Trans_Mul(Trans_Rotate(90, 0, 0, 1),Trans_Rotate(180, 0, 1)),Trans_Translate(0,0,400));
 	return Trans_Rotate(180,1,0,0);
 }
 
