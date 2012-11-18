@@ -3,6 +3,7 @@ openclonk (5.3.2-1) unstable; urgency=low
   * New upstream release.
     - Fixes FTBFS on some architectures (narrowing conversion to int8_t),
       but not all.
+  * Drop fix-format-string-use.patch: applied upstream.
 
  -- Philipp Kern <pkern@debian.org>  Mon, 19 Nov 2012 00:43:43 +0100
 
