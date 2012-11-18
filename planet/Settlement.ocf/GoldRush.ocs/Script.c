@@ -14,19 +14,22 @@ protected func Initialize()
 	
 	// Place some trees.
 	//Tree_Coniferous->Place(16+Random(4), Rectangle(0,LandscapeHeight()/3, LandscapeWidth(), LandscapeHeight()));
-	PlaceForest([Tree_Coniferous, SproutBerryBush],0, LandscapeHeight()/2+50, nil, true);
+	PlaceForest([Tree_Coniferous], 0, LandscapeHeight()/2+50, nil, true);
 
+	SproutBerryBush->Place();
 	PlaceGrass(100);
+	
+	SetSkyParallax(0,20,20);
 	
 	CreateEnvironmentObjects("Temperate");
 	
 	// Set time of day to evening and create some clouds and celestials.
 	Cloud->Place(10);
-	Cloud->SetPrecipitation("Water", 15);
+	Cloud->SetPrecipitation("Water", 8);
 	CreateObject(Environment_Celestial);
 	var time = CreateObject(Environment_Time);
-	time->SetTime(600);
-	time->SetCycleSpeed(12);
+	time->SetTime(60*12);
+	time->SetCycleSpeed(20);
 	return;
 }
 
