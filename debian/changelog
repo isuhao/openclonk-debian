@@ -1,3 +1,11 @@
+openclonk (5.3.2-1) unstable; urgency=low
+
+  * New upstream release.
+    - Fixes FTBFS on some architectures (narrowing conversion to int8_t),
+      but not all.
+
+ -- Philipp Kern <pkern@debian.org>  Mon, 19 Nov 2012 00:43:43 +0100
+
 openclonk (5.3.1-1) unstable; urgency=low
 
   * Initial Debian release. (Closes: #531324)
