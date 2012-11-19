@@ -1,0 +1,126 @@
+.TH OPENCLONK "6" "November 2012" "OpenClonk 5.3.2" "Games"
+.SH NAME
+.B openclonk
+\- multiplayer game of strategy, action and skill
+.SH SYNOPSIS
+.B openclonk
+.RI [ options ]
+.SH DESCRIPTION
+OpenClonk is a free multiplayer action game where you control clonks,
+small but witty and nimble humanoid beings. The game is mainly about
+mining, settling and fast-paced melees. OpenClonk is also not just a
+game but also a versatile 2D game engine that offers countless
+possibilites to make own mods.
+.SH OPTIONS
+Without startup parameters, the game starts in fullscreen (player mode) and
+shows the startup menu. The following command line parameters are recognized:
+.TP
+\fB\-\-editor\fR
+Starts in editor mode (also called developer mode or windowed mode). In editor
+mode, scenarios can be edited and saved. The game will also start in editor
+mode if a scenario (*.ocs) and no \fB\-\-fullscreen\fR is specified.
+.TP
+\fB\-\-fullscreen\fR
+Starts in fullscreen mode (also called player mode). If no scenario and no
+direct join adress is given, the startup menu is shown.
+.TP
+\fB\-\-config\fR=\fIFILE\fR
+Loads and saves the configuration from the specified file instead of the
+default configuration file.
+.TP
+\fB\-\-record\fR
+The round is recorded.
+.TP
+\fB\-\-network\fR, \fB\-\-nonetwork\fR
+Activates or deactivates network mode.
+.TP
+\fB\-\-signup\fR, \fB\-\-nosignup\fR
+Activates or deactivates online signup of the game as public internet game.
+This value is stored in the configuration.
+.IP
+\fB\-\-signup\fR implies \fB\-\-network\fR. \fB\-\-nosignup\fR implies \fB\-\-noleague\fR.
+.TP
+\fB\-\-league\fR, \fB\-\-noleague\fR
+Activates or deactivates online signup of the game as league game. This value
+is stored in the configuration.
+.IP
+\fB\-\-league\fR implies \fB\-\-network\fR and \fB\-\-signup\fR.
+.TP
+\fB\-\-runtimejoin\fR, \fB\-\-noruntimejoin\fR
+Activates or deactivates runtime join. This setting will be stored in the
+configuration.
+.TP
+\fB\-\-lobby\fR[=\fITIME\fR]
+Activates the lobby before a network game is started. The lobby is the
+waiting and chat screen. The lobby is on by default for all network games.
+.IP
+Implies \fB\-\-network\fR. If you specify a time (e.g. \fB\-\-lobby=120\fR) the
+lobby will start with a countdown, automatically launching the game after (in
+this case) 120 seconds.
+.TP
+\fB\-\-observe\fR
+For network games: The client joins as observer (without players).
+.IP
+Implies \fB\-\-network\fR.
+.TP
+\fB\-\-join\fR=\fIADDRESS\fR, \fBclonk://\fIADDRESS\fB/\fR
+Searches for a network game on the specified address and joins it. No local
+scenario (*.ocs) should be specified.
+.IP
+Implies \fB\-\-network.
+.TP
+\fB\-\-tcpport\fR=\fIPORT\fR
+Sets the TCP port number for client connections in network games. This setting
+will be stored in the configuration. If \fB\-1\fR is specified, TCP is disabled
+and all connections are created using UDP.
+.TP
+\fB\-\-udpport\fR=\fIPORT\fR
+Sets the UDP port number for client connections in network games. This setting
+will be stored in the configuration. If \fB\-1\fR is specified, UDP is disabled
+and all connections are created using TCP.
+.TP
+\fB\-\-pass\fR[=\fIPASSWORD\fR]
+For network hosts: sets the join password to the specified value. If PASSWORD
+is left empty, no password is set.
+.TP
+\fB\-\-comment\fR=\fICOMMENT\fR
+For network hosts: sets the network game comment. This setting will be stored
+in the configuration.
+.TP
+\fB\-\-update\fR
+Performs an update check at program start.
+.TP
+\fB\-\-recdump\fR=\fIFILE\fR
+Only for replay of recorded games: Before the replay is started, all replay
+data (player controls) are dumped into a file called FILE in the Clonk folder.
+If the file name extension is .txt, the controls will be dumped in text mode,
+otherwise binary. The replay file must be specified separately as a scenario
+file (e.g. openclonk Records.ocf/Record001.ocs \-\-recdump=CtrlRec.txt).
+.TP
+\fB\-\-startup\fR=\fINAME\fR
+Only for fullscreen startup menu: Instead of the main menu, one of the submenus
+is shown directly. Possible values for NAME are "main" (Main menu), "scen"
+(Scenario selection), "netscen" (Scenario selection for a new network game),
+"net" (Network/Internet game list), "options" (Options menu) and "plrsel" (Player
+selection).
+.TP
+\fB*.ocs\fR
+If a scenario is specified (File extension .ocs), it will be started directly.
+.TP
+\fB*.ocd\fR
+If the started scenario does not specify any required definitions (File
+extension .ocd), and no definitions are supplied in the registry, definitions
+can be specified via command line.
+.TP
+\fB*.ocp\fR
+Player files (File extension .ocp) can be specified in the command line. If no
+player files are given, the config values are used. By specifying a
+non-existant player (like doesnotexist.ocp), the game can be started without
+players (e.g. in order to just edit landscapes in developer mode).
+.SH AUTHORS
+The original Clonk source code is Copyright (c) 2001-2009, RedWolf
+Design GmbH. OpenClonk has been extended by various contributors, their
+copyright is documented in the source code.
+.PP
+This manual page was written by Philipp Kern <pkern@debian.org> based on
+the OpenClonk documentation.
