@@ -755,7 +755,8 @@ void C4ScriptHost::ClearCode()
 		C4AulScriptFunc *pSFunc = GetPropList()->GetFunc(pFn)->SFunc();
 		while (pSFunc)
 		{
-			assert(pSFunc->Owner == this);
+			// see http://forum.openclonk.org/topic_show.pl?pid=22432#pid22432 (only for this stable branch)
+			// assert(pSFunc->Owner == this);
 			pSFunc->CodePos = 0;
 			pSFunc = pSFunc->OwnerOverloaded ? pSFunc->OwnerOverloaded->SFunc() : 0;
 		}
@@ -1947,6 +1948,7 @@ void C4AulParse::Parse_PropList()
 
 C4Value C4AulParse::Parse_ConstPropList(const C4PropListStatic * parent, C4String * Name)
 {
+	C4Value v;
 	if (!Name)
 		throw new C4AulParseError(this, "a static proplist is not allowed to be anonymous");
 	C4PropListStatic * p;
@@ -1956,7 +1958,6 @@ C4Value C4AulParse::Parse_ConstPropList(const C4PropListStatic * parent, C4Strin
 	}
 	else
 	{
-		C4Value v;
 		bool r;
 		if (parent)
 			r = parent->GetPropertyByS(Name, &v);
@@ -1965,7 +1966,7 @@ C4Value C4AulParse::Parse_ConstPropList(const C4PropListStatic * parent, C4Strin
 		if (!r || !v.getPropList())
 		{
 			// the proplist couldn't be parsed or was overwritten by a later constant.
-			// create a temporary replacement
+			// create a temporary replacement, make v hold the reference to it for now
 			v.SetPropList(C4PropList::NewAnon(NULL, parent, Name));
 		}
 		p = v.getPropList()->IsStatic();
@@ -2011,11 +2012,12 @@ void C4AulParse::Parse_DoWhile()
 {
 	Shift();
 	// Save position for later jump back
-	int iStart = JumpHere();
+	int Start = JumpHere();
 	// We got a loop
 	PushLoop();
 	// Execute body
 	Parse_Statement();
+	int BeforeCond = JumpHere();
 	// Execute condition
 	if (TokenType != ATT_IDTF || !SEqual(Idtf, C4AUL_While))
 		UnexpectedToken("'while'");
@@ -2024,14 +2026,14 @@ void C4AulParse::Parse_DoWhile()
 	Parse_Expression();
 	Match(ATT_BCLOSE);
 	// Jump back
-	AddJump(AB_COND, iStart);
+	AddJump(AB_COND, Start);
 	if (Type != PARSER) return;
 	// Set targets for break/continue
 	for (Loop::Control *pCtrl = pLoopStack->Controls; pCtrl; pCtrl = pCtrl->Next)
 		if (pCtrl->Break)
 			SetJumpHere(pCtrl->Pos);
 		else
-			SetJump(pCtrl->Pos, iStart);
+			SetJump(pCtrl->Pos, BeforeCond);
 	PopLoop();
 }
 
@@ -3006,6 +3008,7 @@ void C4ScriptHost::CopyPropList(C4Set<C4Property> & from, C4PropListStatic * to)
 					}
 				to->SetPropertyByS(prop->Key, C4VPropList(p));
 			}
+			break;
 		case C4V_Array: // FIXME: copy the array if necessary
 		default:
 			to->SetPropertyByS(prop->Key, prop->Value);

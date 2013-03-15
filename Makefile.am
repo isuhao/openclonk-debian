@@ -76,7 +76,8 @@ do_subst = sed -e 's,[@]C4PROJECT[@],'"$$(sed -n 's/SET(C4PROJECT\s\+"\(.\+\)")/
   -e 's,[@]C4XVER3[@],'"$$(sed -n 's/SET(C4XVER3\s\+\(.\+\))/\1/ p' $(srcdir)/Version.txt)"',g' \
   -e 's,[@]C4XVER4[@],'"$$(sed -n 's/SET(C4XVER4\s\+\(.\+\))/\1/ p' $(srcdir)/Version.txt)"',g' \
   -e 's,[@]C4VERSIONBUILDNAME[@],'"$$(sed -n 's/SET(C4VERSIONBUILDNAME\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)"',g' \
-  -e 's,[@]C4VERSIONEXTRA[@],'"$$(sed -n 's/SET(C4VERSIONEXTRA\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)"',g'
+  -e 's,[@]C4VERSIONEXTRA[@],'"$$(sed -n 's/SET(C4VERSIONEXTRA\s\+"\(.\+\)")/\1/ p' $(srcdir)/Version.txt)"',g' \
+  -e 's,[@]OC_BUILD_ID[@],,g'
 
 C4Version.h: $(srcdir)/src/C4Version.h.in $(srcdir)/Version.txt
 	$(do_subst) < $< > $@
@@ -304,8 +305,6 @@ src/gui/C4StartupPlrSelDlg.cpp \
 src/gui/C4StartupPlrSelDlg.h \
 src/gui/C4StartupScenSelDlg.cpp \
 src/gui/C4StartupScenSelDlg.h \
-src/gui/C4UpdateDlg.cpp \
-src/gui/C4UpdateDlg.h \
 src/gui/C4UpperBoard.cpp \
 src/gui/C4UpperBoard.h \
 src/landscape/C4Landscape.cpp \
@@ -537,6 +536,13 @@ src/res/engine.rc \
 src/res/resource.h
 endif
 
+if MACOSX
+clonk_SOURCES += \
+src/platform/C4AppDelegate.h \
+src/platform/C4AppDelegate.mm \
+src/platform/C4FileMonitorMac.mm
+endif
+
 if SDL_MAIN_LOOP
 clonk_SOURCES += \
 src/platform/C4AppSDL.cpp \
@@ -561,22 +567,26 @@ endif
 if MACOSX
 clonk_SOURCES += \
 src/editor/C4ConsoleCocoa.mm \
+src/editor/C4EditorWindowController.h \
+src/editor/C4EditorWindowController.mm \
+src/graphics/C4DrawGLMac.h \
+src/graphics/C4DrawGLMac.mm \
+src/platform/C4AppDelegate+MainMenuActions.h \
+src/platform/C4AppDelegate+MainMenuActions.mm \
 src/platform/C4AppMac.mm \
-src/platform/C4FileMonitorMac.mm \
+src/platform/C4WindowController.h \
+src/platform/C4WindowController.mm \
 src/platform/C4WindowMac.mm \
-src/platform/ClonkAppDelegate.h \
-src/platform/ClonkAppDelegate.mm \
-src/platform/ConsoleWindowController.h \
-src/platform/ConsoleWindowController.mm \
-src/platform/ClonkWindowController.h \
-src/platform/ClonkWindowController.mm \
-src/platform/ClonkOpenGLView.h \
-src/platform/ClonkOpenGLView.mm \
 src/platform/CocoaKeycodeMap.h \
-src/platform/ClonkMainMenuActions.h \
-src/platform/ClonkMainMenuActions.mm
+src/platform/ObjectiveCAssociated.h
 endif
 endif
+endif
+
+if AUTOUPDATE
+clonk_SOURCES += \
+src/gui/C4UpdateDlg.cpp \
+src/gui/C4UpdateDlg.h
 endif
 
 if LIBUPNP
@@ -718,7 +728,9 @@ c4groups = \
   Sound.ocg \
   System.ocg \
   Objects.ocd \
-  BackToTheRocks.ocf \
+  Arena.ocf \
+  Parkour.ocf \
+  Settlement.ocf \
   Tutorial.ocf
 
 CLEANFILES += $(c4groups)
