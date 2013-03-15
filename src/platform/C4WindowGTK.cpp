@@ -47,7 +47,6 @@
 #ifdef USE_X11
 #include <gdk/gdkx.h>
 #include <X11/Xlib.h>
-#include <X11/extensions/xf86vmode.h>
 #include <GL/glx.h>
 #endif
 
@@ -276,7 +275,7 @@ static void OnRealizeStatic(GtkWidget* widget, gpointer user_data)
 
 static gboolean OnKeyPressStatic(GtkWidget* widget, GdkEventKey* event, gpointer user_data)
 {
-#if GTK_CHECK_VERSION(2,90,7)
+#if GTK_CHECK_VERSION(2,21,8)
 	if (event->keyval == GDK_KEY_Scroll_Lock)
 #else
 	if (event->keyval == GDK_Scroll_Lock)
@@ -475,7 +474,7 @@ static gboolean OnFocusInFS(GtkWidget *widget, GdkEvent  *event, gpointer user_d
 static gboolean OnFocusOutFS(GtkWidget *widget, GdkEvent  *event, gpointer user_data)
 {
 	Application.Active = false;
-	if (Application.FullScreenMode())
+	if (Application.FullScreenMode() && Application.GetConfigWidth() != -1)
 	{
 		Application.RestoreVideoMode();
 		gtk_window_iconify(GTK_WINDOW(widget));
