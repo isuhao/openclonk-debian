@@ -1,3 +1,9 @@
+openclonk (5.3.3-1) unstable; urgency=low
+
+  * New upstream bugfix release.
+
+ -- Philipp Kern <pkern@debian.org>  Fri, 15 Mar 2013 17:45:54 +0100
+
 openclonk (5.3.2-1) unstable; urgency=low
 
   * New upstream release.
