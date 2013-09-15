@@ -1,3 +1,10 @@
+openclonk (5.3.3-2) unstable; urgency=low
+
+  * Include a patch by Guillem Jover to fix an XRandR-related crash
+    on startup. (Closes: #704632)
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 15 Sep 2013 12:08:35 +0200
+
 openclonk (5.3.3-1) unstable; urgency=low
 
   * New upstream bugfix release.
