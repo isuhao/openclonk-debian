@@ -1,3 +1,9 @@
+openclonk (5.3.3-3) unstable; urgency=high
+
+  * Add a patch to pre-compute Z values before face ordering. (Closes: #693750)
+
+ -- Philipp Kern <pkern@debian.org>  Thu, 26 Dec 2013 16:34:01 +0100
+
 openclonk (5.3.3-2) unstable; urgency=low
 
   * Include a patch by Guillem Jover to fix an XRandR-related crash
