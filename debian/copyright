@@ -4,53 +4,46 @@ This package was debianized by Sebastian Rühl
 It was downloaded from the Mercurial repository at
 `http://hg.openclonk.org/openclonk/'.
 
-Upstream Authors:
-
-   <Engine and Tools>
-   Armin Burgmeier (Clonk-Karl)
-   Günther Brammer (Günther)
-   Nicolas Hake (Isilkor)
-   Sven Eberhardt (Sven2)
-   Martin Plicht (Mortimer)
-   Peter Wortmann (PeterW)
-   Julius Michaelis (Caesar)
-   
-   <Art and Content>
-   Charles Spurrill (Ringwaul)
-   Richard Gerum (Randrian)
-   Timo Stabbert (Mimmo)
-   
-   <Scripting and Content>
-   Maikel de Vries (Maikel)
-   Bernhard Bonigl (Boni)
-   Felix Wagner (Clonkonaut)
-   David Dormagen (Zapper)
-   
-   <Coordination, Administration>
-   Tobias Zwick (Newton)
-   
-   <Thanks to Contributors>
-   Benjamin Herr (Loriel), Matthias Rottländer (Matthi), Felix Riese
-   (Fungiform), Manuel Riecke (MrBeast), Benedict Etzel (B_E),
-   Carl-Philip Hänsch (Carli), Alexander Semeniuk (AlteredARMOR), Florian
-   Graier (Nachtfalter), ST-DDT, Asmageddon, Merten Ehmig (Pluto), Mark
-   Haßelbusch (Marky), Luchs, Peewee, Lauri Niskanen (Ape), Dominik
-   Bayerl (Kanibal), Faby, Checkmaty, Gurkenglas, Clonkine, mizipzor,
-   mixi, RedWolf Design GmbH and all those who contributed to previous
-   Clonk titles for the passion they put into the game and for agreeing
-   to make Clonk open source.
-
 Copyright:
 
    Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+   Copyright (c) 2009-2013, The OpenClonk Team and contributors
 
-   Portions are copyrighted by other authors who have contributed
-   to OpenClonk.  The complete copyright statements can be found
-   in the corresponding source files.
+   Portions of the code have been contributed by other authors:
+   Copyright (c) 2006-2007  Alexander Post
+   Copyright (c) 2004-2013  Armin Burgmeier
+   Copyright (c) 2005-2006, 2008-2010  Asmageddon
+   Copyright (c) 2010, 2012  Benjamin Herr
+   Copyright (c) 2006, 2012  Bernhard Bonigl
+   Copyright (c) 2009-2010  Carl-Philip Hänsch
+   Copyright (c) 2001  Carlo Teubner
+   Copyright (c) 2009, 2011-2013  David Dormagen
+   Copyright (c) 2011-2012  Felix Wagner
+   Copyright (c) 2006  Florian Groß
+   Copyright (c) 2004-2012  Günther Brammer
+   Copyright (c) 2006-2008  Julian Raschke
+   Copyright (c) 2010-2012  Julius Michaelis
+   Copyright (c) 2010-2011  Maikel de Vries
+   Copyright (c) 2010  Manuel Riecke
+   Copyright (c) 2009  Mark Haßelbusch
+   Copyright (c) 2009-2012  Martin Plicht
+   Copyright (c) 1998-2008  Matthes Bender
+   Copyright (c) 2001  Michael Käser
+   Copyright (c) 2009  mizipzor
+   Copyright (c) 2009-2013  Nicolas Hake
+   Copyright (c) 2010  Peewee
+   Copyright (c) 2001-2011  Peter Wortmann
+   Copyright (c) 2012  Philipp Kern
+   Copyright (c) 2009-2010  Richard Gerum
+   Copyright (c) 2001-2013  Sven Eberhardt
+   Copyright (c) 2004-2005, 2009-2013  Tobias Zwick
 
    For tinyxml:
    Copyright (c) 2000-2007 Lee Thomason (www.grinninglizard.com)
    Copyright (c) 2002-2004, Yves Berquin <yvesb@users.sourceforge.net>
+
+   For timsort:
+   Copyright (c) 2010 Christopher Swenson
 
 License:
 
@@ -90,6 +83,30 @@ License:
    3. This notice may not be removed or altered from any source
    distribution.
 
+   OpenClonk includes a copy of timsort which is licensed under the terms
+   of the MIT license:
+
+   Permission is hereby granted, free of charge, to any person
+   obtaining a copy of this software and associated documentation
+   files (the "Software"), to deal in the Software without
+   restriction, including without limitation the rights to use,
+   copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the
+   Software is furnished to do so, subject to the following
+   conditions:
+  
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+  
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE.
+
    Some files belonging to the game content are licensed under the
    Creative Commons Attribution 3.0 license[1] or the Creative Commons
    CC0 (public domain) license[2].
@@ -98,6 +115,6 @@ License:
    [2] http://creativecommons.org/publicdomain/zero/1.0/
 
 The Debian packaging is copyright 2009, Sebastian Rühl
-<sebastian.ruehl@mni.fh-giessen.de> and copyright 2011, 2012, Philipp Kern
+<sebastian.ruehl@mni.fh-giessen.de> and copyright 2011-2014 Philipp Kern
 <pkern@debian.org> and is licensed under the GPL, see
 `/usr/share/common-licenses/GPL'.
