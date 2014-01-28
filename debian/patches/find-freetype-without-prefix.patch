@@ -1,0 +1,28 @@
+Newer libfreetype6-dev packages do no longer include the freetype/ prefix
+in the include paths. Let's check for config/ftheader.h instead
+and add the subdir to the search path (the latter being untested).
+
+Author: Philipp Kern <pkern@debian.g>
+
+diff --git a/cmake/FindFreetype.cmake b/cmake/FindFreetype.cmake
+index 891d1e2..a21f99d 100644
+--- a/cmake/FindFreetype.cmake
++++ b/cmake/FindFreetype.cmake
+@@ -77,7 +77,7 @@ find_path(FREETYPE_INCLUDE_DIR_ft2build ft2build.h
+   PATH_SUFFIXES include/freetype2 include
+ )
+ 
+-find_path(FREETYPE_INCLUDE_DIR_freetype2 freetype/config/ftheader.h
++find_path(FREETYPE_INCLUDE_DIR_freetype2 config/ftheader.h
+   HINTS
+     ENV FREETYPE_DIR
+   PATHS
+@@ -85,7 +85,7 @@ find_path(FREETYPE_INCLUDE_DIR_freetype2 freetype/config/ftheader.h
+     /usr/local/X11R6
+     /usr/local/X11
+     /usr/freeware
+-  PATH_SUFFIXES include/freetype2 include
++  PATH_SUFFIXES include/freetype2/freetype include/freetype2 include
+ )
+ 
+ if(FREETYPE_INCLUDE_DIR_freetype2 AND EXISTS "${FREETYPE_INCLUDE_DIR_freetype2}/freetype/freetype.h")
