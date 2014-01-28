@@ -62,7 +62,9 @@ public func SetStrength(int strength)
 
 public func SetMaterial(int material)
 {
-
+	var effect = GetEffect("IntWaterfall", this);
+	if (effect)
+		effect.Material = material;
 	return;
 }
 
@@ -83,6 +85,25 @@ public func SetSoundLocation(int x, int y)
 {
 	SetPosition(x, y);
 	return;
+}
+
+// Scenario saving
+func SaveScenarioObject(props)
+{
+	if (!inherited(props, ...)) return false;
+	var fx_waterfall = GetEffect("IntWaterfall", this), fx_drain = GetEffect("IntLiquidDrain", this);
+	if (!fx_waterfall && !fx_drain) return false; // effects lost? don't save dead object then
+	// Waterfall has its own creation procedure
+	props->RemoveCreation();
+	if (fx_waterfall)
+	{
+		props->Add(SAVEOBJ_Creation, "CreateWaterfall(%d,%d,%d,%v)",fx_waterfall.X, fx_waterfall.Y, fx_waterfall.Strength, fx_waterfall.Material);
+		if (fx_waterfall.X != GetX() || fx_waterfall.Y != GetY()) props->AddCall("Position", this, "SetSoundLocation", GetX(), GetY());
+		if (fx_waterfall.XDir || fx_waterfall.YDir || fx_waterfall.XVar || fx_waterfall.YVar)
+			props->AddCall("Direction", this, "SetDirection", fx_waterfall.XDir, fx_waterfall.YDir, fx_waterfall.XVar, fx_waterfall.YVar);
+	}
+	if (fx_drain) props->Add(SAVEOBJ_Creation, "CreateLiquidDrain(%d,%d,%d);",fx_drain.X, fx_drain.Y, fx_drain.Strength);
+	return true;
 }
 
 
@@ -108,8 +129,7 @@ protected func FxIntLiquidDrainStart(object target, proplist effect, int tempora
 
 protected func FxIntLiquidDrainTimer(object target, proplist effect)
 {
-	for (var i = 0; i < effect.Strength / 2; i++)
-		ExtractLiquid(AbsX(effect.X), AbsY(effect.Y));
+	ExtractLiquidAmount(AbsX(effect.X), AbsY(effect.Y),effect.Strength / 2);
 	return 1;
 }
 

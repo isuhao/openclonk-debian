@@ -1,26 +1,18 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 1998-2000, 2008  Matthes Bender
- * Copyright (c) 2001-2010  Sven Eberhardt
- * Copyright (c) 2002-2008  Peter Wortmann
- * Copyright (c) 2004, 2010  Armin Burgmeier
- * Copyright (c) 2005-2011  Günther Brammer
- * Copyright (c) 2009  Tobias Zwick
- * Copyright (c) 2009-2010  Nicolas Hake
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 1998-2000, Matthes Bender
+ * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 /* Player data at runtime */
@@ -447,27 +439,28 @@ bool C4Player::Save(C4Group &hGroup, bool fSavegame, bool fStoreTiny)
 
 void C4Player::PlaceReadyCrew(int32_t tx1, int32_t tx2, int32_t ty, C4Object *FirstBase)
 {
-	int32_t cnt,crewnum,ctx,cty;
+	int32_t cnt,ctx,cty;
 	C4Object *nobj;
 	C4ObjectInfo *pInfo;
 	C4Def *pDef;
 
-	// Old specification
-	if (Game.C4S.PlrStart[PlrStartIndex].ReadyCrew.IsClear())
+	// Place crew
+	int32_t iCount;
+	C4ID id;
+	for (cnt=0; (id=Game.C4S.PlrStart[PlrStartIndex].ReadyCrew.GetID(cnt,&iCount)); cnt++)
 	{
-		// Target number of ready crew
-		crewnum=Game.C4S.PlrStart[PlrStartIndex].Crew.Evaluate();
-		// Place crew
-		for (cnt=0; cnt<crewnum; cnt++)
+		// Minimum one clonk if empty id
+		iCount = Max<int32_t>(iCount,1);
+
+		for (int32_t cnt2=0; cnt2<iCount; cnt2++)
 		{
-			// Set standard crew
-			C4ID idStdCrew = Game.C4S.PlrStart[PlrStartIndex].NativeCrew;
 			// Select member from home crew, add new if necessary
-			while (!(pInfo=CrewInfoList.GetIdle(idStdCrew,::Definitions)))
-				if (!CrewInfoList.New(idStdCrew,&::Definitions))
+			while (!(pInfo=CrewInfoList.GetIdle(id,::Definitions)))
+				if (!CrewInfoList.New(id,&::Definitions))
 					break;
-			// Crew placement location
+			// Safety
 			if (!pInfo || !(pDef=C4Id2Def(pInfo->id))) continue;
+			// Crew placement location
 			ctx=tx1+Random(tx2-tx1); cty=ty;
 			if (!Game.C4S.PlrStart[PlrStartIndex].EnforcePosition)
 				FindSolidGround(ctx,cty,pDef->Shape.Wdt*3);
@@ -475,65 +468,20 @@ void C4Player::PlaceReadyCrew(int32_t tx1, int32_t tx2, int32_t ty, C4Object *Fi
 			if ((nobj=Game.CreateInfoObject(pInfo,Number,ctx,cty)))
 			{
 				// Add object to crew
-				Crew.Add(nobj, C4ObjectList::stMain);
+				Crew.Add(nobj, C4ObjectList::stNone);
 				// add visibility range
 				nobj->SetPlrViewRange(C4FOW_Def_View_RangeX);
 				// If base is present, enter base
 				if (FirstBase) { nobj->Enter(FirstBase); nobj->SetCommand(C4CMD_Exit); }
 				// OnJoinCrew callback
-#ifndef DEBUGREC_RECRUITMENT
-				C4DebugRecOff DBGRECOFF;
-#endif
-				C4AulParSet parset(C4VInt(Number));
-				nobj->Call(PSF_OnJoinCrew, &parset);
-			}
-		}
-	}
-
-	// New specification
-	else
-	{
-		// Place crew
-		int32_t iCount;
-		C4ID id;
-		for (cnt=0; (id=Game.C4S.PlrStart[PlrStartIndex].ReadyCrew.GetID(cnt,&iCount)); cnt++)
-		{
-
-			// Minimum one clonk if empty id
-			iCount = Max<int32_t>(iCount,1);
-
-			for (int32_t cnt2=0; cnt2<iCount; cnt2++)
-			{
-				// Select member from home crew, add new if necessary
-				while (!(pInfo=CrewInfoList.GetIdle(id,::Definitions)))
-					if (!CrewInfoList.New(id,&::Definitions))
-						break;
-				// Safety
-				if (!pInfo || !(pDef=C4Id2Def(pInfo->id))) continue;
-				// Crew placement location
-				ctx=tx1+Random(tx2-tx1); cty=ty;
-				if (!Game.C4S.PlrStart[PlrStartIndex].EnforcePosition)
-					FindSolidGround(ctx,cty,pDef->Shape.Wdt*3);
-				// Create object
-				if ((nobj=Game.CreateInfoObject(pInfo,Number,ctx,cty)))
 				{
-					// Add object to crew
-					Crew.Add(nobj, C4ObjectList::stMain);
-					// add visibility range
-					nobj->SetPlrViewRange(C4FOW_Def_View_RangeX);
-					// If base is present, enter base
-					if (FirstBase) { nobj->Enter(FirstBase); nobj->SetCommand(C4CMD_Exit); }
-					// OnJoinCrew callback
-					{
 #if !defined(DEBUGREC_RECRUITMENT)
-						C4DebugRecOff DbgRecOff;
+					C4DebugRecOff DbgRecOff;
 #endif
-						C4AulParSet parset(C4VInt(Number));
-						nobj->Call(PSF_OnJoinCrew, &parset);
-					}
+					C4AulParSet parset(C4VInt(Number));
+					nobj->Call(PSF_OnJoinCrew, &parset);
 				}
 			}
-
 		}
 	}
 
@@ -978,7 +926,7 @@ void C4Player::Default()
 	NoEliminationCheck = false;
 	Evaluated = false;
 	ZoomLimitMinWdt=ZoomLimitMinHgt=ZoomLimitMaxWdt=ZoomLimitMaxHgt=ZoomWdt=ZoomHgt=0;
-	ViewLock = false;
+	ViewLock = true;
 }
 
 bool C4Player::Load(const char *szFilename, bool fSavegame)
@@ -1077,7 +1025,7 @@ bool C4Player::MakeCrewMember(C4Object *pObj, bool fForceInfo, bool fDoCalls)
 
 	// Add to crew
 	if (!Crew.GetLink(pObj))
-		Crew.Add(pObj, C4ObjectList::stMain);
+		Crew.Add(pObj, C4ObjectList::stNone);
 
 	// add plr view
 	if (!pObj->PlrViewRange) pObj->SetPlrViewRange(C4FOW_Def_View_RangeX); else pObj->PlrFoWActualize();
@@ -1186,7 +1134,7 @@ void C4Player::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 	pComp->Value(mkNamingAdapt(ViewMode,            "ViewMode",             C4PVM_Cursor));
 	pComp->Value(mkNamingAdapt(ViewX,               "ViewX",                0));
 	pComp->Value(mkNamingAdapt(ViewY,               "ViewY",                0));
-	pComp->Value(mkNamingAdapt(ViewLock,            "ViewLock",             false));
+	pComp->Value(mkNamingAdapt(ViewLock,            "ViewLock",             true));
 	pComp->Value(mkNamingAdapt(ZoomLimitMinWdt,     "ZoomLimitMinWdt",      0));
 	pComp->Value(mkNamingAdapt(ZoomLimitMinHgt,     "ZoomLimitMinHgt",      0));
 	pComp->Value(mkNamingAdapt(ZoomLimitMaxWdt,     "ZoomLimitMaxWdt",      0));
@@ -1354,7 +1302,7 @@ void C4Player::DoTeamSelection(int32_t idTeam)
 	// stop team selection. This might close the menu forever if the control gets lost
 	// let's hope it doesn't!
 	Status = PS_TeamSelectionPending;
-	::Control.DoInput(CID_Script, new C4ControlScript(FormatString("InitScenarioPlayer(%d,%d)", (int)Number, (int)idTeam).getData()), CDT_Queue);
+	::Control.DoInput(CID_PlrAction, C4ControlPlayerAction::InitScenarioPlayer(this, idTeam), CDT_Queue);
 }
 
 void C4Player::DenumeratePointers()
@@ -1425,7 +1373,8 @@ void C4Player::NotifyOwnedObjects()
 				C4AulFunc *pFn = cobj->GetFunc(PSF_OnOwnerRemoved);
 				if (pFn)
 				{
-					pFn->Exec(cobj);
+					C4AulParSet pars(C4VInt(iNewOwner));
+					pFn->Exec(cobj, &pars);
 				}
 				else
 				{
@@ -1433,9 +1382,8 @@ void C4Player::NotifyOwnedObjects()
 					if (Crew.IsContained(cobj))
 						continue;
 					// Regular objects: Try to find a new, suitable owner from the same team
-					// Ignore StaticBack, because this would not be backwards compatible with many internal objects such as team account
-					// Do not ignore flags which might be StaticBack if being attached to castle parts
-					if ((~cobj->Category & C4D_StaticBack) || (cobj->id == C4ID::Flag))
+					// Ignore StaticBack, because this would not be compatible with many internal objects such as team account
+					if ((~cobj->Category & C4D_StaticBack))
 						cobj->SetOwner(iNewOwner);
 				}
 			}
@@ -1523,14 +1471,7 @@ void C4Player::InitControl()
 				MouseControl=true;
 		// Some controls such as gamepad control need special synced GUI elements
 		// Do a script callback for selected control
-		if (ControlSet)
-		{
-			::Control.DoInput(CID_Script, new C4ControlScript(FormatString("%s(%d,\"%s\",%d,%d,%d)", (const char *)PSF_InitializePlayerControl, (int)Number, ControlSet->GetName(), (int)ControlSet->HasKeyboard(), (int)ControlSet->HasMouse(), (int)ControlSet->HasGamepad()).getData()), CDT_Queue);
-		}
-		else
-		{
-			::Control.DoInput(CID_Script, new C4ControlScript(FormatString("%s(%d)", (const char *)PSF_InitializePlayerControl, (int)Number).getData()), CDT_Queue);
-		}
+		::Control.DoInput(CID_PlrAction, C4ControlPlayerAction::InitPlayerControl(this, ControlSet), CDT_Queue);
 	}
 	// clear old control method and register new
 	Control.RegisterKeyset(Number, ControlSet);

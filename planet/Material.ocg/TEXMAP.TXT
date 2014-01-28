@@ -1,6 +1,8 @@
 # Static Map Material/Texture Table 
 # Index +128 for underground materials
 
+1=Vehicle-none
+
 10=Tunnel-tunnel
 12=Tunnel-brickback
 
@@ -18,6 +20,7 @@
 31=Earth-earth_topsoil
 32=Earth-earth_midsoil
 33=Ashes-ashes
+35=SandDry-sand_rough
 
 36=Ore-ore
 
@@ -29,7 +32,7 @@
 50=Rock-rock
 51=Rock-rock_cracked
 
-53=Sulphur-sulphur
+53=Firestone-firestone
 
 54=Coal-coal
 

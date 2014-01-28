@@ -1,21 +1,17 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2004-2008  Sven Eberhardt
- * Copyright (c) 2005, 2009  Peter Wortmann
- * Copyright (c) 2006  Günther Brammer
- * Copyright (c) 2004-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 2004-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 // dialogs for network information
 
@@ -45,7 +41,7 @@ public:
 	C4Network2ClientDlg(int iForClientID); // ctor
 };
 
-// ressource dialog: created as listbox inside another dialog
+// resource dialog: created as listbox inside another dialog
 class C4Network2ResDlg : public C4GUI::ListBox, private C4ApplicationSec1Timer
 {
 public:
@@ -86,7 +82,7 @@ public:
 	// enable/disable updates by timer calls
 	void Activate(); void Deactivate();
 
-	// update by ressources
+	// update by resources
 	void OnSec1Timer() { Update(); }
 	void Update();
 };

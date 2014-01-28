@@ -1,25 +1,18 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2006, 2008-2011  Günther Brammer
- * Copyright (c) 2005, 2007, 2009  Peter Wortmann
- * Copyright (c) 2002, 2005-2007  Sven Eberhardt
- * Copyright (c) 2006, 2010  Armin Burgmeier
- * Copyright (c) 2009-2011  Nicolas Hake
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2010  Martin Plicht
- * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 1998-2000, Matthes Bender
+ * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 /* A wrapper class to OS dependent event and window interfaces, WIN32 version */
@@ -32,7 +25,6 @@
 #include <C4Config.h>
 #include <C4Console.h>
 #include <C4DrawGL.h>
-#include <C4DrawD3D.h>
 #include <C4FullScreen.h>
 #include <C4GraphicsSystem.h>
 #include <C4MouseControl.h>
@@ -52,6 +44,44 @@
 #define ConsoleDlgClassName L"C4GUIdlg"
 #define ConsoleDlgWindowStyle (WS_VISIBLE | WS_POPUP | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX)
 
+/** Convert certain keys to unix scancodes (those that differ from unix scancodes) */
+static void ConvertToUnixScancode(WPARAM wParam, C4KeyCode *scancode)
+{
+	C4KeyCode &s = *scancode;
+
+	switch(wParam)
+	{
+	case VK_HOME:		s = K_HOME; break;
+	case VK_END:		s = K_END; break;
+	case VK_PRIOR:		s = K_PAGEUP; break;
+	case VK_NEXT:		s = K_PAGEDOWN; break;
+	case VK_UP:			s = K_UP; break;
+	case VK_DOWN:		s = K_DOWN; break;
+	case VK_LEFT:		s = K_LEFT; break;
+	case VK_RIGHT:		s = K_RIGHT; break;
+	case VK_CLEAR:		s = K_CENTER; break;
+	case VK_INSERT:		s = K_INSERT; break;
+	case VK_DELETE:		s = K_DELETE; break;
+	case VK_LWIN:		s = K_WIN_L; break;
+	case VK_RWIN:		s = K_WIN_R; break;
+	case VK_MENU:		s = K_MENU; break;
+	case VK_PAUSE:		s = K_PAUSE; break;
+	case VK_PRINT:		s = K_PRINT; break;
+	case VK_RCONTROL:	s = K_CONTROL_R; break;
+	case VK_NUMLOCK:	s = K_NUM; break;
+	case VK_NUMPAD1:	s = K_NUM1; break;
+	case VK_NUMPAD2:	s = K_NUM2; break;
+	case VK_NUMPAD3:	s = K_NUM3; break;
+	case VK_NUMPAD4:	s = K_NUM4; break;
+	case VK_NUMPAD5:	s = K_NUM5; break;
+	case VK_NUMPAD6:	s = K_NUM6; break;
+	case VK_NUMPAD7:	s = K_NUM7; break;
+	case VK_NUMPAD8:	s = K_NUM8; break;
+	case VK_NUMPAD9:	s = K_NUM9; break;
+	case VK_NUMPAD0:	s = K_NUM0; break;
+	}
+}
+
 LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	static bool NativeCursorShown = true;
@@ -59,6 +89,10 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 	POINT p;
 	p.x = GET_X_LPARAM(lParam);
 	p.y = GET_Y_LPARAM(lParam);
+
+	// compute scancode
+	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
+	ConvertToUnixScancode(wParam, &scancode);
 
 	// Process message
 	switch (uMsg)
@@ -68,7 +102,7 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		// fall through to next case
 	case WM_ACTIVATEAPP:
 		Application.Active = wParam != 0;
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 		if (pGL)
 		{
 			if (Application.Active)
@@ -94,12 +128,6 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 			}
 		}
 #endif
-#ifdef USE_DIRECTX
-		if (pD3D && Application.Active)
-			pD3D->TaskIn();
-		if (pD3D && !Application.Active)
-			pD3D->TaskOut();
-#endif
 		// redraw background
 		::GraphicsSystem.InvalidateBg();
 		// Redraw after task switch
@@ -124,16 +152,16 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 			Application.MusicSystem.NotifySuccess();
 		return true;
 	case WM_KEYUP:
-		if (Game.DoKeyboardInput(wParam, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, NULL))
+		if (Game.DoKeyboardInput(scancode, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, NULL))
 			return 0;
 		break;
 	case WM_KEYDOWN:
-		if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL))
+		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL))
 			return 0;
 		break;
 	case WM_SYSKEYDOWN:
 		if (wParam == 18) break;
-		if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL))
+		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL))
 			return 0;
 		break;
 	case WM_CHAR:
@@ -210,6 +238,10 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	if (!(cvp=::Viewports.GetViewport(hwnd)))
 		return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 
+	// compute scancode
+	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
+	ConvertToUnixScancode(wParam, &scancode);
+
 	// Process message
 	switch (uMsg)
 	{
@@ -225,19 +257,19 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 			break;
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 		default:
-			if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL)) return 0;
+			if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL)) return 0;
 			break;
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 		}
 		break;
 		//---------------------------------------------------------------------------------------------------------------------------
 	case WM_KEYUP:
-		if (Game.DoKeyboardInput(wParam, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, NULL)) return 0;
+		if (Game.DoKeyboardInput(scancode, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, NULL)) return 0;
 		break;
 		//------------------------------------------------------------------------------------------------------------
 	case WM_SYSKEYDOWN:
 		if (wParam == 18) break;
-		if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL)) return 0;
+		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL)) return 0;
 		break;
 		//----------------------------------------------------------------------------------------------------------------------------------
 	case WM_DESTROY:
@@ -380,16 +412,16 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		switch (uMsg)
 		{
 		case WM_KEYDOWN:
-			Console.EditCursor.KeyDown(wParam, dwKeyState);
+			Console.EditCursor.KeyDown(scancode, dwKeyState);
 			break;
 		case WM_KEYUP:
-			Console.EditCursor.KeyUp(wParam, dwKeyState);
+			Console.EditCursor.KeyUp(scancode, dwKeyState);
 			break;
 		case WM_SYSKEYDOWN:
-			Console.EditCursor.KeyDown(wParam, dwKeyState);
+			Console.EditCursor.KeyDown(scancode, dwKeyState);
 			break;
 		case WM_SYSKEYUP:
-			Console.EditCursor.KeyUp(wParam, dwKeyState);
+			Console.EditCursor.KeyUp(scancode, dwKeyState);
 			break;
 			//----------------------------------------------------------------------------------------------------------------------------------
 		case WM_LBUTTONDOWN:
@@ -421,21 +453,25 @@ LRESULT APIENTRY DialogWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	p.x = GET_X_LPARAM(lParam);
 	p.y = GET_Y_LPARAM(lParam);
 
+	// compute scancode
+	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
+	ConvertToUnixScancode(wParam, &scancode);
+
 	// Process message
 	switch (uMsg)
 	{
 		//---------------------------------------------------------------------------------------------------------------------------
 	case WM_KEYDOWN:
-		if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), pDlg)) return 0;
+		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), pDlg)) return 0;
 		break;
 		//---------------------------------------------------------------------------------------------------------------------------
 	case WM_KEYUP:
-		if (Game.DoKeyboardInput(wParam, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, pDlg)) return 0;
+		if (Game.DoKeyboardInput(scancode, KEYEV_Up, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, false, pDlg)) return 0;
 		break;
 		//------------------------------------------------------------------------------------------------------------
 	case WM_SYSKEYDOWN:
 		if (wParam == 18) break;
-		if (Game.DoKeyboardInput(wParam, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), pDlg)) return 0;
+		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), pDlg)) return 0;
 		break;
 		//----------------------------------------------------------------------------------------------------------------------------------
 	case WM_DESTROY:
@@ -699,13 +735,9 @@ void C4Window::FlashWindow()
 
 void C4Window::EnumerateMultiSamples(std::vector<int>& samples) const
 {
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	if(pGL && pGL->pMainCtx)
 		samples = pGL->pMainCtx->EnumerateMultiSamples();
-#endif
-
-#ifdef USE_DIRECTX
-	// TODO: Enumerate multi samples
 #endif
 }
 
@@ -830,16 +862,7 @@ void C4AbstractApp::RestoreVideoMode()
 
 bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int iColorDepth, unsigned int iRefreshRate, unsigned int iMonitor, bool fFullScreen)
 {
-#ifdef USE_DIRECTX
-	if (pD3D)
-	{
-		if (!pD3D->SetVideoMode(iXRes, iYRes, iColorDepth, iMonitor, fFullScreen))
-			return false;
-		OnResolutionChanged(iXRes, iYRes);
-		return true;
-	}
-#endif
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	SetWindowLong(pWindow->hWindow, GWL_EXSTYLE,
 	              GetWindowLong(pWindow->hWindow, GWL_EXSTYLE) | WS_EX_APPWINDOW);
 	// change mode
@@ -941,14 +964,8 @@ bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigne
 #endif
 }
 
-bool C4AbstractApp::SaveDefaultGammaRamp(_D3DGAMMARAMP &ramp)
+bool C4AbstractApp::SaveDefaultGammaRamp(_GAMMARAMP &ramp)
 {
-#ifdef USE_DIRECTX
-	if (pD3D)
-	{
-		return pD3D->SaveDefaultGammaRamp(ramp);
-	}
-#endif
 	HDC hDC = GetDC(pWindow->hWindow);
 	if (hDC)
 	{
@@ -963,14 +980,8 @@ bool C4AbstractApp::SaveDefaultGammaRamp(_D3DGAMMARAMP &ramp)
 	return false;
 }
 
-bool C4AbstractApp::ApplyGammaRamp(_D3DGAMMARAMP &ramp, bool fForce)
+bool C4AbstractApp::ApplyGammaRamp(_GAMMARAMP &ramp, bool fForce)
 {
-#ifdef USE_DIRECTX
-	if (pD3D)
-	{
-		return pD3D->ApplyGammaRamp(ramp, fForce);
-	}
-#endif
 	if (!Active && !fForce) return false;
 	HDC hDC = GetDC(pWindow->hWindow);
 	if (hDC)
