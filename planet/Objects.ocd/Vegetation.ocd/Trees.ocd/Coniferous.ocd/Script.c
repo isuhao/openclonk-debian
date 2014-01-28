@@ -1,6 +1,7 @@
 /*-- Coniferous Tree --*/
 
 #include Library_Plant
+#include Library_Tree
 
 // Overloaded from the plant library to add the foreground parameter, foreground = true will roughly make every 3rd tree foreground (not the offspring though)
 func Place(int amount, proplist rectangle, proplist settings, bool foreground)
@@ -17,7 +18,7 @@ func Place(int amount, proplist rectangle, proplist settings, bool foreground)
 
 private func SeedChance() {	return 500; }
 private func SeedArea() { return 400; }
-private func SeedAmount() { return 12; }
+private func SeedAmount() { return 10; }
 
 func Construction()
 {
@@ -26,8 +27,6 @@ func Construction()
 	SetProperty("MeshTransformation", Trans_Rotate(RandomX(0,359),0,1,0));
 	inherited(...);
 }
-
-public func IsTree() { return true; }
 
 public func ChopDown()
 {

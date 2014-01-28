@@ -38,6 +38,11 @@ global func SetCon(int new_con)
 	return DoCon(new_con - GetCon());
 }
 
+global func GetObjAlpha()
+{
+	return (GetClrModulation() >> 24) & 0xFF;
+}
+
 // Sets the object's transparency.
 global func SetObjAlpha(int by_alpha)
 {
@@ -84,8 +89,8 @@ global func LaunchProjectile(int angle, int dist, int speed, int x, int y, int p
 	// y: Y offset from container's center
 	// rel_x: if true, makes the X offset relative to container direction. (x=+30 will become x=-30 when Clonk turns left. This way offset always stays in front of a Clonk.)
 
-	var x_offset = Sin(angle, dist, precAng);
-	var y_offset = -Cos(angle, dist, precAng);
+	var x_offset = x ?? Sin(angle, dist, precAng);
+	var y_offset = y ?? -Cos(angle, dist, precAng);
 	
 	if(!precAng) precAng = 1;
 	if(!precSpd) precSpd = 10;
@@ -96,14 +101,14 @@ global func LaunchProjectile(int angle, int dist, int speed, int x, int y, int p
 
 	if (Contained() != nil)
 	{
-		Exit(x_offset + x, y_offset + y, angle / precAng);
+		Exit(x_offset, y_offset, angle / precAng);
 		SetVelocity(angle, speed, precAng, precSpd);
 		return true;
 	}
 
 	if (Contained() == nil)
 	{
-		SetPosition(GetX() + x_offset + x, GetY() + y_offset + y);
+		SetPosition(GetX() + x_offset, GetY() + y_offset);
 		SetR(angle/precAng);
 		SetVelocity(angle, speed, precAng, precSpd);
 		return true;

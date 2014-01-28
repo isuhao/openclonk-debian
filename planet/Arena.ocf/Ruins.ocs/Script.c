@@ -85,8 +85,8 @@ global func FxDryTimeTimer(object pTarget, effect, int timer)
 	InsertMaterial(Material("Water"),Random(LandscapeWidth()-60)+30,1,Random(7)-3,100+Random(100));
 		return 1;
 	}
-	for(var i=0; i<6+Random(4);i++)
-		ExtractLiquid(310+Random(50),430+Random(10));
+	ExtractLiquidAmount(310+Random(50),430+Random(10),6+Random(4));
+	
 	if(!GBackLiquid(335,430))
 	{
 		AddEffect("Rain",nil,100,2);
@@ -101,7 +101,7 @@ global func FxIntFillChestsStart(object target, effect, int temporary)
 {
 	if(temporary) return 1;
 	var chests = FindObjects(Find_ID(Chest));
-	var w_list = [Bow, Musket, Shield, Sword, Club, Javelin, Bow, Musket, Shield, Sword, Club, Javelin, DynamiteBox];
+	var w_list = [Bow, Musket, Shield, Sword, Club, GrenadeLauncher, Bow, Musket, Shield, Sword, Club, GrenadeLauncher, DynamiteBox];
 	
 	for(var chest in chests)
 		for(var i=0; i<4; ++i)
@@ -113,7 +113,7 @@ global func FxIntFillChestsTimer()
 {
 	SetTemperature(100);
 	var chest = FindObjects(Find_ID(Chest), Sort_Random())[0];
-	var w_list = [Boompack, IronBomb, Loam, Firestone, Bow, Musket, Sword, Javelin];
+	var w_list = [Boompack, IronBomb, IronBomb, Firestone, Bow, Musket, Sword, Javelin];
 	
 	if (chest->ContentsCount() < 5)
 		chest->CreateChestContents(w_list[Random(GetLength(w_list))]);

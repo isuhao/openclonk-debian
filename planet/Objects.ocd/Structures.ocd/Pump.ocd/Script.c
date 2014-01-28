@@ -1,59 +1,129 @@
 /*--
 	Pump
-	Author: Maikel, ST-DDT
+	Author: Maikel, ST-DDT, Sven2, Newton
 	
-	Pumps liquids using drain and source pipes.
+	Pumps liquids using drain and source pipes. Features include:
+	+ switch on and off
+	+ consume/produce a variable amount of power depending on the height of
+	  source and drain
+	
 --*/
 
 #include Library_Structure
 #include Library_Ownable
 #include Library_PowerConsumer
+#include Library_PowerProducer
 
-func NeededPower() { return 100; }
+local Name = "$Name$";
+local Description = "$Description$";
+local BlastIncinerate = 50;
+local HitPoints = 70;
 
-// This object is a liquid pump, thus pipes can be connected.
+/*
+	States
+	"Wait":				turned off or source pipe not connected
+	"WaitForPower":		turned on but no power (does consume power)
+	"WaitForLiquid":	turned on but no liquid (does not consume power)
+	"Pump":				currently working and consuming/producing power
+
+*/
+local ActMap = {
+	Pump = {
+		Prototype = Action,
+		Name = "Pump",
+		Length = 30,
+		Delay = 3,
+		Sound = "Pumpjack",
+		NextAction = "Pump",
+		StartCall = "CheckState",
+		PhaseCall = "Pumping"
+	},
+	Wait = {
+		Prototype = Action,
+		Name = "Wait",
+		Delay = 90,
+		NextAction = "Wait",
+		EndCall = "CheckState"
+	},
+	WaitForPower = {
+		Prototype = Action,
+		Name = "WaitForPower",
+		Delay = 30,
+		NextAction = "WaitForPower",
+		EndCall = "CheckState"
+	},
+	WaitForLiquid = {
+		Prototype = Action,
+		Name = "WaitForLiquid",
+		Delay = 30,
+		NextAction = "WaitForLiquid",
+		EndCall = "CheckState"
+	}
+};
+
+local animation; // animation handle
+
+local switched_on; // controlled by Interaction. Indicates whether the user wants to pump or not
+
+local powered; // whether the pump has enough power as a consumer, always true if producing
+local power_used; // the amount of power currently consumed or (if negative) produced
+
+local stored_material_index; //contained liquid
+local stored_material_amount;
+
+local source_pipe;
+local drain_pipe;
+
+/** This object is a liquid pump, thus pipes can be connected. */
 public func IsLiquidPump() { return true; }
 
-public func Construction(object creator)
+func Definition(def) 
 {
-	return _inherited(creator, ...);
+	// for title image
+	SetProperty("PictureTransformation",Trans_Rotate(50,0,1,0),def);
+	// for building preview
+	SetProperty("MeshTransformation",Trans_Rotate(50,0,1,0),def);
 }
 
-protected func Initialize()
+func Construction()
 {
-	turned_on = true;
-	SetAction("Wait");
-	CheckCurrentState();
-	return;
+	// Rotate at a 45 degree angle towards viewer and add a litte bit of Random
+	this.MeshTransformation = Trans_Rotate(50 + RandomX(-10,10),0,1,0);
 }
+
+func Initialize()
+{
+	switched_on = true;
+	var start = 0;
+	var end = GetAnimationLength("pump");
+	animation = PlayAnimation("pump", 5, Anim_Linear(GetAnimationPosition(animation), start, end, 35, ANIM_Loop), Anim_Const(1000));
+	SetState("Wait");
+}
+
 
 /*-- Interaction --*/
-
-local turned_on;
 
 public func IsInteractable() { return GetCon() >= 100; }
 
 public func GetInteractionMetaInfo(object clonk)
 {
-	if (turned_on)
-		return { Description = "$MsgTurnOff$", IconName = nil, IconID = nil };
-	return { Description = "$MsgTurnOn$", IconName = nil, IconID = nil };
+	if (switched_on)
+		return { Description = "$MsgTurnOff$", IconName = nil, IconID = Icon_Stop };
+	else
+		return { Description = "$MsgTurnOn$", IconName = nil, IconID = Icon_Play };
 }
 
-// On interaction the pump can be turned on or off.
+/** Turn on or off. */
 public func Interact(object clonk)
 {
-	turned_on = !turned_on;
-	CheckCurrentState();
+	switched_on = !switched_on;
+	CheckState();
+	
 	return true;
 }
 
 /*-- Pipe connection --*/
 
-local source_pipe;
-local drain_pipe;
-
-// Set-Getters for source and drain pipe.
 public func GetSource() { return source_pipe; }
 public func SetDrain(object pipe) { drain_pipe = pipe; }
 public func GetDrain() { return drain_pipe; }
@@ -61,8 +131,10 @@ public func GetDrain() { return drain_pipe; }
 public func SetSource(object pipe)
 {
 	source_pipe = pipe;
-	CheckCurrentState();
+	CheckState();
 }
+
+/*-- Power stuff --*/
 
 func QueryWaivePowerRequest()
 {
@@ -72,179 +144,256 @@ func QueryWaivePowerRequest()
 
 func OnNotEnoughPower()
 {
-	// assert: current action is "Pump"
-	SetAction("WillPump");
-	return _inherited(...);
+	_inherited(...);
+	powered = false;
+	CheckState();
 }
 
 func OnEnoughPower()
 {
-	// assert: current action is either WillPump or Wait
-	SetAction("Pump");
-	return _inherited(...);
+	_inherited(...);
+	powered = true;
+	CheckState();
 }
 
-local aMaterials=["", 0]; //contained liquids
-local pumpable_materials; // materials that can be pumped
+/** Returns object to which the liquid is pumped */
+private func GetDrainObject()
+{
+	if (drain_pipe) return drain_pipe->GetConnectedObject(this) ?? this;
+	return this;
+}
 
+/** Re	turns object to which the liquid is pumped */
+private func GetSourceObject()
+{
+	if (source_pipe) return source_pipe->GetConnectedObject(this) ?? this;
+	return this;
+}
+
+/** Returns amount of pixels to pump per 30 frames */
+public func GetPumpSpeed()
+{
+	return 50;
+}
+
+/** PhaseCall of Pump: Pump the liquid from the source to the drain pipe */
 protected func Pumping()
 {
 	// at this point we can assert that we have power
 	
 	// something went wrong in the meantime?
-	// let the central function handle that
-	if (!source_pipe)
-		return CheckCurrentState();
+	// let the central function handle that on next check
+	if (!source_pipe) return;
 	
-	// not able to pump right now?
-	if(!HasLiquidToPump()) return;
+	var pump_ok = true;
 	
-	// is empty?
-	if ((aMaterials[1] == 0) || (aMaterials[0] == ""))
+	// is empty? -> try to get liquid
+	if (!stored_material_amount)
 	{
+
 		// get new materials
-		aMaterials = source_pipe->GetLiquid(pumpable_materials, 5, this, true);
+		var aMat = GetSourceObject()->ExtractLiquidAmount(0,0, GetPumpSpeed()/10);
+	
 		// no material to pump?
-		if ((aMaterials[0] == "") || (aMaterials[1] == 0))
-			return;
+		if (aMat)
+		{
+		stored_material_index = aMat[0];
+		stored_material_amount = aMat[1];
+		}
+		else
+		{
+			pump_ok = false;
+		}
 	}
-	if (drain_pipe)
-		aMaterials[1] -= BoundBy(drain_pipe->PutLiquid(aMaterials[0], aMaterials[1], this), 0, aMaterials[1]);
+	if (pump_ok)
+	{
+		var i = stored_material_amount;
+		while (i > 0)
+		{
+			if (GetDrainObject()->InsertMaterial(stored_material_index))
+			{
+				i--;
+			}
+			// Drain is stuck.
+			else
+			{
+				pump_ok = false;
+				break;
+			}
+		}
+		
+		stored_material_amount = i;
+		if (stored_material_amount <= 0)
+			stored_material_index = nil;
+	}
+	
+	if(!pump_ok)
+	{
+		SetState("WaitForLiquid");
+	}
+}
+
+/** Re check state and change the state if needed */
+func CheckState()
+{
+	var is_fullcon = GetCon() >= 100;
+	var can_pump = source_pipe && is_fullcon && switched_on;
+	
+	// can't pump at all -> wait
+	if (!can_pump)
+	{
+		SetState("Wait");
+	}
 	else
 	{
-		var i = Max(0, aMaterials[1]), itMaterial = Material(aMaterials[0]);
-		while (i--)
-			InsertMaterial(itMaterial);
-		aMaterials = ["", 0];
+		// can pump but has no liquid -> wait for liquid
+		if (!HasLiquidToPump())
+		{
+			SetState("WaitForLiquid");
+		}
+		else
+		{
+			// can pump, has liquid but has no power -> wait for power
+			if (!powered)
+			{
+				SetState("WaitForPower");
+			}
+			// otherwise, pump! :-)
+			else
+			{
+				SetState("Pump");
+			}
+			
+			// regularly update the power usage while pumping or waiting for power
+			UpdatePowerUsage();
+		}
 	}
-	// maybe add the possebility to empty pump (invaild mats?)
-	return;	
 }
 
-func CheckCurrentState()
+/** Get current height the pump has to push liquids upwards (input.y - output.y) */
+private func GetPumpHeight()
 {
-	if(turned_on)
+	// compare each the surfaces of the bodies of liquid pumped
+	
+	// find Y position of surface of liquid that is pumped to target
+	var source_y = 0;
+	if (GetSourceObject()->GBackLiquid())
 	{
-		var has_source_pipe = !!source_pipe;
-		var is_fullcon = GetCon() >= 100;
-		
-		if(GetAction() == "Wait") // waiting: not consuming power
-		{
-			if(has_source_pipe && is_fullcon)
-			{
-				SetAction("WillPump");
-				MakePowerConsumer(NeededPower());
-				return;
-			}
-			else return; // waiting and no source pipe, keep waiting
-		}
-		else // not waiting: consuming power
-		{
-			if(!has_source_pipe || !is_fullcon)
-			{
-				UnmakePowerConsumer();
-				SetAction("Wait");
-				return;
-			}
-			return;
-		}
-		// this point should not be reached
+		var src_mat = GetSourceObject()->GetMaterial();
+		while (src_mat == GetSourceObject()->GetMaterial(0, source_y-1))
+			--source_y;
 	}
-	else // turned off
-	{
-		if(GetAction() != "Wait") // consuming power
-		{
-			UnmakePowerConsumer();
-			SetAction("Wait");
-			return;
-		}
-		else // already waiting
-			return;
-	}
-	FatalError("Not every case handled in Pump::CheckCurrentState");
+	// same for target (use same function as if inserting)
+	var target_pos = {X=0, Y=0};
+	GetDrainObject()->CanInsertMaterial(Material("Water"),0,0,target_pos);
+	return (GetSourceObject()->GetY() + source_y) - target_pos.Y;
 }
 
-// Returns whether the pump can pump some liquid.
+/** Recheck power usage/production for current pump height
+	and make the pump a producer / consumer for the power system */
+private func UpdatePowerUsage()
+{
+	var new_power;
+	if(IsUsingPower())
+		new_power = PumpHeight2Power(GetPumpHeight());
+	else
+		new_power = 0;
+	
+	// do nothing if not necessary
+	if (new_power == power_used)
+		return;
+	
+	// and update energy system
+	if (new_power > 0)
+	{
+		if (power_used < 0)
+		{
+			powered = false; // needed since the flag was set manually
+			UnmakePowerProducer();
+		}
+		MakePowerConsumer(new_power);
+		
+	}
+	else if (new_power < 0)
+	{
+		if (power_used > 0)
+			UnmakePowerConsumer();
+		MakePowerProducer(-new_power);
+		powered = true; // when producing, we always have power
+	}
+	else // new_power == 0
+	{
+		if (power_used < 0) UnmakePowerProducer();
+		else if (power_used > 0) UnmakePowerConsumer();
+		powered = true;
+	}
+	
+	power_used = new_power;
+}
+
+/** Return whether the pump should be using power in the current state */
+private func IsUsingPower()
+{
+	return switched_on && (GetAction() == "Pump" || GetAction() == "WaitForPower");
+}
+
+/** Transform pump height (input.y - output.y) to required power */
+private func PumpHeight2Power(int pump_height)
+{
+	// pumping downwards will only produce energy after an offset
+	var power_offset = 40;
+	// max power consumed/produced
+	var max_power = 150;
+	
+	return BoundBy((pump_height + power_offset)/15*5, -max_power,max_power+power_offset);
+}
+
+/** Returns whether there is liquid at the source pipe to pump */
 private func HasLiquidToPump()
 {
-	// If there is no source pipe, return false.
 	if (!source_pipe)
 		return false;
-	// If there is nothing to pump at the source return false.
-	var source = source_pipe->GetConnectedObject(this);
-	if (!source)
+		
+	// source
+	if(!GetSourceObject()->GBackLiquid())
 		return false;
-	if (!source->GBackLiquid())
+	
+	// target (test with the very popular liquid "water")
+	if(!GetDrainObject()->CanInsertMaterial(Material("Water"),0,0))
 		return false;
-	// TODO: Account for pumping into buildings.
-	// Pumping is okay.
+	
 	return true;
 }
 
-/**
-Set name or wildcard string of materials this pump can pump
-@param to_val: Material that can be pumped. 0 or "*" for any material.
-*/
-public func SetPumpableMaterials(string to_val)
+/** Set the state of the pump, retaining the animation position and updating the power usage */
+func SetState(string act)
 {
-	pumpable_materials = to_val;
-	return true;
-}
+	if(act == GetAction()) return;
 
-local Name = "$Name$";
-local Description = "$Description$";
-local BlastIncinerate = 50;
-local HitPoints = 70;
-
-/*
-	"Pump": the pump is currently working and consuming power
-	"WillPump": the pump wants to work as soon as there is power
-	"Wait": the pump has been turned off or some other need is not fulfilled (f.e. connected pipe)
-*/
-local ActMap = {
-	Pump = {
-		Prototype = Action,
-		Name = "Pump",
-		Procedure = DFA_NONE,
-		Length = 30,
-		Delay = 3,
-		Directions = 2,
-		FlipDir = 1,
-		X = 0,
-		Y = 0,
-		Wdt = 28,
-		Hgt = 32,
-		NextAction = "Pump",
-		StartCall = "CheckCurrentState",
-		PhaseCall = "Pumping"
-	},
-	Wait = {
-		Prototype = Action,
-		Name = "Wait",
-		Procedure = DFA_NONE,
-		Length = 1,
-		Delay = 60,
-		Directions = 2,
-		FlipDir = 1,
-		X = 0,
-		Y = 0,
-		Wdt = 28,
-		Hgt = 32,
-		NextAction = "Wait",
-		StartCall = "CheckCurrentState"
-	},
-	WillPump = {
-		Prototype = Action,
-		Name = "WillPump",
-		Procedure = DFA_NONE,
-		Length = 1,
-		Delay = 60,
-		Directions = 2,
-		FlipDir = 1,
-		X = 0,
-		Y = 0,
-		Wdt = 28,
-		Hgt = 32,
-		NextAction = "WillPump",
+	var start = 0;
+	var end = GetAnimationLength("pump");
+	var anim_pos = GetAnimationPosition(animation);
+	if (act == "Pump")
+	{
+		SetAnimationPosition(animation, Anim_Linear(anim_pos, start, end, 35, ANIM_Loop));
 	}
-};
+	else if(act == "WaitForLiquid")
+	{
+		SetAnimationPosition(animation, Anim_Linear(anim_pos, start, end, 350, ANIM_Loop));
+	}
+	else
+	{
+		SetAnimationPosition(animation, Anim_Const(anim_pos));
+	}
+	
+	// deactivate power usage when not pumping
+	if (powered && (act == "Wait" || act == "WaitForLiquid"))
+	{
+		if (power_used < 0) UnmakePowerProducer();
+		else if(power_used > 0) UnmakePowerConsumer();
+		power_used = 0;
+		powered = false;
+	}
+	// finally, set the action
+	SetAction(act);
+}

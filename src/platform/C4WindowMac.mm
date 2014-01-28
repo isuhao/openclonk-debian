@@ -19,6 +19,7 @@
 #include <C4Version.h>
 #include <C4Application.h>
 #include <C4Rect.h>
+#include <C4FullScreen.h>
 
 #import <Appkit/AppKit.h>
 #import <C4WindowController.h>
@@ -108,13 +109,23 @@ void C4Window::SetTitle(const char *szToTitle)
 
 bool C4Window::GetSize(C4Rect * pRect)
 {
-	C4WindowController* controller = ctrler;
-	NSView* view = controller.openGLView ? controller.openGLView : controller.window.contentView;
-	NSRect r = [view frame];
-	pRect->x = 0;
-	pRect->y = 0;
-	pRect->Wdt = r.size.width;
-	pRect->Hgt = r.size.height;
+	if (this == &::FullScreen)
+	{
+		pRect->x = 0;
+		pRect->y = 0;
+		pRect->Wdt = ActualFullscreenX;
+		pRect->Hgt = ActualFullscreenY;
+	}
+	else
+	{
+		C4WindowController* controller = ctrler;
+		NSView* view = controller.openGLView ? controller.openGLView : controller.window.contentView;
+		NSRect r = [view frame];
+		pRect->x = 0;
+		pRect->y = 0;
+		pRect->Wdt = r.size.width;
+		pRect->Hgt = r.size.height;
+	}
 	return true;
 }
 
@@ -134,6 +145,10 @@ bool C4Window::ReInit(C4AbstractApp* pApp)
 	return true;
 }
 
+C4KeyCode K_SHIFT_L = 56 + CocoaKeycodeOffset;
+C4KeyCode K_SHIFT_R = 60 + CocoaKeycodeOffset;
+C4KeyCode K_ALT_L = 58 + CocoaKeycodeOffset;
+C4KeyCode K_ALT_R = 61 + CocoaKeycodeOffset;
 C4KeyCode K_F1 = 122 + CocoaKeycodeOffset;
 C4KeyCode K_F2 = 120 + CocoaKeycodeOffset;
 C4KeyCode K_F3 = 99 + CocoaKeycodeOffset;
@@ -167,14 +182,14 @@ C4KeyCode K_SCROLL = 1000 + CocoaKeycodeOffset;
 C4KeyCode K_MENU = 1000 + CocoaKeycodeOffset;
 C4KeyCode K_PAGEUP = 116 + CocoaKeycodeOffset;
 C4KeyCode K_PAGEDOWN = 121 + CocoaKeycodeOffset;
-C4KeyCode KEY_M = 46 + CocoaKeycodeOffset;
-C4KeyCode KEY_T = 17 + CocoaKeycodeOffset;
-C4KeyCode KEY_W = 13 + CocoaKeycodeOffset;
-C4KeyCode KEY_I = 34 + CocoaKeycodeOffset;
-C4KeyCode KEY_C = 8 + CocoaKeycodeOffset;
-C4KeyCode KEY_V = 9 + CocoaKeycodeOffset;
-C4KeyCode KEY_X = 7 + CocoaKeycodeOffset;
-C4KeyCode KEY_A = 0 + CocoaKeycodeOffset;
+C4KeyCode K_M = 46 + CocoaKeycodeOffset;
+C4KeyCode K_T = 17 + CocoaKeycodeOffset;
+C4KeyCode K_W = 13 + CocoaKeycodeOffset;
+C4KeyCode K_I = 34 + CocoaKeycodeOffset;
+C4KeyCode K_C = 8 + CocoaKeycodeOffset;
+C4KeyCode K_V = 9 + CocoaKeycodeOffset;
+C4KeyCode K_X = 7 + CocoaKeycodeOffset;
+C4KeyCode K_A = 0 + CocoaKeycodeOffset;
 int MK_SHIFT = NSShiftKeyMask;
 int MK_CONTROL = NSControlKeyMask;
 int MK_ALT = NSAlternateKeyMask;

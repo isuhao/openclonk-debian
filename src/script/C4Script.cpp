@@ -1,25 +1,18 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 1998-2000  Matthes Bender
- * Copyright (c) 2004, 2006-2007, 2010  Sven Eberhardt
- * Copyright (c) 2005-2011  Günther Brammer
- * Copyright (c) 2005-2006  Peter Wortmann
- * Copyright (c) 2009  Nicolas Hake
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2010  Armin Burgmeier
- * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 1998-2000, Matthes Bender
+ * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 /* Functions mapped by C4Script */
@@ -581,6 +574,44 @@ static Nillable<C4String *> FnGetConstantNameByValue(C4PropList * _this, int val
 	return C4Void();
 }
 
+static bool FnSortArray(C4PropList * _this, C4ValueArray *pArray, bool descending)
+{
+	if (!pArray) throw new C4AulExecError("SortArray: no array given");
+	// sort array by its members
+	pArray->Sort(descending);
+	return true;
+}
+
+static bool FnSortArrayByProperty(C4PropList * _this, C4ValueArray *pArray, C4String *prop_name, bool descending)
+{
+	if (!pArray) throw new C4AulExecError("SortArrayByProperty: no array given");
+	if (!prop_name) throw new C4AulExecError("SortArrayByProperty: no property name given");
+	// sort array by property
+	if (!pArray->SortByProperty(prop_name, descending)) throw new C4AulExecError("SortArrayByProperty: not all array elements are proplists");
+	return true;
+}
+
+static bool FnSortArrayByArrayElement(C4PropList * _this, C4ValueArray *pArray, int32_t element_index, bool descending)
+{
+	if (!pArray) throw new C4AulExecError("SortArrayByArrayElement: no array given");
+	if (element_index<0) throw new C4AulExecError("SortArrayByArrayElement: element index must be >=0");
+	// sort array by array element
+	if (!pArray->SortByArrayElement(element_index, descending)) throw new C4AulExecError("SortArrayByArrayElement: not all array elements are arrays of sufficient length");
+	return true;
+}
+
+static bool FnFileWrite(C4PropList * _this, int32_t file_handle, C4String *data)
+{
+	// resolve file handle to user file
+	C4AulUserFile *file = ::ScriptEngine.GetUserFile(file_handle);
+	if (!file) throw new C4AulExecError("FileWrite: invalid file handle");
+	// prepare string to write
+	if (!data) return false; // write NULL? No.
+	// write it
+	file->Write(data->GetCStr(), data->GetData().getLength());
+	return true;
+}
+
 //=========================== C4Script Function Map ===================================
 
 C4ScriptConstDef C4ScriptConstMap[]=
@@ -599,13 +630,13 @@ C4ScriptConstDef C4ScriptConstMap[]=
 	{ "C4X_Ver1",        C4V_Int, C4XVER1},
 	{ "C4X_Ver2",        C4V_Int, C4XVER2},
 	{ "C4X_Ver3",        C4V_Int, C4XVER3},
-	{ "C4X_Ver4",        C4V_Int, C4XVER4},
 
 	{ NULL, C4V_Nil, 0}
 };
 
 C4ScriptFnDef C4ScriptFnMap[]=
 {
+	{ "Call",          1, C4V_Any,    { C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any    ,C4V_Any    ,C4V_Any    ,C4V_Any}, FnCall     },
 	{ "Log",           1, C4V_Bool,   { C4V_String  ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any    ,C4V_Any    ,C4V_Any    ,C4V_Any}, FnLog      },
 	{ "DebugLog",      1, C4V_Bool,   { C4V_String  ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any    ,C4V_Any    ,C4V_Any    ,C4V_Any}, FnDebugLog },
 	{ "Format",        1, C4V_String, { C4V_String  ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any     ,C4V_Any    ,C4V_Any    ,C4V_Any    ,C4V_Any}, FnFormat   },
@@ -659,11 +690,16 @@ void InitCoreFunctionMap(C4AulScriptEngine *pEngine)
 	F(StartCallTrace);
 	F(StartScriptProfiler);
 	F(StopScriptProfiler);
+	F(SortArray);
+	F(SortArrayByProperty);
+	F(SortArrayByArrayElement);
 	F(LocateFunc);
+	F(FileWrite);
 
 	F(eval);
 	F(GetConstantNameByValue);
 
 	AddFunc(pEngine, "Translate", C4AulExec::FnTranslate);
+	AddFunc(pEngine, "LogCallStack", C4AulExec::FnLogCallStack);
 #undef F
 }

@@ -1,21 +1,17 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2006, 2009  Sven Eberhardt
- * Copyright (c) 2005  Günther Brammer
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 // Keyboard input mapping to engine functions
 
@@ -198,7 +194,6 @@ struct C4KeyCodeEx
 
 	// helpers
 	static C4KeyShiftState String2KeyShift(const StdStrBuf &sName);
-	static C4KeyCode GetKeyByScanCode(const char *scan_code);
 	static C4KeyCode String2KeyCode(const StdStrBuf &sName);
 	static StdStrBuf KeyCode2String(C4KeyCode wCode, bool fHumanReadable, bool fShort);
 	StdStrBuf ToString(bool fHumanReadable, bool fShort) const;
@@ -221,6 +216,8 @@ struct C4KeyCodeEx
 			: Key(Key), dwShift(Shift), fRepeated(fIsRepeated) {}
 
 	bool IsRepeated() const { return fRepeated; }
+private:
+	static C4KeyCode GetKeyByScanCode(const char *scan_code);
 };
 
 // extra data associated with a key event

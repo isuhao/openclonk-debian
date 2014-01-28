@@ -1,23 +1,17 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2009, 2011  Günther Brammer
- * Copyright (c) 2005  Peter Wortmann
- * Copyright (c) 2006-2008, 2010  Armin Burgmeier
- * Copyright (c) 2010  Martin Plicht
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 /* A wrapper class to OS dependent event and window interfaces, GTK+ version */
@@ -54,7 +48,7 @@
 
 // Some helper functions for choosing a proper visual
 
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 // Returns which XVisual attribute for two given attributes is greater.
 static int CompareVisualAttribute(Display* dpy, XVisualInfo* first, XVisualInfo* second, int attrib)
 {
@@ -206,7 +200,7 @@ static std::vector<XVisualInfo> EnumerateVisuals(Display* dpy)
 	XFree(infos);
 	return selected_infos;
 }
-#endif // USE_GL
+#endif // #ifndef USE_CONSOLE
 static void OnDestroyStatic(GtkWidget* widget, gpointer data)
 {
 	C4Window* wnd = static_cast<C4Window*>(data);
@@ -223,16 +217,18 @@ static gboolean OnDelete(GtkWidget* widget, GdkEvent* event, gpointer data)
 static gboolean OnKeyPress(GtkWidget* widget, GdkEventKey* event, gpointer data)
 {
 	C4Window* wnd = static_cast<C4Window*>(data);
-	DWORD key = XKeycodeToKeysym(GDK_WINDOW_XDISPLAY(event->window), event->hardware_keycode, 0);
-	Game.DoKeyboardInput(key, KEYEV_Down, !!(event->state & GDK_MOD1_MASK), !!(event->state & GDK_CONTROL_MASK), !!(event->state & GDK_SHIFT_MASK), false, NULL);
+	// keycode = scancode + 8
+	if (event->hardware_keycode <= 8) return false;
+	Game.DoKeyboardInput(event->hardware_keycode-8, KEYEV_Down, !!(event->state & GDK_MOD1_MASK), !!(event->state & GDK_CONTROL_MASK), !!(event->state & GDK_SHIFT_MASK), false, NULL);
 	wnd->CharIn(event->string); // FIXME: Use GtkIMContext somehow
 	return true;
 }
 
 static gboolean OnKeyRelease(GtkWidget* widget, GdkEventKey* event, gpointer user_data)
 {
-	DWORD key = XKeycodeToKeysym(GDK_WINDOW_XDISPLAY(event->window), event->hardware_keycode, 0);
-	Game.DoKeyboardInput(key, KEYEV_Up, !!(event->state & GDK_MOD1_MASK), !!(event->state & GDK_CONTROL_MASK), !!(event->state & GDK_SHIFT_MASK), false, NULL);
+	// keycode = scancode + 8
+	if (event->hardware_keycode <= 8) return false;
+	Game.DoKeyboardInput(event->hardware_keycode-8, KEYEV_Up, !!(event->state & GDK_MOD1_MASK), !!(event->state & GDK_CONTROL_MASK), !!(event->state & GDK_SHIFT_MASK), false, NULL);
 	return true;
 }
 
@@ -284,16 +280,15 @@ static gboolean OnKeyPressStatic(GtkWidget* widget, GdkEventKey* event, gpointer
 		static_cast<C4ViewportWindow*>(user_data)->cvp->TogglePlayerLock();
 		return true;
 	}
-
-	DWORD key = XKeycodeToKeysym(GDK_WINDOW_XDISPLAY(event->window), event->hardware_keycode, 0);
-	Console.EditCursor.KeyDown(key, event->state);
+	if (event->hardware_keycode <= 8) return false;
+	Console.EditCursor.KeyDown(event->hardware_keycode - 8, event->state);
 	return false;
 }
 
 static gboolean OnKeyReleaseStatic(GtkWidget* widget, GdkEventKey* event, gpointer user_data)
 {
-	DWORD key = XKeycodeToKeysym(GDK_WINDOW_XDISPLAY(event->window), event->hardware_keycode, 0);
-	Console.EditCursor.KeyUp(key, event->state);
+	if (event->hardware_keycode <= 8) return false;
+	Console.EditCursor.KeyUp(event->hardware_keycode - 8, event->state);
 	return false;
 }
 
@@ -642,7 +637,7 @@ C4Window::~C4Window ()
 
 bool C4Window::FindInfo(int samples, void** info)
 {
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
 	std::vector<XVisualInfo> infos = EnumerateVisuals(dpy);
 	for(unsigned int i = 0; i < infos.size(); ++i)
@@ -660,14 +655,14 @@ bool C4Window::FindInfo(int samples, void** info)
 	}
 #else
 	// TODO: Do we need to handle this case?
-#endif // USE_GL
+#endif // #ifndef USE_CONSOLE
 
 	return false;
 }
 
 void C4Window::EnumerateMultiSamples(std::vector<int>& samples) const
 {
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
 	std::vector<XVisualInfo> infos = EnumerateVisuals(dpy);
 	for(unsigned int i = 0; i < infos.size(); ++i)
@@ -891,7 +886,7 @@ bool C4Window::ReInit(C4AbstractApp* pApp)
 {
 	// Check whether multisampling settings was changed. If not then we
 	// don't need to ReInit anything.
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	int value;
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
 	glXGetConfig(dpy, static_cast<XVisualInfo*>(Info), GLX_SAMPLES_ARB, &value);

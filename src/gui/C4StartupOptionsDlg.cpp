@@ -1,26 +1,17 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2005-2008, 2011  Sven Eberhardt
- * Copyright (c) 2006, 2008, 2010  Günther Brammer
- * Copyright (c) 2006  Florian Groß
- * Copyright (c) 2007  Matthes Bender
- * Copyright (c) 2007  Julian Raschke
- * Copyright (c) 2008, 2010  Armin Burgmeier
- * Copyright (c) 2009  Carli@Carli-PC
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 // Startup screen for non-parameterized engine start: Options dialog
 
@@ -421,62 +412,6 @@ C4StartupOptionsDlg::ControlConfigArea::ControlConfigArea(const C4Rect &rcArea, 
 	caArea.ExpandTop(caArea.GetVMargin());
 	control_list = new ControlConfigListBox(caArea.GetFromLeft(caArea.GetInnerWidth()), NULL);
 	AddElement(control_list);
-	/*C4Facet &rfctKey = ::GraphicsResource.fctKey;
-	int32_t iKeyAreaMaxWdt = caArea.GetWidth()-2*caArea.GetHMargin(), iKeyAreaMaxHgt = caArea.GetHeight()-2*caArea.GetVMargin();
-	int32_t iKeyWdt = rfctKey.Wdt*3/2, iKeyHgt = rfctKey.Hgt*3/2;
-	int32_t iKeyUseWdt = iKeyWdt + iKeyHgt*3; // add space for label
-	int32_t iKeyMargin = 20;
-	int32_t iKeyAreaWdt = (iKeyUseWdt+2*iKeyMargin) * iKeyPosMaxX, iKeyAreaHgt = (iKeyHgt+2*iKeyMargin) * iKeyPosMaxY;
-	if (iKeyAreaWdt > iKeyAreaMaxWdt || iKeyAreaHgt > iKeyAreaMaxHgt)
-	{
-		// scale down
-		float fScaleX = float(iKeyAreaMaxWdt) / float(Max<int32_t>(iKeyAreaWdt,1)),
-		                fScaleY = float(iKeyAreaMaxHgt) / float(Max<int32_t>(iKeyAreaHgt,1)), fScale;
-		if (fScaleX > fScaleY) fScale = fScaleY; else fScale = fScaleX;
-		iKeyMargin = int32_t(fScale*iKeyMargin);
-		iKeyWdt = int32_t(fScale*iKeyWdt);
-		iKeyUseWdt = int32_t(fScale*iKeyUseWdt);
-		iKeyHgt = int32_t(fScale*iKeyHgt);
-		iKeyAreaWdt = int32_t(fScale*iKeyAreaWdt);
-		iKeyAreaHgt = int32_t(fScale*iKeyAreaHgt);
-	}
-	C4GUI::ComponentAligner caCtrlKeys(caArea.GetFromTop(iKeyAreaHgt, iKeyAreaWdt), 0,iKeyMargin);
-	int32_t iKeyNum;
-	for (int iY = 0; iY < iKeyPosMaxY; ++iY)
-	{
-		C4GUI::ComponentAligner caCtrlKeysLine(caCtrlKeys.GetFromTop(iKeyHgt), iKeyMargin,0);
-		for (int iX = 0; iX < iKeyPosMaxX; ++iX)
-		{
-			C4Rect rcKey = caCtrlKeysLine.GetFromLeft(iKeyWdt);
-			caCtrlKeysLine.ExpandLeft(iKeyWdt - iKeyUseWdt);
-			if ((iKeyNum=iKeyPosis[iY][iX])<0) continue;
-			KeySelButton *pKeyBtn = new C4GUI::CallbackButton<C4StartupOptionsDlg::ControlConfigArea, KeySelButton>(iKeyNum, rcKey, 0, &C4StartupOptionsDlg::ControlConfigArea::OnCtrlKeyBtn, this);
-			AddElement(KeyControlBtns[iKeyNum] = pKeyBtn);
-			pKeyBtn->SetToolTip(KeyID2Desc(iKeyNum));
-		}
-	}
-	// bottom area controls
-	caArea.ExpandBottom(-iKeyHgt/2);
-	C4GUI::ComponentAligner caKeyBottomBtns(caArea.GetFromBottom(C4GUI_ButtonHgt), 2,0);
-	// gamepad: Use for GUI
-	if (fGamepad)
-	{
-		int iWdt=100,iHgt=20;
-		const char *szResetText = LoadResStr("IDS_CTL_GAMEPADFORMENU");
-		C4GUI::CheckBox::GetStandardCheckBoxSize(&iWdt, &iHgt, szResetText, pUseFont);
-		pGUICtrl = new C4GUI::CheckBox(caKeyBottomBtns.GetFromLeft(iWdt, iHgt), szResetText, !!Config.Controls.GamepadGuiControl);
-		pGUICtrl->SetOnChecked(new C4GUI::CallbackHandler<C4StartupOptionsDlg::ControlConfigArea>(this, &C4StartupOptionsDlg::ControlConfigArea::OnGUIGamepadCheckChange));
-		pGUICtrl->SetToolTip(LoadResStr("IDS_DESC_GAMEPADFORMENU"));
-		pGUICtrl->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
-		AddElement(pGUICtrl);
-	}
-	// reset button
-	const char *szBtnText = LoadResStr("IDS_BTN_RESETKEYBOARD");
-	int32_t iButtonWidth=100, iButtonHeight=20; C4GUI::Button *btn;
-	::GraphicsResource.CaptionFont.GetTextExtent(szBtnText, iButtonWidth, iButtonHeight, true);
-	C4Rect rcResetBtn = caKeyBottomBtns.GetFromRight(Min<int32_t>(iButtonWidth+iButtonHeight*4, caKeyBottomBtns.GetInnerWidth()));
-	AddElement(btn = new C4GUI::CallbackButton<C4StartupOptionsDlg::ControlConfigArea, SmallButton>(szBtnText, rcResetBtn, &C4StartupOptionsDlg::ControlConfigArea::OnResetKeysBtn, this));
-	btn->SetToolTip(LoadResStr("IDS_MSG_RESETKEYSETS"));*/
 
 	UpdateCtrlSet();
 }
@@ -768,7 +703,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 
 	// main config area tabular
 	pOptionsTabular = new C4GUI::Tabular(caConfigArea.GetAll(), C4GUI::Tabular::tbLeft);
-	pOptionsTabular->SetGfx(&C4Startup::Get()->Graphics.fctOptionsDlgPaper, &C4Startup::Get()->Graphics.fctOptionsTabClip, &C4Startup::Get()->Graphics.fctOptionsIcons, &C4Startup::Get()->Graphics.BookSmallFont, true);
+	pOptionsTabular->SetGfx(&C4Startup::Get()->Graphics.fctDlgPaper, &C4Startup::Get()->Graphics.fctOptionsTabClip, &C4Startup::Get()->Graphics.fctOptionsIcons, &C4Startup::Get()->Graphics.BookSmallFont, true);
 	AddElement(pOptionsTabular);
 	C4GUI::Tabular::Sheet *pSheetGeneral  = pOptionsTabular->AddSheet(LoadResStr("IDS_DLG_PROGRAM") , 0);
 	C4GUI::Tabular::Sheet *pSheetGraphics = pOptionsTabular->AddSheet(LoadResStr("IDS_DLG_GRAPHICS"), 1);
@@ -846,32 +781,6 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 
 	// --- page graphics
 	C4GUI::ComponentAligner caSheetGraphics(pSheetGraphics->GetClientRect(), iIndentX1, iIndentY1, true);
-	// --subgroup engine
-	C4GUI::GroupBox *pGroupEngine = new C4GUI::GroupBox(caSheetGraphics.GetGridCell(0,2,0,3));
-	pGroupEngine->SetTitle(LoadResStrNoAmp("IDS_CTL_GFXENGINE"));
-	pGroupEngine->SetFont(pUseFont);
-	pGroupEngine->SetColors(C4StartupEditBorderColor, C4StartupFontClr);
-	pGroupEngine->SetToolTip(LoadResStr("IDS_MSG_GFXENGINE_DESC"));
-	pSheetGraphics->AddElement(pGroupEngine);
-	C4GUI::ComponentAligner caGroupEngine(pGroupEngine->GetClientRect(), iIndentX1, iIndentY2, true);
-	const char *szGfxEngineNames[3] = { "DirectX", "OpenGL", "DirectX Software" };
-	C4GUI::BaseCallbackHandler *pGfxEngineCheckCB = new C4GUI::CallbackHandler<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnGfxEngineCheck);
-	for (int32_t iGfxEngine = 0; iGfxEngine<3; ++iGfxEngine)
-	{
-		pCheckGfxEngines[iGfxEngine] = new C4GUI::CheckBox(caGroupEngine.GetGridCell(0,1,iGfxEngine,3,-1,iCheckHgt,true), szGfxEngineNames[iGfxEngine], (Config.Graphics.Engine == iGfxEngine));
-		pCheckGfxEngines[iGfxEngine]->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
-		pCheckGfxEngines[iGfxEngine]->SetOnChecked(pGfxEngineCheckCB);
-		pGroupEngine->AddElement(pCheckGfxEngines[iGfxEngine]);
-	}
-#ifndef USE_DIRECTX
-	pCheckGfxEngines[GFXENGN_DIRECTX]->SetEnabled(false);
-	pCheckGfxEngines[GFXENGN_DIRECTXS]->SetEnabled(false);
-#endif
-#ifndef USE_GL
-	pCheckGfxEngines[GFXENGN_OPENGL]->SetEnabled(false);
-#endif
-	pCheckGfxEngines[GFXENGN_DIRECTX]->SetEnabled(false); // as long as DX doesnt work, its disabled
-	pCheckGfxEngines[GFXENGN_DIRECTXS]->SetEnabled(false); // better not using this
 	// --subgroup resolution
 	C4GUI::GroupBox *pGroupResolution = new C4GUI::GroupBox(caSheetGraphics.GetGridCell(1,2,0,3));
 	pGroupResolution->SetTitle(LoadResStrNoAmp("IDS_CTL_RESOLUTION"));
@@ -902,8 +811,8 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	C4GUI::BaseCallbackHandler *pGfxClrDepthCheckCB = new C4GUI::CallbackHandler<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnGfxClrDepthCheck);
 	for (int32_t iBitDepthIdx = 0; iBitDepthIdx<2; ++iBitDepthIdx)
 	{
-		int iBitDepth = (iBitDepthIdx+1) * 16;
-		pCheckGfxClrDepth[iBitDepthIdx] = new C4GUI::CheckBox(caGroupEngine.GetGridCell(iBitDepthIdx,2,2,4,-1,iCheckHgt,true), FormatString("%d Bit", (int)iBitDepth).getData(), (Config.Graphics.BitDepth == iBitDepth));
+		int iBitDepth = (iBitDepthIdx+1) * 16;          //WORKAROUND
+		pCheckGfxClrDepth[iBitDepthIdx] = new C4GUI::CheckBox(caGroupResolution.GetGridCell(iBitDepthIdx,2,2,4,-1,iCheckHgt,true), FormatString("%d Bit", (int)iBitDepth).getData(), (Config.Graphics.BitDepth == iBitDepth));
 		pCheckGfxClrDepth[iBitDepthIdx]->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
 		pCheckGfxClrDepth[iBitDepthIdx]->SetOnChecked(pGfxClrDepthCheckCB);
 		pCheckGfxClrDepth[iBitDepthIdx]->SetToolTip(LoadResStr("IDS_CTL_BITDEPTH"));
@@ -1147,28 +1056,6 @@ void C4StartupOptionsDlg::OnResetConfigBtn(C4GUI::Control *btn)
 	Application.Quit();
 }
 
-void C4StartupOptionsDlg::OnGfxEngineCheck(C4GUI::Element *pCheckBox)
-{
-	C4GUI::CheckBox *pCheck = static_cast<C4GUI::CheckBox *>(pCheckBox);
-	// radiogroup: do not allow unchecking!
-	if (!pCheck->GetChecked())
-	{
-		pCheck->SetChecked(true);
-		return;
-	}
-	// get new engine
-	int i;
-	for (i=0; i<3; ++i) if (pCheck == pCheckGfxEngines[i]) break;
-	if (i==3 || i == Config.Graphics.Engine) return;
-	// okay, engine change
-	pCheckGfxEngines[Config.Graphics.Engine]->SetChecked(false);
-	StdStrBuf sTitle; sTitle.Copy(LoadResStrNoAmp("IDS_CTL_GFXENGINE"));
-	GetScreen()->ShowMessage(LoadResStr("IDS_MSG_RESTARTCHANGECFG"), sTitle.getData(), C4GUI::Ico_Notify, &Config.Startup.HideMsgGfxEngineChange);
-	SaveGfxTroubleshoot();
-	Config.Graphics.Engine = i;
-	LoadGfxTroubleshoot();
-}
-
 void C4StartupOptionsDlg::OnGfxMSComboFill(C4GUI::ComboBox_FillCB *pFiller)
 {
 	// clear all old entries first to allow a clean refill
@@ -1191,38 +1078,22 @@ void C4StartupOptionsDlg::OnGfxMSComboFill(C4GUI::ComboBox_FillCB *pFiller)
 bool C4StartupOptionsDlg::OnGfxMSComboSelChange(C4GUI::ComboBox *pForCombo, int32_t idNewSelection)
 {
 	if(pTexMgr) pTexMgr->IntLock();
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	pDraw->InvalidateDeviceObjects();
 	// Note: This assumes there is only one GL context (the main context). This
 	// is true in fullscreen mode, and since the startup dlg is only shown in
 	// fullscreen mode we are safe this way.
 	if(pGL) pGL->pMainCtx->Clear();
 #endif
-#ifdef USE_DIRECTX
-	// It should also be possible to clear+reinit DDraw also for GL, however,
-	// if ReInit() does _not_ create a new window on X11 then all rendering
-	// stops until the Window is being moved again (or tasked-out and back in
-	// in fullscreen mode). This does not happen when only reinitializing the
-	// GL context instead of whole DDraw so that's why we do this currently.
-	if(pD3D) pDraw->Clear();
-#endif
-
 	int32_t PrevMultiSampling = Config.Graphics.MultiSampling;
 	Config.Graphics.MultiSampling = idNewSelection;
 	bool success = Application.pWindow->ReInit(&Application);
 
-#ifdef USE_GL
+#ifndef USE_CONSOLE
 	if(pGL) pGL->pMainCtx->Init(Application.pWindow, &Application);
 	pDraw->RestoreDeviceObjects();
 #endif
-#ifdef USE_DIRECTX
-	// Note: Editor is hardcoded to false at this point... I guess that's OK
-	// because C4StartupOptionsDlg is never shown in editor mode anyway.
-	if(pD3D) pDraw->Init(&Application, false, false, Config.Graphics.ResX, Config.Graphics.ResY, Config.Graphics.BitDepth, Config.Graphics.Monitor);
-#endif
-
 	if(pTexMgr) pTexMgr->IntUnlock();
-	
 	if(!success) Config.Graphics.MultiSampling = PrevMultiSampling;
 	return !success;
 }
@@ -1581,10 +1452,8 @@ void C4StartupOptionsDlg::SaveGfxTroubleshoot()
 {
 	// get it from controls
 	Config.Graphics.EnableShaders=pShaders->GetChecked();
-	// get config set to be used
-	bool fUseGL = (Config.Graphics.Engine == GFXENGN_OPENGL);
-	// and apply them directly, if the engine is current
-	if (fUseGL == pDraw->IsOpenGL())
+
+	if (pDraw->IsOpenGL())
 	{
 		pDraw->RestoreDeviceObjects();
 	}

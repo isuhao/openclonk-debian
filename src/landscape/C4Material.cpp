@@ -1,23 +1,18 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 1998-2000, 2007  Matthes Bender
- * Copyright (c) 2001-2002, 2005-2007, 2011  Sven Eberhardt
- * Copyright (c) 2006-2007  Peter Wortmann
- * Copyright (c) 2006-2007, 2009  Günther Brammer
- * Copyright (c) 2010-2011  Nicolas Hake
- * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 1998-2000, Matthes Bender
+ * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 /* Material definitions used by the landscape */
@@ -35,7 +30,6 @@
 #include <C4Landscape.h>
 #include <C4SoundSystem.h>
 #include <C4Effect.h>
-#include <C4Game.h>
 #include <C4Log.h>
 #include <C4Physics.h> // For GravAccel
 
@@ -483,7 +477,7 @@ int32_t C4MaterialMap::Get(const char *szMaterial)
 }
 
 
-bool C4MaterialMap::CrossMapMaterials() // Called after load
+bool C4MaterialMap::CrossMapMaterials(const char* szEarthMaterial) // Called after load
 {
 	// Check material number
 	if (::MaterialMap.Num>C4MaxMaterial)
@@ -502,8 +496,8 @@ bool C4MaterialMap::CrossMapMaterials() // Called after load
 			// natural stuff: material conversion here?
 			if (pMatPXS && pMatPXS->sInMatConvert.getLength() && SEqualNoCase(pMatPXS->sInMatConvert.getData(), pMatLS ? pMatLS->Name : C4TLS_MatSky))
 				pReaction = &DefReactConvert;
-			// the rest is happening for same/higher densities only
-			else if ((MatDensity(iMatPXS) <= MatDensity(iMatLS)) && pMatPXS && pMatLS)
+			// non-sky reactions
+			else if (pMatPXS && pMatLS)
 			{
 				// incindiary vs extinguisher
 				if ((pMatPXS->Incindiary && pMatLS->Extinguisher) || (pMatPXS->Extinguisher && pMatLS->Incindiary))
@@ -514,8 +508,11 @@ bool C4MaterialMap::CrossMapMaterials() // Called after load
 				// corrosive vs corrode
 				else if (pMatPXS->Corrosive && pMatLS->Corrode)
 					pReaction = &DefReactCorrode;
-				// otherwise, when hitting same or higher density: Material insertion
-				else
+				// liquid hitting liquid or solid: Material insertion
+				else if (DensityLiquid(MatDensity(iMatPXS)) && DensitySemiSolid(MatDensity(iMatLS)))
+					pReaction = &DefReactInsert;
+				// solid hitting solid: Material insertion
+				else if (DensitySolid(MatDensity(iMatPXS)) && DensitySolid(MatDensity(iMatLS)))
 					pReaction = &DefReactInsert;
 			}
 			// assign the function; or NULL for no reaction
@@ -675,10 +672,11 @@ bool C4MaterialMap::CrossMapMaterials() // Called after load
 			if (ppReactionMap[(cnt2+1)*(Num+1) + cnt+1])
 				printf("%s -> %s: %p\n", Map[cnt].Name, Map[cnt2].Name, ppReactionMap[(cnt2+1)*(Num+1) + cnt+1]->pFunc);
 #endif
+
 	// Get hardcoded system material indices
-	const C4TexMapEntry* earth_entry = ::TextureMap.GetEntry(::TextureMap.GetIndexMatTex(Game.C4S.Landscape.Material));
+	const C4TexMapEntry* earth_entry = ::TextureMap.GetEntry(::TextureMap.GetIndexMatTex(szEarthMaterial));
 	if(!earth_entry)
-		{ LogFatal(FormatString("Earth material \"%s\" not found!", Game.C4S.Landscape.Material).getData()); return false; }
+		{ LogFatal(FormatString("Earth material \"%s\" not found!", szEarthMaterial).getData()); return false; }
 
 	MVehic   = Get("Vehicle"); MCVehic = Mat2PixColDefault(MVehic);
 	MTunnel  = Get("Tunnel");
@@ -687,6 +685,7 @@ bool C4MaterialMap::CrossMapMaterials() // Called after load
 
 	if ((MVehic==MNone) || (MTunnel==MNone))
 		{ LogFatal(LoadResStr("IDS_PRC_NOSYSMATS")); return false; }
+
 	return true;
 }
 
@@ -804,11 +803,14 @@ bool mrfInsertCheck(int32_t &iX, int32_t &iY, C4Real &fXDir, C4Real &fYDir, int3
 
 	// Incindiary mats smoke on contact even before doing their slide
 	if (::MaterialMap.Map[iPxsMat].Incindiary)
-		if (!Random(25)) Smoke(iX, iY, 4+Random(3) );
+		if (!Random(25))
+		{
+			Smoke(iX, iY, 4 + Random(3));
+		}
 
 	// Move by mat path/slide
 	int32_t iSlideX = iX, iSlideY = iY;
-	if (::Landscape.FindMatSlide(iSlideX,iSlideY,Sign(GravAccel),::MaterialMap.Map[iPxsMat].Density,::MaterialMap.Map[iPxsMat].MaxSlide))
+	if (::Landscape.FindMatSlide(iSlideX,iSlideY,Sign(GravAccel),Min(::MaterialMap.Map[iPxsMat].Density, C4M_Solid),::MaterialMap.Map[iPxsMat].MaxSlide))
 	{
 		if (iPxsMat == iLsMat)
 			{ iX = iSlideX; iY = iSlideY; fXDir = 0; return false; }
@@ -916,16 +918,19 @@ bool C4MaterialMap::mrfCorrode(C4MaterialReaction *pReaction, int32_t &iX, int32
 	case meeMassMove: // MassMover-movement
 	{
 		// evaluate corrosion percentage
-		bool fDoCorrode;
+		bool fDoCorrode; int d100 = Random(100);
 		if (pReaction->fUserDefined)
-			fDoCorrode = (Random(100) < pReaction->iCorrosionRate);
+			fDoCorrode = (d100 < pReaction->iCorrosionRate);
 		else
-			fDoCorrode = (Random(100) < ::MaterialMap.Map[iPxsMat].Corrosive) && (Random(100) < ::MaterialMap.Map[iLsMat].Corrode);
+			fDoCorrode = (d100 < ::MaterialMap.Map[iPxsMat].Corrosive) && (d100 < ::MaterialMap.Map[iLsMat].Corrode);
 		if (fDoCorrode)
 		{
 			ClearBackPix(iLSPosX,iLSPosY);
 			//::Landscape.CheckInstabilityRange(iLSPosX,iLSPosY); - more correct, but makes acid too effective as well
-			if (!Random(5)) Smoke(iX,iY,3+Random(3));
+			if (!Random(5))
+			{
+				Smoke(iX, iY, 3 + Random(3));
+			}
 			if (!Random(20)) StartSoundEffectAt("Corrode", iX, iY);
 			return true;
 		}
@@ -940,21 +945,24 @@ bool C4MaterialMap::mrfCorrode(C4MaterialReaction *pReaction, int32_t &iX, int32
 				// either splash or slide prevented interaction
 				return false;
 		// evaluate corrosion percentage
-		bool fDoCorrode;
+		bool fDoCorrode; int d100 = Random(100);
 		if (pReaction->fUserDefined)
-			fDoCorrode = (Random(100) < pReaction->iCorrosionRate);
+			fDoCorrode = (d100 < pReaction->iCorrosionRate);
 		else
-			fDoCorrode = (Random(100) < ::MaterialMap.Map[iPxsMat].Corrosive) && (Random(100) < ::MaterialMap.Map[iLsMat].Corrode);
+			fDoCorrode = (d100 < ::MaterialMap.Map[iPxsMat].Corrosive) && (d100 < ::MaterialMap.Map[iLsMat].Corrode);
 		if (fDoCorrode)
 		{
 			ClearBackPix(iLSPosX,iLSPosY);
 			::Landscape.CheckInstabilityRange(iLSPosX,iLSPosY);
-			if (!Random(5)) Smoke(iX,iY,3+Random(3));
+			if (!Random(5))
+			{
+				Smoke(iX,iY,3+Random(3));
+			}
 			if (!Random(20)) StartSoundEffectAt("Corrode", iX, iY);
 			return true;
 		}
 		// Else: dead. Insert material here
-		::Landscape.InsertMaterial(iPxsMat,iX,iY);
+		::Landscape.InsertMaterial(iPxsMat,&iX,&iY);
 		return true;
 	}
 	}
@@ -981,7 +989,7 @@ bool C4MaterialMap::mrfIncinerate(C4MaterialReaction *pReaction, int32_t &iX, in
 		// evaluate inflammation (should always succeed)
 		if (::Landscape.Incinerate(iX, iY)) return true;
 		// Else: dead. Insert material here
-		::Landscape.InsertMaterial(iPxsMat,iX,iY);
+		::Landscape.InsertMaterial(iPxsMat,&iX,&iY);
 		return true;
 	}
 	// not handled
@@ -1004,7 +1012,7 @@ bool C4MaterialMap::mrfInsert(C4MaterialReaction *pReaction, int32_t &iX, int32_
 				// continue existing
 				return false;
 		// Else: dead. Insert material here
-		::Landscape.InsertMaterial(iPxsMat,iX,iY);
+		::Landscape.InsertMaterial(iPxsMat,&iX,&iY);
 		return true;
 	}
 

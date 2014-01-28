@@ -33,8 +33,11 @@ protected func Construction()
 	inventory = [];
 	progress_bar_links = [];
 	
+	// ensure object is not close to the bottom right border, so subobjects won't be created outside the landscape
+	SetPosition(0,0);
+	
 	// find all clonks of this crew which do not have a selector yet (and can have one)
-	for(var i=GetCrewCount(GetOwner())-1; i >= 0; --i)
+	for(var i=0; i < GetCrewCount(GetOwner()); ++i)
 	{
 		var crew = GetCrew(GetOwner(),i);
 		if(!(crew->HUDAdapter())) continue;
@@ -146,8 +149,11 @@ public func OnGoalUpdate(object goal)
 	}
 	else
 	{
-		if (!HUDgoal) HUDgoal = CreateObject(GUI_Goal, 0, 0, GetOwner());
-		HUDgoal->SetPosition(-64-16-GUI_Goal->GetDefHeight()/2,8+GUI_Goal->GetDefHeight()/2);
+		if (!HUDgoal)
+		{
+			HUDgoal = CreateObject(GUI_Goal, 0, 0, GetOwner());
+			HUDgoal->SetPosition(-64-16-GUI_Goal->GetDefHeight()/2,8+GUI_Goal->GetDefHeight()/2);
+		}
 		HUDgoal->SetGoal(goal);
 	}
 }
@@ -220,12 +226,12 @@ func UpdateInventory()
 	}
 	
 	// update hand-indicator
-	if(c->IsCarryingHeavy())
+	if(c->~IsCarryingHeavy())
 	{
 		carryheavy->SetSelected(-1);
 	}
 	else
-		for(var i=0; i < c->HandObjects(); ++i)
+		for(var i=0; i < c->~HandObjects(); ++i)
 		{
 			var handpos = c->GetHandItemPos(i);
 			if(inventory[handpos]) 
@@ -245,6 +251,7 @@ func SetProgressBarLinkForObject(object what, proplist e)
 // Removes it if it's nil
 func OnCarryHeavyChange(object obj)
 {
+	if (!carryheavy) return; // safety if called during construction/destruction process
 	carryheavy->SetSymbol(obj);
 
 	if(obj == nil)
@@ -279,7 +286,7 @@ public func ControlHotkey(int hotindex)
 /** Callbacks **/
 
 // insert new clonk into crew-selectors on recruitment
-protected func OnClonkRecruitment(object clonk, int plr)
+public func OnCrewRecruitment(object clonk, int plr)
 {
 	// not my business
 	if(plr != GetOwner()) return;
@@ -314,7 +321,7 @@ protected func OnClonkRecruitment(object clonk, int plr)
 	ScheduleUpdateInventory();
 }
 
-protected func OnClonkDeRecruitment(object clonk, int plr)
+public func OnCrewDeRecruitment(object clonk, int plr)
 {
 	// not my business
 	if(plr != GetOwner()) return;
@@ -323,7 +330,7 @@ protected func OnClonkDeRecruitment(object clonk, int plr)
 	OnCrewDisabled(clonk);
 }
 
-protected func OnClonkDeath(object clonk, int killer)
+public func OnCrewDeath(object clonk, int killer)
 {
 	if(clonk->GetController() != GetOwner()) return;
 	if(!(clonk->~HUDAdapter())) return;
@@ -331,6 +338,13 @@ protected func OnClonkDeath(object clonk, int killer)
 	OnCrewDisabled(clonk);
 }
 
+public func OnCrewDestruction(object clonk)
+{
+	if(clonk->GetController() != GetOwner()) return;
+	if(!(clonk->~HUDAdapter())) return;
+	
+	OnCrewDisabled(clonk);
+}
 
 
 // called from engine on player eliminated
@@ -362,7 +376,7 @@ public func OnCrewDisabled(object clonk)
 
 public func OnCrewEnabled(object clonk)
 {
-	CreateSelectorFor(clonk);
+	if (!clonk->GetSelector()) CreateSelectorFor(clonk);
 	ReorderCrewSelectors();
 }
 
@@ -640,10 +654,8 @@ private func CreateSelectorFor(object clonk)
 /** Rearranges the CrewSelectors in the correct order */
 private func ReorderCrewSelectors(object leaveout)
 {
-	// somehow new crew gets sorted at the beginning
-	// because we dont want that, the for loop starts from the end
 	var j = 0;
-	for(var i=GetCrewCount(GetOwner())-1; i >= 0; --i)
+	for(var i=0; i < GetCrewCount(GetOwner()); ++i)
 	{
 		var spacing = 12;
 		var crew = GetCrew(GetOwner(),i);
@@ -663,7 +675,7 @@ private func ReorderCrewSelectors(object leaveout)
 
 
 /* When loading a savegame, make sure the GUI still works */
-protected func UpdateTransferZone()
+func OnSynchronized()
 {
 	ScheduleCall(this, "Reset", 1);
 }

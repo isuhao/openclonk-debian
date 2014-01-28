@@ -35,11 +35,7 @@ global func RandomX(int start, int end)
 // Returns the sign of x.
 global func Sign(int x)
 {
-	if (x > 0)
-		return 1;
-	else if (x < 0)
-		return -1;
-	return 0;
+	return (x>0)-(x<0);
 }
 
 // Tangens.
@@ -141,6 +137,12 @@ global func RectangleEnsureWithin(proplist first, proplist second)
 	if (adjusted.y + adjusted.h > second.y + second.h) adjusted.h = second.h - (adjusted.y - second.y);
 
 	return adjusted;
+}
+
+// checks whether a point {x, y} is in a normalized rectangle {x, y, w, h}
+global func IsPointInRectangle(proplist point, proplist rectangle)
+{
+	return (point.x >= rectangle.x && point.x <= rectangle.x + rectangle.w) && (point.y >= rectangle.y && point.y <= rectangle.w + rectangle.h);
 }
 
 //Moves param 'a' towards param 'b' by 'max' amount per frame

@@ -1,21 +1,17 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2009-2011  Sven Eberhardt
- * Copyright (c) 2009  Nicolas Hake
- * Copyright (c) 2010  Benjamin Herr
- * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de
+ * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de/
+ * Copyright (c) 2009-2013, The OpenClonk Team and contributors
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 // Input to player control mapping
 
@@ -38,9 +34,7 @@
 
 #include <algorithm>
 
-#ifdef DEBUGREC
 #include "C4Record.h"
-#endif
 
 /* C4PlayerControlDef */
 
@@ -230,6 +224,7 @@ void C4PlayerControlAssignment::CompileFunc(StdCompiler *pComp)
 		{ "Hold",         CTM_Hold     },
 		{ "Release",      CTM_Release  },
 		{ "AlwaysUnhandled", CTM_AlwaysUnhandled  },
+		{ "ClearRecentKeys", CTM_ClearRecentKeys  },
 		{ NULL, 0 }
 	};
 	pComp->Value(mkNamingAdapt(mkBitfieldAdapt< int32_t>(iTriggerMode, TriggerModeNames), "TriggerMode", CTM_Default));
@@ -302,11 +297,6 @@ bool C4PlayerControlAssignment::ResolveRefs(C4PlayerControlAssignmentSet *pParen
 				is_key_reference = true;
 				szKeyName +=4;
 			}
-			else if (*szKeyName == '$')
-			{
-				// this is a scan code. re-resolve in case keyboard layout changed.
-				rKeyComboItem.Key = C4KeyCodeEx::GetKeyByScanCode(szKeyName);
-			}
 		}
 		if (is_key_reference)
 		{
@@ -344,8 +334,10 @@ bool C4PlayerControlAssignment::ResolveRefs(C4PlayerControlAssignmentSet *pParen
 		else
 		{
 			// non-reference: check if the assignment was valid
+#ifndef USE_CONSOLE
 			if (rKeyComboItem.Key == KEY_Default)
-				LogF("WARNING: Control %s of set %s contains undefined key \"%s.\"", GetControlName(), pParentSet->GetName(), szKeyName);
+				LogF("WARNING: Control %s of set %s contains undefined key \"%s\".", GetControlName(), pParentSet->GetName(), szKeyName);
+#endif
 			// ...and just keep this item.
 			NewCombo.push_back(rKeyComboItem);
 		}
@@ -365,7 +357,7 @@ bool C4PlayerControlAssignment::IsComboMatched(const C4PlayerControlRecentKeyLis
 	// check if combo is currently fulfilled (assuming TriggerKey is already matched)
 	if (fComboIsSequence)
 	{
-		DWORD tKeyLast = GetTime();
+		C4TimeMilliseconds tKeyLast = C4TimeMilliseconds::Now();
 		// combo is a sequence: The last keys of RecentKeys must match the sequence
 		// the last ComboKey is the TriggerKey, which is omitted because it has already been matched and is not to be found in RecentKeys yet
 		KeyComboVec::const_reverse_iterator i = KeyCombo.rbegin()+1;
@@ -375,7 +367,7 @@ bool C4PlayerControlAssignment::IsComboMatched(const C4PlayerControlRecentKeyLis
 			if (ri == RecentKeys.rend()) return false;
 			const C4PlayerControlRecentKey &rk = *ri;
 			// user waited for too long?
-			DWORD tKeyRecent = rk.tTime;
+			C4TimeMilliseconds tKeyRecent = rk.tTime;
 			if (tKeyLast - tKeyRecent > C4PlayerControl::MaxSequenceKeyDelay) return false;
 			// key doesn't match?
 			const KeyComboItem &k = *i;
@@ -986,7 +978,7 @@ void C4PlayerControl::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(Sync, "PlayerControl", DefaultSync));
 }
 
-bool C4PlayerControl::ProcessKeyEvent(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key, bool fUp, const C4KeyEventData &rKeyExtraData, bool reset_down_states_only)
+bool C4PlayerControl::ProcessKeyEvent(const C4KeyCodeEx &pressed_key, const C4KeyCodeEx &matched_key, bool fUp, const C4KeyEventData &rKeyExtraData, bool reset_down_states_only, bool *clear_recent_keys)
 {
 	// collect all matching keys
 	C4PlayerControlAssignmentPVec Matches;
@@ -1002,6 +994,8 @@ bool C4PlayerControl::ProcessKeyEvent(const C4KeyCodeEx &pressed_key, const C4Ke
 		const C4PlayerControlDef *pControlDef = ControlDefs.GetControlByIndex(iControlIndex);
 		if (pControlDef && pControlDef->IsValid() && !Sync.IsControlDisabled(iControlIndex) && (!fUp || pControlDef->IsHoldKey()))
 		{
+			// clear RecentKeys if requested by this assignment. Must be done before sync queue, so multiple combos can be issued in a single control frame.
+			if (clear_recent_keys && (pAssignment->GetTriggerMode() & C4PlayerControlAssignment::CTM_ClearRecentKeys)) *clear_recent_keys = true;
 			// extra data from key or overwrite by current cursor pos if definition requires it
 			if (pControlDef->IsAsync() && !pControlPacket)
 			{
@@ -1039,15 +1033,19 @@ bool C4PlayerControl::ProcessKeyDown(const C4KeyCodeEx &pressed_key, const C4Key
 {
 	// add key to local "down" list if it's not already in there
 	// except for some mouse events for which a down state does not make sense
-	C4PlayerControlRecentKey RKey(pressed_key,matched_key,GetTime());
+	C4PlayerControlRecentKey RKey(pressed_key,matched_key,C4TimeMilliseconds::Now());
 	if (!Key_IsMouse(pressed_key.Key) || Inside<uint8_t>(Key_GetMouseEvent(pressed_key.Key), KEY_MOUSE_Button1, KEY_MOUSE_ButtonMax))
 	{
 		if (std::find(DownKeys.begin(), DownKeys.end(), pressed_key) == DownKeys.end()) DownKeys.push_back(RKey);
 	}
 	// process!
-	bool fResult = ProcessKeyEvent(pressed_key, matched_key, false, Game.KeyboardInput.GetLastKeyExtraData());
-	// add to recent list unless repeated
-	if (!pressed_key.IsRepeated()) RecentKeys.push_back(RKey);
+	bool clear_recent_keys = false;
+	bool fResult = ProcessKeyEvent(pressed_key, matched_key, false, Game.KeyboardInput.GetLastKeyExtraData(), false, &clear_recent_keys);
+	// unless assignment requests a clear, always add keys to recent list even if not handled
+	if (clear_recent_keys)
+		RecentKeys.clear();
+	else if (!pressed_key.IsRepeated()) // events caused by holding down the key are not added to recent list (so you cannot cause "double-Q" just by holding down Q)
+		RecentKeys.push_back(RKey);
 	return fResult;
 }
 
@@ -1075,12 +1073,13 @@ void C4PlayerControl::ExecuteControlPacket(const class C4ControlPlayerControl *p
 		const C4PlayerControlDef *pCtrlDef = ControlDefs.GetControlByIndex(rItem.iControl);
 		if (pCtrlDef)
 		{
-#ifdef DEBUGREC
-			if (pCtrlDef->IsSync())
+			if (Config.General.DebugRec)
 			{
-				AddDbgRec(RCT_PlrCom, &rItem.iControl, sizeof(rItem.iControl));
+				if (pCtrlDef->IsSync())
+				{
+					AddDbgRec(RCT_PlrCom, &rItem.iControl, sizeof(rItem.iControl));
+				}
 			}
-#endif
 			if (ExecuteControl(rItem.iControl, pCtrl->IsReleaseControl(), pCtrl->GetExtraData(), rItem.iTriggerMode, false, fHandleDownStateOnly))
 				if (pCtrlDef->IsSync())
 				{
@@ -1284,8 +1283,8 @@ void C4PlayerControl::Execute()
 		}
 	}
 	// cleanup old recent keys
+	C4TimeMilliseconds tNow = C4TimeMilliseconds::Now();
 	C4PlayerControlRecentKeyList::iterator irk;
-	DWORD tNow = GetTime();
 	for (irk = RecentKeys.begin(); irk != RecentKeys.end(); ++irk)
 	{
 		C4PlayerControlRecentKey &rk = *irk;

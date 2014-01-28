@@ -16,6 +16,8 @@ Fly = {
 }
 };
 
+func IsEnvironment() { return true; } // shouldn't be affected by wind, etc.
+
 public func Initialize()
 {
 	this.Plane=1545;
@@ -119,3 +121,6 @@ func FxFadeOutTimer(target, effect, time)
 	//SetClrModulation(color|RGBa(0,0,0,fade));
 	SetObjAlpha(fade);
 }
+
+// UI not saved.
+func SaveScenarioObject() { return false; }

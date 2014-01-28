@@ -1,10 +1,12 @@
 /*-- Mushroom --*/
 
 #include Library_Plant
+#include Library_Crop
 
 private func SeedChance() { return 400; }
 private func SeedArea() { return 150; }
 private func SeedAmount() { return 6; }
+private func SeedOffset() { return 10; }
 
 /* Initialisation */
 
@@ -51,5 +53,7 @@ protected func ControlUse(object clonk, int iX, int iY)
 public func NutritionalValue() { return 5; }
 
 local Name = "$Name$";
+local Description = "$Description$";
+local UsageHelp = "$UsageHelp$";
 local Collectible = 0;
 local Placement = 4;
