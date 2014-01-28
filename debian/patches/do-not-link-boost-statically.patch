@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5f6a97c..38fa72c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1400,7 +1400,7 @@ if(HAVE_UPNP)
+ endif()
+ 
+ if(USE_BOOST_REGEX)
+-	SET(Boost_USE_STATIC_LIBS ON)
++	SET(Boost_USE_STATIC_LIBS OFF)
+ 	find_package(Boost 1.40.0 REQUIRED COMPONENTS regex)
+ 	# Disable automatic linking, we'll do it ourselves
+ 	add_definitions(-DBOOST_REGEX_NO_LIB)
