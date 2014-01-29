@@ -16,7 +16,7 @@ Description: multiplayer game of strategy, action and skill
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
  game but also a versatile 2D game engine that offers countless
- possibilites to make own mods.
+ possibilities to make own mods.
  .
  This package contains the OpenClonk engine.
 
@@ -29,7 +29,7 @@ Description: multiplayer game of strategy, action and skill - data
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
  game but also a versatile 2D game engine that offers countless
- possibilites to make own mods.
+ possibilities to make own mods.
  .
  This package contains the game data.
 
@@ -43,6 +43,6 @@ Description: multiplayer game of strategy, action and skill - debug symbols
  small but witty and nimble humanoid beings. The game is mainly about
  mining, settling and fast-paced melees. OpenClonk is also not just a
  game but also a versatile 2D game engine that offers countless
- possibilites to make own mods.
+ possibilities to make own mods.
  .
  This package contains the debugging symbols. It is usually not needed.
