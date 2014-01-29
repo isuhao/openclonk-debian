@@ -1,4 +1,3 @@
 ?package(openclonk):needs="X11" section="Games/Action"\
   title="OpenClonk" command="/usr/games/openclonk" \
-  longtitle="OpenClonk - a fast-paced game of strategy, action and skill" \
-  icon="c4x.xpm"
+  longtitle="OpenClonk - a fast-paced game of strategy, action and skill"
