@@ -1,3 +1,21 @@
+openclonk (5.4.0-1) unstable; urgency=medium
+
+  * Imported Upstream version 5.4.0
+  * Rework debian/copyright based on the new upstream release.
+  * Dropped change-data-directory.patch: merged upstream.
+  * Dropped move-clonk-to-usr-games.patch: merged upstream.
+  * Dropped Pre-compute-Z-values-before-face-ordering-984.patch: included in
+    the new release.
+  * Dropped xrandr-primary-output.patch: solved differently upstream.
+  * Add new build-dependencies: upnp, freetype, boost-regex.
+  * Fix Freetype include path lookup made by CMake.
+  * Do not link boost-regex statically.
+  * Remove clonk to openclonk renaming.
+  * Get rid of the X11 pixmap for the menu entry (dropped upstream).
+  * Fix a typo in the package description.
+
+ -- Philipp Kern <pkern@debian.org>  Fri, 31 Jan 2014 22:15:04 +0100
+
 openclonk (5.3.3-3) unstable; urgency=high
 
   * Add a patch to pre-compute Z values before face ordering. (Closes: #693750)
