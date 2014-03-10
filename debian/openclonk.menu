@@ -1,3 +1,6 @@
-?package(openclonk):needs="X11" section="Games/Action"\
-  title="OpenClonk" command="/usr/games/openclonk" \
-  longtitle="OpenClonk - a fast-paced game of strategy, action and skill"
+?package(openclonk):needs="X11" \
+  section="Games/Action" \
+  title="OpenClonk" \
+  command="/usr/games/openclonk" \
+  longtitle="OpenClonk - a fast-paced game of strategy, action and skill" \
+  icon="/usr/share/pixmaps/oc32.xpm"

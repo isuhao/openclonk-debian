@@ -14,3 +14,6 @@ override_dh_strip:
 
 override_dh_builddeb:
 	dh_builddeb -- -Zxz
+
+override_dh_auto_build-indep:
+	convert -monitor src/res/oc32.png oc32.xpm
