@@ -99,6 +99,12 @@ set(CMAKE_REQUIRED_FLAGS "${SAFE_CMAKE_REQUIRED_FLAGS}")
 CHECK_CXX_SOURCE_COMPILES("#include <regex>\nint main() { std::cregex_iterator ri; }" HAVE_WORKING_REGEX)
 CMAKE_DEPENDENT_OPTION(USE_BOOST_REGEX "Use Boost.Regex even if the C++ runtime has a working implementation of <regex>" OFF "HAVE_WORKING_REGEX" ON)
 
+# We link Boost statically because that makes it easier for us to distribute
+# the resulting binary. Distributions have the ability to guarantee a certain
+# version of the library exists on the system though, so they may prefer
+# dynamic linking.
+option(USE_STATIC_BOOST "Link Boost libraries statically" ON)
+
 if(MSVC_VERSION GREATER 1499)
 		list(APPEND OC_CXX_FLAGS /MP)
 		list(REMOVE_ITEM OC_CXX_FLAGS_DEBUG /Gm)
@@ -843,8 +849,13 @@ if(NOT WIN32)
 endif()
 
 if(NOT USE_CONSOLE)
-	find_package(Freetype REQUIRED)
-	include_directories(${FREETYPE_INCLUDE_DIRS})
+	if(APPLE)
+		include(LegacyFindFreetype)
+		include_directories(${FREETYPE_INCLUDE_DIRS})
+	else()
+		find_package(Freetype REQUIRED)
+		include_directories(${FREETYPE_INCLUDE_DIRS})
+	endif()
 endif()
 
 # FINDLIB works the same as find_library, but also marks the resulting var as
@@ -925,11 +936,6 @@ if(APPLE)
 		src/res/Clonk.icns
 		src/res/ocd.icns src/res/ocf.icns src/res/ocg.icns
 		src/res/C4P.icns src/res/ocs.icns src/res/ocu.icns
-		src/res/MainMenu.xib
-		src/res/FullScreen.xib
-		src/res/EditorGUIWindow.xib
-		src/res/EditorViewport.xib
-		src/res/Editor.xib
 		src/res/Mouse_Trans.png
 		src/res/Cursor_Trans.png
 		src/res/Brush_Trans.png
@@ -945,6 +951,24 @@ if(APPLE)
 		src/res/Ift_Trans.png
 		src/res/NoIft_Trans.png
 	)
+	
+	if (CMAKE_GENERATOR STREQUAL Xcode)
+		list(APPEND OC_BUNDLE_RESOURCES
+			src/res/MainMenu.xib
+			src/res/FullScreen.xib
+			src/res/EditorGUIWindow.xib
+			src/res/EditorViewport.xib
+			src/res/Editor.xib
+		)
+	else()
+		list(APPEND OC_BUNDLE_RESOURCES
+			src/res/nib/MainMenu.nib
+			src/res/nib/FullScreen.nib
+			src/res/nib/EditorGUIWindow.nib
+			src/res/nib/EditorViewport.nib
+			src/res/nib/Editor.nib
+		)
+	endif()
 
 	# Add icon resources
 	set_source_files_properties(
@@ -1241,35 +1265,36 @@ endif()
 ############################################################################
 
 if (APPLE)
-	add_custom_command(TARGET openclonk
-		POST_BUILD COMMAND "/usr/bin/ruby" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_bundle_libs"
-	)
 	
-	set(CMAKE_XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
-	set(CMAKE_XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
-	
-	SET_TARGET_PROPERTIES(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
-	SET_TARGET_PROPERTIES(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
-	SET_TARGET_PROPERTIES(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
-	SET_TARGET_PROPERTIES(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
-	SET_TARGET_PROPERTIES(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
-	SET_TARGET_PROPERTIES(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
-	SET_TARGET_PROPERTIES(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
-	SET_TARGET_PROPERTIES(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
-	SET_TARGET_PROPERTIES(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
-	SET_TARGET_PROPERTIES(openclonk PROPERTIES XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES)
-	
-	if (USE_APPLE_CLANG)
+	# for good measure - seems to be part of default OSX installation
+	# linking with static freetype library requires it
+	target_link_libraries(openclonk "/usr/lib/libbz2.dylib")
+
+	set(HAVE_RVALUE_REF ON)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++0x -g -Wall -fobjc-arc")
+
+	if(CMAKE_GENERATOR STREQUAL Xcode)
+		add_custom_command(TARGET openclonk
+			POST_BUILD COMMAND "/usr/bin/ruby" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_bundle_libs"
+		)
+		set(CMAKE_XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
+		set(CMAKE_XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
+		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
+		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
+		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
+		set_target_properties(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
+		set_target_properties(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
+		set_target_properties(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
+		set_target_properties(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
+		set_target_properties(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++ objective-c++")
+		set_target_properties(libmisc PROPERTIES XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
+		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES)
+		
 		set(CMAKE_XCODE_ATTRIBUTE_GCC_VERSION "com.apple.compilers.llvm.clang.1_0")
 		set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++0x")
 		set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
-		set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++0x -stdlib=libc++ -g -Wall")
-		SET_TARGET_PROPERTIES(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
-		SET_TARGET_PROPERTIES(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
-				
-		set(HAVE_RVALUE_REF ON)
-	else()
-		set(CMAKE_XCODE_ATTRIBUTE_GCC_VERSION "com.apple.compilers.llvmgcc42")
+		set_target_properties(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
+		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
 	endif()
 endif()
 
@@ -1400,7 +1425,7 @@ if(HAVE_UPNP)
 endif()
 
 if(USE_BOOST_REGEX)
-	SET(Boost_USE_STATIC_LIBS ON)
+	SET(Boost_USE_STATIC_LIBS ${USE_STATIC_BOOST})
 	find_package(Boost 1.40.0 REQUIRED COMPONENTS regex)
 	# Disable automatic linking, we'll do it ourselves
 	add_definitions(-DBOOST_REGEX_NO_LIB)
@@ -1439,38 +1464,44 @@ install(
 	)"
 )
 
-add_custom_target(icon32 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc32.png)
-add_custom_target(icon64 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc64.png)
-add_custom_target(icon128 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc128.png)
-add_custom_target(icon256 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc256.png)
-add_custom_target(icon512 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc512.png)
-add_dependencies(data icon32 icon64 icon128 icon256 icon512)
-install(
-	FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc32.png
-	DESTINATION share/icons/hicolor/32x32/apps
-	RENAME openclonk.png
-)
-install(
-	FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc64.png
-	DESTINATION share/icons/hicolor/64x64/apps
-	RENAME openclonk.png
-)
-install(
-	FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc128.png
-	DESTINATION share/icons/hicolor/128x128/apps
-	RENAME openclonk.png
-)
-install(
-	FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc256.png
-	DESTINATION share/icons/hicolor/256x256/apps
-	RENAME openclonk.png
-)
-install(
-	FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc512.png
-	DESTINATION share/icons/hicolor/512x512/apps
-	RENAME openclonk.png
-)
+if (NOT APPLE)
+	add_custom_target(icon32 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc32.png)
+	add_custom_target(icon64 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc64.png)
+	add_custom_target(icon128 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc128.png)
+	add_custom_target(icon256 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc256.png)
+	add_custom_target(icon512 DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc512.png)
+	add_dependencies(data icon32 icon64 icon128 icon256 icon512)
+	install(
+		FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc32.png
+		DESTINATION share/icons/hicolor/32x32/apps
+		RENAME openclonk.png
+	)
+	install(
+		FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc64.png
+		DESTINATION share/icons/hicolor/64x64/apps
+		RENAME openclonk.png
+	)
+	install(
+		FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc128.png
+		DESTINATION share/icons/hicolor/128x128/apps
+		RENAME openclonk.png
+	)
+	install(
+		FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc256.png
+		DESTINATION share/icons/hicolor/256x256/apps
+		RENAME openclonk.png
+	)
+	install(
+		FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/res/oc512.png
+		DESTINATION share/icons/hicolor/512x512/apps
+		RENAME openclonk.png
+	)
+endif()
 
+# NOTE: The scripts that does the autobuilds and ultimately the automated
+# releases as well do keep their own list of group files around currently.
+# So if you change anything here, change it in the release scripts as well.
+# See openclonk-release-scripts.git/groupcontent.py
 set(OC_C4GROUPS
 	Graphics.ocg
 	Material.ocg
@@ -1489,12 +1520,23 @@ get_target_property(C4GROUP_LOCATION c4group LOCATION)
 get_target_property(CLONK_LOCATION openclonk LOCATION)
 foreach(group ${OC_C4GROUPS})
 	if (APPLE)
-		add_custom_command(TARGET openclonk
-			POST_BUILD COMMAND "/bin/sh" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
-			"${C4GROUP_LOCATION}"
-			"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}"
-			DEPENDS c4group
+		if (CMAKE_GENERATOR STREQUAL Xcode)
+			add_custom_command(TARGET openclonk
+				POST_BUILD COMMAND "/bin/sh" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
+				"${C4GROUP_LOCATION}"
+				"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}"
+				# leave out third parameter here so the script can figure out Xcode-ish paths as usual
+				DEPENDS c4group
 			)
+		else()
+			add_custom_command(TARGET openclonk
+				POST_BUILD COMMAND "/bin/sh" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
+				"${C4GROUP_LOCATION}"
+				"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}"
+				"${CMAKE_CURRENT_BINARY_DIR}/openclonk.app/Contents/Resources"
+				DEPENDS c4group
+			)
+		endif()
 	else()
 		add_custom_command(
 			OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${group}
@@ -1502,21 +1544,29 @@ foreach(group ${OC_C4GROUPS})
 			MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}
 			DEPENDS c4group
 			VERBATIM
-			)
+		)
 		install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${group} DESTINATION share/games/openclonk)
 	endif()
 endforeach()
+
 if (NOT APPLE)
 	add_custom_target(groups DEPENDS ${OC_C4GROUPS})
 	add_dependencies(data groups)
+	
+	# Install new files
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/openclonk.desktop DESTINATION share/applications)
+
+	# Install binaries
+	install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/openclonk DESTINATION games/)
+	install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/c4group DESTINATION bin/)
+else()
+	install(TARGETS openclonk
+		BUNDLE DESTINATION .
+	)
+	install(TARGETS c4group c4script
+		RUNTIME DESTINATION .
+	)
 endif()
-
-# Install new files
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/openclonk.desktop DESTINATION share/applications)
-
-# Install binaries
-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/openclonk DESTINATION games/)
-install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/c4group DESTINATION bin/)
 
 ############################################################################
 # setup_openclonk.exe
