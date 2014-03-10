@@ -1,2 +1,1 @@
-find-freetype-without-prefix.patch
 do-not-link-boost-statically.patch
