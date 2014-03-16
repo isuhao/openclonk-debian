@@ -1,3 +1,18 @@
+openclonk (5.4.1-1) unstable; urgency=medium
+
+  * Imported Upstream version 5.4.1 (bugfix release). (Closes: #733936)
+    - Drop find-freetype-without-prefix.patch; applied upstream.
+    - Drop do-not-link-boost-statically.patch; now configurable upstream.
+  * Re-add menu support, thanks to Markus Koschany. (Closes: #737992)
+  * Install icons into the data package.
+  * Fix two spelling mistakes in the openclonk manpage.
+  * Install the upstream-provided desktop file.
+  * Do not build-depend on a specific version of boost-regex.
+  * Do not build-depend on a specific version of libupnp.
+  * debian/watch: update source code URL
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 16 Mar 2014 17:42:45 +0100
+
 openclonk (5.4.0-1) unstable; urgency=medium
 
   * Imported Upstream version 5.4.0
