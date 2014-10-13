@@ -91,7 +91,8 @@ public func IsFulfilled()
 		if(GetKillCount(GetPlayerByIndex(i)) >= maxkills)
 			winner = GetPlayerByIndex(i);
 	if (winner == nil)
-		return false;
+		// Otherwise just check if there are no enemies
+		return Goal_Melee->IsFulfilled();
 	// Eliminate all players, that are not in a team with one of the winners
 	for (var i = 0; i < GetPlayerCount(); i++)  
 	{
@@ -103,6 +104,27 @@ public func IsFulfilled()
 		EliminatePlayer(plr);
 	}
 	return true;
+}
+
+public func GetDescription(int plr)
+{
+	if(IsFulfilled()) 
+	{
+		if (GetKillCount(plr) >= maxkills) 
+			return "$MsgVictory$";
+	} 
+	else 
+	{
+		var score = GetRelativeScore(plr);
+		if (score.kills > 0)
+			return Format("$MsgAhead$",  score.kills,  GetPlayerName(score.best));
+		else if (score.kills < 0)
+			return Format("$MsgBehind$", -score.kills, GetPlayerName(score.best));
+		else if (score.best == plr) 
+			return Format("$MsgYouAreBest$", score.kills);
+		else 
+			return Format("$MsgEqual$", GetPlayerName(score.best));
+	}
 }
 
 public func Activate(int byplr)

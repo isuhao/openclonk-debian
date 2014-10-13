@@ -18,7 +18,7 @@ protected func Initialize()
 	expansion_goal = 0;
 	// Start running the monte carlo simulation.
 	mc_data = [];
-	AddEffect("IntAreaMonteCarlo", this, 100, 1, this);
+	var effect = AddEffect("IntAreaMonteCarlo", this, 100, 1, this);
 	return inherited(...);
 }
 
@@ -45,7 +45,7 @@ public func SaveScenarioObject(props)
 
 /*-- Goal interface --*/
 
-// The goal is fulfilled if the expansio goal is covered by flags.
+// The goal is fulfilled if the expansion goal is covered by flags.
 public func IsFulfilled()
 {
 	// Check if goal is fulfilled.
@@ -73,15 +73,23 @@ private func GetExpansionArea()
 	return area / cnt;
 }
 
+private func FxIntAreaMonteCarloStart(object target, proplist effect, int temporary)
+{
+	if (temporary)
+		return 1;
+	// Control the amount of storing.
+	effect.store_index = 0;
+	effect.store_amount = 2000;
+}
+
 // Monte Carlo simulation to determine the area covered by flagpoles.
 // There is thin balance between the accuracy of the simulation, the 
 // number of simulations per frame and the refresh rate of the data,
 // or equivalently how long past data is stored. 
-private func FxIntAreaMonteCarloTimer()
+private func FxIntAreaMonteCarloTimer(object target, proplist effect, int time)
 {
 	// Perform simulations and store them.
-	var cnt = 40; // Perform 40 simulations per frame.
-	var store = 500; // Store last 500 events.
+	var cnt = 10; // Perform 10 simulations per frame.
 	var rate = 0;
 	for (var i = 0; i < cnt; i++)
 	{
@@ -91,13 +99,12 @@ private func FxIntAreaMonteCarloTimer()
 			rate++;	
 	}
 	var promille = 1000 * rate / cnt;
-	// Add new montecarlo data to the end the data list and remove old entry.
-	for (var i = 0; i < store - 1; i++)
-	{
-		mc_data[i] = mc_data[i+1];	
-	}
-	mc_data[store - 1] = promille;
-	return;
+	// Add new montecarlo data to the data list and remove old entry.
+	mc_data[effect.store_index] = promille;
+	effect.store_index++;
+	if (effect.store_index >= effect.store_amount)
+		effect.store_index = 0;
+	return 1;
 }
 
 // Returns whether the point (x,y) is covered by a flagpole.
@@ -107,6 +114,17 @@ private func CoveredByFlag(int x, int y)
 		if (Distance(flag->GetX(), flag->GetY(), x, y) < flag->GetFlagRadius())
 			return true;
 	return false;
+}
+
+// Return the description of this goal.
+public func GetDescription(int plr)
+{
+	var message;
+	if (GetExpansionArea() >= GetExpansionGoal() || GetExpansionGoal() == 0)
+		message = Format("$MsgGoalFulfilled$");	
+	else
+		message = Format("$MsgGoalUnFulfilled$", 100 * GetExpansionArea() / GetExpansionGoal());
+	return message;
 }
 
 // Shows or hides a message window with information.
@@ -122,7 +140,7 @@ public func Activate(int plr)
 	// Otherwise open a new message.
 	AddEffect("GoalMessage", this, 100, 0, this);
 	var message;
-	if (GetExpansionArea() >= GetExpansionGoal())
+	if (GetExpansionArea() >= GetExpansionGoal() || GetExpansionGoal() == 0)
 		message = Format("@$MsgGoalFulfilled$");	
 	else
 		message = Format("@$MsgGoalUnFulfilled$", 100 * GetExpansionArea() / GetExpansionGoal());
@@ -136,7 +154,9 @@ protected func FxGoalMessageStart() {}
 public func GetShortDescription(int plr)
 {
 	// Show expansion percentage.
-	var perc = Min(100, 100 * GetExpansionArea() / GetExpansionGoal());
+	var perc = 0;
+	if (GetExpansionGoal())
+		perc = Min(100, 100 * GetExpansionArea() / GetExpansionGoal());
 	var clr = RGB(255, 0, 0);
 	if (perc >= 100)
 		clr = RGB(0, 255, 0);

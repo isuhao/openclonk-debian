@@ -38,6 +38,7 @@ don't need to include this file or any of the files it includes. */
 #define DEBUGREC_MATSCAN
 #define DEBUGREC_MENU
 #define DEBUGREC_OCF
+//#define DEBUGREC_RECRUITMENT
 
 // solidmask debugging
 //#define SOLIDMASK_DEBUG
@@ -65,6 +66,14 @@ don't need to include this file or any of the files it includes. */
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifdef USE_BOOST_REGEX
+#	include <boost/regex.hpp>
+	namespace re = boost;
+#else
+#	include <regex>
+	namespace re = std;
+#endif
 
 // debug memory management - must come after standard and boost headers,
 // because those libraries use placement new

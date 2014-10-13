@@ -105,7 +105,7 @@ namespace C4GUI
 		}
 	}
 
-	bool Label::OnHotkey(char cHotkey)
+	bool Label::OnHotkey(uint32_t cHotkey)
 	{
 		// if hotkey matches and focus control is assigned, set focus
 		if (this->cHotkey == cHotkey && pClickFocusControl)
@@ -519,7 +519,7 @@ namespace C4GUI
 		// resize log buffer pos to horizontal extents
 		C4Rect rcChildBounds = pLogBuffer->GetBounds();
 		rcChildBounds.x = 0;
-		rcChildBounds.y = pTitlePicture ? pTitlePicture->GetBounds().Hgt + iPicPadding : 0;
+		rcChildBounds.y = (pTitlePicture && pTitlePicture->IsVisible()) ? pTitlePicture->GetBounds().Hgt + iPicPadding : 0;
 		rcChildBounds.Wdt = pClientWindow->GetClientRect().Wdt;
 		pLogBuffer->SetBounds(rcChildBounds);
 	}

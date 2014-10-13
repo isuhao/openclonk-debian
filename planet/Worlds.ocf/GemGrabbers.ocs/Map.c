@@ -1,31 +1,29 @@
 /**
 	Gem Grabbers
-	Dynamic map with sky islands and hard to reach gems. There is a main island, with at the bottom hanging gems 
-	and some smaller islands which also have gems hanging from the bottom.
+	Dynamic map with sky islands and hard to reach gems. There is a main island, with at the bottom gem stalactites
+	and some smaller islands which also have gem stalactites hanging from the bottom. Each of the smaller islands
+	have different materials.
 	
-	@authors Maikel
+	@author Maikel
 */
 
 #include Library_Map
 
-
-// Scenario properties which can be set later by the lobby options.
-static const SCENOPT_MapSize = 1;
 
 // Called be the engine: draw the complete map here.
 protected func InitializeMap(proplist map)
 {
 	// Retrieve the settings according to the MapSize setting.
 	var map_size, main_size, nr_islands;
-	if (SCENOPT_MapSize == 1)
+	if (SCENPAR_MapSize == 1)
 	{
 		map_size = [240, 200]; main_size = 80; nr_islands = RandomX(6, 7);
 	}
-	if (SCENOPT_MapSize == 2)
+	if (SCENPAR_MapSize == 2)
 	{
 		map_size = [280, 220]; main_size = 90; nr_islands = RandomX(7, 8);
 	}
-	if (SCENOPT_MapSize == 3)
+	if (SCENPAR_MapSize == 3)
 	{
 		map_size = [320, 240]; main_size = 100; nr_islands = RandomX(8, 9);
 	}
@@ -67,7 +65,7 @@ public func DrawMainIsland(proplist map, int size)
 	island.Y = [y-size/6, y, y+size/3, y+size/6, y+size/6, y+size/3, y, y-size/6];
 	
 	// Draw the earth patch of the island.
-	island = {Algo = MAPALGO_Turbulence, Iterations = 4, Seed = Random(65536), Op = island};
+	island = {Algo = MAPALGO_Turbulence, Iterations = 4, Amplitude = [10, 6], Seed = Random(65536), Op = island};
 	Draw("Earth", island);
 		
 	// Overlay a set of materials inside the island.
@@ -81,13 +79,13 @@ public func DrawMainIsland(proplist map, int size)
 	DrawIslandMat("Coal", island, 6, 12);
 	
 	// Draw a top border out of sand and top soil.
-	var sand_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Op = island, Top = [-1,2]}, {Algo = MAPALGO_RndChecker, Ratio = 50, Wdt = 4, Hgt = 3}]};
- 	var topsoil_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Op = island, Top = [-1,3]}, {Algo = MAPALGO_RndChecker, Ratio = 40, Wdt = 4, Hgt = 2}]};
+	var sand_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Op = island, Top = [-1, 2]}, {Algo = MAPALGO_RndChecker, Ratio = 50, Wdt = 4, Hgt = 3}]};
+ 	var topsoil_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Op = island, Top = [-1, 3]}, {Algo = MAPALGO_RndChecker, Ratio = 40, Wdt = 4, Hgt = 2}]};
 	Draw("Sand", sand_border);
 	Draw("Earth-earth_topSoil", topsoil_border);	
 	
 	// Draw a bottom border out of granite and rock.
-	var granite_border = {Algo = MAPALGO_Border, Op = island, Bottom = [-4,3]};
+	var granite_border = {Algo = MAPALGO_Border, Op = island, Bottom = [-4, 3]};
 	Draw("Granite", granite_border);
 	var rock_border = {Algo = MAPALGO_RndChecker, Ratio = 20, Wdt = 2, Hgt = 2};
 	Draw("Rock", {Algo = MAPALGO_And, Op = [granite_border, rock_border]});
