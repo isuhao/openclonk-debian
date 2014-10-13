@@ -206,7 +206,7 @@ static bool FnCheckConstructionSite(C4PropList * _this, C4PropList * PropList, i
 {
 	// Make sure parameters are valid
 	if (!PropList || !PropList->GetDef())
-		return NULL;
+		return false;
 
 	// Local object calls override position offset, owner
 	if (Object(_this))
@@ -522,11 +522,19 @@ static long FnMusicLevel(C4PropList * _this, long iLevel)
 	return Application.MusicSystem.SetVolume(iLevel);
 }
 
-static long FnSetPlayList(C4PropList * _this, C4String *szPlayList)
+static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<long> iAtPlayer)
 {
+	// If a player number is provided, set play list for clients where given player is local only
+	if (!iAtPlayer.IsNil() && iAtPlayer != NO_OWNER)
+	{
+		C4Player *at_plr = ::Players.Get(iAtPlayer);
+		if (!at_plr) return 0;
+		if (!at_plr->LocalControl) return 0;
+	}
+	// Set playlist; count entries
 	long iFilesInPlayList = Application.MusicSystem.SetPlayList(FnStringPar(szPlayList));
 	Game.PlayList.Copy(FnStringPar(szPlayList));
-	// network/record/replay: return 0
+	// network/record/replay: return 0 for sync reasons
 	if (::Control.SyncMode()) return 0;
 	return iFilesInPlayList;
 }
@@ -685,7 +693,8 @@ static const int PLRZOOM_Direct     = 0x01,
                  PLRZOOM_NoIncrease = 0x04,
                  PLRZOOM_NoDecrease = 0x08,
                  PLRZOOM_LimitMin   = 0x10,
-                 PLRZOOM_LimitMax   = 0x20;
+                 PLRZOOM_LimitMax   = 0x20,
+                 PLRZOOM_Set        = 0x40;
 
 static bool FnSetPlayerZoomByViewRange(C4PropList * _this, long plr_idx, long range_wdt, long range_hgt, long flags)
 {
@@ -705,13 +714,64 @@ static bool FnSetPlayerZoomByViewRange(C4PropList * _this, long plr_idx, long ra
 		C4Player *plr = ::Players.Get(plr_idx);
 		if (!plr) return false;
 		// adjust values in player
-		if (!(flags & (PLRZOOM_LimitMin | PLRZOOM_LimitMax)))
-			plr->SetZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_Direct), !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
-		else
+		if (flags & PLRZOOM_LimitMin) plr->SetMinZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+		if (flags & PLRZOOM_LimitMax) plr->SetMaxZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+		// set values after setting min/max to ensure old limits don't block new value
+		if ((flags & PLRZOOM_Set) || !(flags & (PLRZOOM_LimitMin | PLRZOOM_LimitMax)))
 		{
-			if (flags & PLRZOOM_LimitMin) plr->SetMinZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
-			if (flags & PLRZOOM_LimitMax) plr->SetMaxZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+			plr->SetZoomByViewRange(range_wdt, range_hgt, !!(flags & PLRZOOM_Direct), !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
 		}
+
+	}
+	return true;
+}
+
+static C4PropList *FnGetPlayerZoomLimits(C4PropList * _this, long plr_idx)
+{
+	// get player
+	C4Player *plr = ::Players.Get(plr_idx);
+	if (!plr) return NULL;
+	// collect limits in a prop list
+	// if neither width not height is set for zoom limits, return engine defaults.
+	C4PropList *result = C4PropList::New();
+	if (!result) return NULL;
+	result->SetPropertyByS(::Strings.RegString("MaxWidth"), C4VInt((plr->ZoomLimitMaxWdt || plr->ZoomLimitMaxHgt) ? plr->ZoomLimitMaxWdt : C4VP_DefMaxViewRangeX));
+	result->SetPropertyByS(::Strings.RegString("MaxHeight"), C4VInt(plr->ZoomLimitMaxHgt));
+	result->SetPropertyByS(::Strings.RegString("MaxValue"), C4VInt(fixtoi(plr->ZoomLimitMaxVal, 100)));
+	result->SetPropertyByS(::Strings.RegString("MinWidth"), C4VInt((plr->ZoomLimitMinWdt || plr->ZoomLimitMinHgt) ? plr->ZoomLimitMinWdt : C4VP_DefMinViewRangeX));
+	result->SetPropertyByS(::Strings.RegString("MinHeight"), C4VInt(plr->ZoomLimitMinHgt));
+	result->SetPropertyByS(::Strings.RegString("MinValue"), C4VInt(fixtoi(plr->ZoomLimitMinVal, 100)));
+	return result;
+}
+
+static bool FnSetPlayerZoom(C4PropList * _this, long plr_idx, long zoom, long precision, long flags)
+{
+	// parameter safety. 0/0 means "reset to default".
+	if (zoom < 0 || precision < 0) return false;
+	// special player NO_OWNER: apply to all viewports
+	if (plr_idx == NO_OWNER)
+	{
+		for (C4Player *plr = ::Players.First; plr; plr=plr->Next)
+			if (plr->Number != NO_OWNER) // can't happen, but would be a crash if it did...
+				FnSetPlayerZoom(_this, plr->Number, zoom, precision, flags);
+		return true;
+	}
+	else
+	{
+		// zoom factor calculation
+		if (!precision) precision = 1;
+		C4Fixed fZoom = itofix(zoom, precision);
+		// safety check on player only, so function return result is always in sync
+		C4Player *plr = ::Players.Get(plr_idx);
+		if (!plr) return false;
+		// adjust values in player
+		if (flags & PLRZOOM_LimitMin) plr->SetMinZoom(fZoom, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+		if (flags & PLRZOOM_LimitMax) plr->SetMaxZoom(fZoom, !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+		if ((flags & PLRZOOM_Set) || !(flags & (PLRZOOM_LimitMin | PLRZOOM_LimitMax)))
+		{
+			plr->SetZoom(fZoom, !!(flags & PLRZOOM_Direct), !!(flags & PLRZOOM_NoIncrease), !!(flags & PLRZOOM_NoDecrease));
+		}
+
 	}
 	return true;
 }
@@ -732,26 +792,26 @@ static bool FnSetPlayerViewLock(C4PropList * _this, long plr_idx, bool is_locked
 	return true;
 }
 
-static bool FnDoHomebaseMaterial(C4PropList * _this, long iPlr, C4ID id, long iChange)
+static bool FnDoBaseMaterial(C4PropList * _this, long iPlr, C4ID id, long iChange)
 {
 	// validity check
 	if (!ValidPlr(iPlr)) return false;
 	C4Def *pDef = C4Id2Def(id);
 	if (!pDef) return false;
 	// add to material
-	long iLastcount = ::Players.Get(iPlr)->HomeBaseMaterial.GetIDCount(id);
-	return ::Players.Get(iPlr)->HomeBaseMaterial.SetIDCount(id,iLastcount+iChange,true);
+	long iLastcount = ::Players.Get(iPlr)->BaseMaterial.GetIDCount(id);
+	return ::Players.Get(iPlr)->BaseMaterial.SetIDCount(id,iLastcount+iChange,true);
 }
 
-static bool FnDoHomebaseProduction(C4PropList * _this, long iPlr, C4ID id, long iChange)
+static bool FnDoBaseProduction(C4PropList * _this, long iPlr, C4ID id, long iChange)
 {
 	// validity check
 	if (!ValidPlr(iPlr)) return false;
 	C4Def *pDef = C4Id2Def(id);
 	if (!pDef) return false;
 	// add to material
-	long iLastcount = ::Players.Get(iPlr)->HomeBaseProduction.GetIDCount(id);
-	return ::Players.Get(iPlr)->HomeBaseProduction.SetIDCount(id,iLastcount+iChange,true);
+	long iLastcount = ::Players.Get(iPlr)->BaseProduction.GetIDCount(id);
+	return ::Players.Get(iPlr)->BaseProduction.SetIDCount(id,iLastcount+iChange,true);
 }
 
 static bool FnSetPlrKnowledge(C4PropList * _this, long iPlr, C4ID id, bool fRemove)
@@ -810,22 +870,22 @@ static C4Value FnGetComponent(C4PropList * _this, C4ID idComponent, int iIndex, 
 	return C4Value();
 }
 
-static C4Value FnGetHomebaseMaterial(C4PropList * _this, int iPlr, C4ID id, int iIndex, int dwCategory)
+static C4Value FnGetBaseMaterial(C4PropList * _this, int iPlr, C4ID id, int iIndex, int dwCategory)
 {
 	if (!ValidPlr(iPlr)) return C4VBool(false);
 	// Search by id, return available count
-	if (id) return C4VInt(::Players.Get(iPlr)->HomeBaseMaterial.GetIDCount(id));
+	if (id) return C4VInt(::Players.Get(iPlr)->BaseMaterial.GetIDCount(id));
 	// Search indexed item of given category, return C4ID
-	return C4VPropList(C4Id2Def(::Players.Get(iPlr)->HomeBaseMaterial.GetID( ::Definitions, dwCategory, iIndex )));
+	return C4VPropList(C4Id2Def(::Players.Get(iPlr)->BaseMaterial.GetID( ::Definitions, dwCategory, iIndex )));
 }
 
-static C4Value FnGetHomebaseProduction(C4PropList * _this, int iPlr, C4ID id, int iIndex, int dwCategory)
+static C4Value FnGetBaseProduction(C4PropList * _this, int iPlr, C4ID id, int iIndex, int dwCategory)
 {
 	if (!ValidPlr(iPlr)) return C4VBool(false);
 	// Search by id, return available count
-	if (id) return C4VInt(::Players.Get(iPlr)->HomeBaseProduction.GetIDCount(id));
+	if (id) return C4VInt(::Players.Get(iPlr)->BaseProduction.GetIDCount(id));
 	// Search indexed item of given category, return C4ID
-	return C4VPropList(C4Id2Def(::Players.Get(iPlr)->HomeBaseProduction.GetID( ::Definitions, dwCategory, iIndex )));
+	return C4VPropList(C4Id2Def(::Players.Get(iPlr)->BaseProduction.GetID( ::Definitions, dwCategory, iIndex )));
 }
 
 static long FnGetWealth(C4PropList * _this, long iPlr)
@@ -927,11 +987,14 @@ static bool FnSurrenderPlayer(C4PropList * _this, long iPlr)
 }
 
 // undocumented!
-static bool FnSetLeaguePerformance(C4PropList * _this, long iScore)
-{
-	Game.RoundResults.SetLeaguePerformance(iScore);
+static bool FnSetLeaguePerformance(C4PropList * _this, long iScore, long idPlayer)
+	{
+	if(!Game.Parameters.isLeague()) return false;
+	if(idPlayer && !Game.PlayerInfos.GetPlayerInfoByID(idPlayer)) return false;
+	Game.RoundResults.SetLeaguePerformance(iScore, idPlayer);
 	return true;
-}
+	}
+
 
 static const int32_t CSPF_FixedAttributes = 1<<0,
     CSPF_NoScenarioInit  = 1<<1,
@@ -1130,6 +1193,34 @@ static C4String *FnGetLeague(C4PropList * _this, long idx)
 	StdStrBuf sIdxLeague;
 	if (!Game.Parameters.League.GetSection(idx, &sIdxLeague)) return NULL;
 	return String(sIdxLeague.getData());
+}
+
+static int32_t FnGetLeagueScore(C4PropList * _this, long idPlayer)
+{
+	// security
+	if (idPlayer < 1) return 0;
+	// get info
+	C4PlayerInfo *pInfo = Game.PlayerInfos.GetPlayerInfoByID(idPlayer);
+	if (!pInfo) return 0;
+	// get league score
+	return pInfo->getLeagueScore();
+}
+
+static bool FnSetLeagueProgressData(C4PropList * _this, C4String *pNewData, long idPlayer)
+{
+	if(!Game.Parameters.League.getLength() || !idPlayer) return false;
+	C4PlayerInfo *info = Game.PlayerInfos.GetPlayerInfoByID(idPlayer);
+	if (!info) return false;
+	info->SetLeagueProgressData(pNewData ? pNewData->GetCStr() : NULL);
+	return true;
+}
+
+static C4String *FnGetLeagueProgressData(C4PropList * _this, long idPlayer)
+{
+	if(!Game.Parameters.League.getLength()) return NULL;
+	C4PlayerInfo *info = Game.PlayerInfos.GetPlayerInfoByID(idPlayer);
+	if (!info) return NULL;
+	return String(info->GetLeagueProgressData());
 }
 
 // undocumented!
@@ -1566,8 +1657,9 @@ static bool FnCreateParticle(C4PropList * _this, C4String *name, C4Value x, C4Va
 
 static bool FnClearParticles(C4PropList * _this)
 {
+#ifndef USE_CONSOLE
 	C4Object *obj;
-	if (obj = Object(_this))
+	if ((obj = Object(_this)))
 	{
 		if (obj->BackParticles)
 			obj->BackParticles->Clear();
@@ -1579,7 +1671,7 @@ static bool FnClearParticles(C4PropList * _this)
 		if (::Particles.GetGlobalParticles())
 			::Particles.GetGlobalParticles()->Clear();
 	}
-
+#endif
 	// always return true
 	return true;
 }
@@ -1611,13 +1703,14 @@ static C4ValueArray* FnPV_Direction(C4PropList * _this, C4Value factor)
 	return pArray;
 }
 
-static C4ValueArray* FnPV_Step(C4PropList * _this, C4Value step, C4Value startValue, C4Value delay)
+static C4ValueArray* FnPV_Step(C4PropList * _this, C4Value step, C4Value startValue, C4Value delay, C4Value maximumValue)
 {
-	C4ValueArray *pArray = new C4ValueArray(4);
+	C4ValueArray *pArray = new C4ValueArray(5);
 	pArray->SetItem(0, C4VInt(C4PV_Step));
 	pArray->SetItem(1, step);
 	pArray->SetItem(2, startValue);
 	pArray->SetItem(3, delay);
+	pArray->SetItem(4, maximumValue);
 	return pArray;
 }
 
@@ -1639,6 +1732,16 @@ static C4Value FnPV_KeyFrames(C4PropList * _this, C4Value *pars)
 	}
 	pArray->SetSize(i + offset);
 	return C4Value(pArray);
+}
+
+static C4ValueArray* FnPV_Sin(C4PropList * _this, C4Value value, C4Value amplitude, C4Value offset)
+{
+	C4ValueArray *pArray = new C4ValueArray(5);
+	pArray->SetItem(0, C4VInt(C4PV_Sin));
+	pArray->SetItem(1, value);
+	pArray->SetItem(2, amplitude);
+	pArray->SetItem(3, offset);
+	return pArray;
 }
 
 static C4ValueArray* FnPV_Speed(C4PropList * _this, C4Value factor, C4Value startValue)
@@ -2180,7 +2283,7 @@ static bool FnCustomMessage(C4PropList * _this, C4String *pMsg, C4Object *pObj, 
 {
 	// safeties
 	if (pSrc)
-		if(!pSrc->GetDef() && !pSrc->GetObject()) return false;
+		if(!pSrc->GetDef() && !pSrc->GetObject() && !pSrc->GetPropertyPropList(P_Source)) return false;
 	if (!pMsg) return false;
 	if (pObj && !pObj->Status) return false;
 	const char *szMsg = pMsg->GetCStr();
@@ -2365,6 +2468,29 @@ static int32_t FnGetStartupPlayerCount(C4PropList * _this)
 	return ::Game.StartupPlayerCount;
 }
 
+static bool FnGainScenarioAchievement(C4PropList * _this, C4String *achievement_name, Nillable<long> avalue, Nillable<long> player, C4String *for_scenario)
+{
+	// safety
+	if (!achievement_name || !achievement_name->GetData().getLength()) return false;
+	// default parameter
+	long value = avalue.IsNil() ? 1 : (long)avalue;
+	// gain achievement
+	bool result = true;
+	if (!player.IsNil() && player != NO_OWNER)
+	{
+		C4Player *plr = ::Players.Get(player);
+		if (!plr) return false;
+		result = plr->GainScenarioAchievement(achievement_name->GetCStr(), value, for_scenario ? for_scenario->GetCStr() : NULL);
+	}
+	else
+	{
+		for (C4Player *plr = ::Players.First; plr; plr = plr->Next)
+			if (!plr->GainScenarioAchievement(achievement_name->GetCStr(), value, for_scenario ? for_scenario->GetCStr() : NULL))
+				result = false;
+	}
+	return true;
+}
+
 extern C4ScriptConstDef C4ScriptGameConstMap[];
 extern C4ScriptFnDef C4ScriptGameFnMap[];
 
@@ -2428,7 +2554,10 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "GetPlayerByIndex", FnGetPlayerByIndex);
 	AddFunc(pEngine, "EliminatePlayer", FnEliminatePlayer);
 	AddFunc(pEngine, "SurrenderPlayer", FnSurrenderPlayer);
+	AddFunc(pEngine, "FnGetLeagueScore", FnGetLeagueScore);
 	AddFunc(pEngine, "SetLeaguePerformance", FnSetLeaguePerformance);
+	AddFunc(pEngine, "SetLeagueProgressData", FnSetLeagueProgressData);
+	AddFunc(pEngine, "GetLeagueProgressData", FnGetLeagueProgressData);
 	AddFunc(pEngine, "CreateScriptPlayer", FnCreateScriptPlayer);
 	AddFunc(pEngine, "GetCursor", FnGetCursor);
 	AddFunc(pEngine, "GetViewCursor", FnGetViewCursor);
@@ -2453,9 +2582,11 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "SetClimate", FnSetClimate);
 	AddFunc(pEngine, "GetClimate", FnGetClimate);
 	AddFunc(pEngine, "SetPlayerZoomByViewRange", FnSetPlayerZoomByViewRange);
+	AddFunc(pEngine, "GetPlayerZoomLimits", FnGetPlayerZoomLimits);
+	AddFunc(pEngine, "SetPlayerZoom", FnSetPlayerZoom);
 	AddFunc(pEngine, "SetPlayerViewLock", FnSetPlayerViewLock);
-	AddFunc(pEngine, "DoHomebaseMaterial", FnDoHomebaseMaterial);
-	AddFunc(pEngine, "DoHomebaseProduction", FnDoHomebaseProduction);
+	AddFunc(pEngine, "DoBaseMaterial", FnDoBaseMaterial);
+	AddFunc(pEngine, "DoBaseProduction", FnDoBaseProduction);
 	AddFunc(pEngine, "GainMissionAccess", FnGainMissionAccess);
 	AddFunc(pEngine, "IsNetwork", FnIsNetwork);
 	AddFunc(pEngine, "GetLeague", FnGetLeague);
@@ -2526,11 +2657,12 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "GetStartupPlayerCount", FnGetStartupPlayerCount);
 	AddFunc(pEngine, "PlayerObjectCommand", FnPlayerObjectCommand);
 	AddFunc(pEngine, "EditCursor", FnEditCursor);
+	AddFunc(pEngine, "GainScenarioAchievement", FnGainScenarioAchievement);
 
 	F(GetPlrKnowledge);
 	F(GetComponent);
-	F(GetHomebaseMaterial);
-	F(GetHomebaseProduction);
+	F(GetBaseMaterial);
+	F(GetBaseProduction);
 	F(GetDefCoreVal);
 	F(GetObjectVal);
 	F(GetObjectInfoCoreVal);
@@ -2551,6 +2683,7 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	F(PV_Wind);
 	F(PV_Gravity);
 	// F(PV_KeyFrames); added below
+	F(PV_Sin);
 	F(PC_Die);
 	F(PC_Bounce);
 	F(PC_Stop);
@@ -2578,6 +2711,7 @@ C4ScriptConstDef C4ScriptGameConstMap[]=
 	{ "FX_Call_DmgScript"         ,C4V_Int,      C4FxCall_DmgScript         }, // damage through script call
 	{ "FX_Call_DmgBlast"          ,C4V_Int,      C4FxCall_DmgBlast          }, // damage through blast
 	{ "FX_Call_DmgFire"           ,C4V_Int,      C4FxCall_DmgFire           }, // damage through fire
+	{ "FX_Call_DmgChop"           ,C4V_Int,      C4FxCall_DmgChop           }, // damage through chopping
 	{ "FX_Call_Energy"            ,C4V_Int,      32                         }, // bitmask for generic energy loss
 	{ "FX_Call_EngScript"         ,C4V_Int,      C4FxCall_EngScript         }, // energy loss through script call
 	{ "FX_Call_EngBlast"          ,C4V_Int,      C4FxCall_EngBlast          }, // energy loss through blast
@@ -2680,6 +2814,7 @@ C4ScriptConstDef C4ScriptGameConstMap[]=
 	{ "PLRZOOM_NoDecrease"        ,C4V_Int,      PLRZOOM_NoDecrease },
 	{ "PLRZOOM_LimitMin"          ,C4V_Int,      PLRZOOM_LimitMin },
 	{ "PLRZOOM_LimitMax"          ,C4V_Int,      PLRZOOM_LimitMax },
+	{ "PLRZOOM_Set"               ,C4V_Int,      PLRZOOM_Set },
 
 	{ "ATTACH_Front"              ,C4V_Int,      C4ATTACH_Front },
 	{ "ATTACH_Back"               ,C4V_Int,      C4ATTACH_Back },

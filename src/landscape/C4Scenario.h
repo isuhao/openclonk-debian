@@ -146,8 +146,8 @@ public:
 	C4IDList ReadyVehic;
 	C4IDList ReadyMaterial;
 	C4IDList BuildKnowledge;
-	C4IDList HomeBaseMaterial;
-	C4IDList HomeBaseProduction;
+	C4IDList BaseMaterial;
+	C4IDList BaseProduction;
 public:
 	void Default();
 	bool EquipmentEqual(C4SPlrStart &rhs);
@@ -267,6 +267,7 @@ public:
 	C4Group *GetGroupfile(C4Group &rGrp); // get group at section file (returns temp group, scenario subgroup or scenario group itself)
 	bool EnsureTempStore(bool fExtractLandscape, bool fExtractObjects);               // make sure that a temp file is created, and nothing is modified within the main scenario file
 };
+
 
 
 #endif // INC_C4Scenario

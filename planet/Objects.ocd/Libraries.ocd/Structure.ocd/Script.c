@@ -9,11 +9,9 @@
 
 func Initialize()
 {
-	if (ObjectCount(Find_ID(Rule_EnergyBarsAboveStructures)) > 0)
-	{
+	if (FindObject(Find_ID(Rule_StructureHPBars)))
 		if (this.HitPoints != nil)
 			AddEnergyBar();
-	}
 	return _inherited(...);
 }
 
@@ -28,3 +26,6 @@ public func Damage(int change, int cause, int cause_plr)
 		}
 	return _inherited(change, cause, cause_plr);
 }
+
+// This object is a structure.
+public func IsStructure() { return true; }

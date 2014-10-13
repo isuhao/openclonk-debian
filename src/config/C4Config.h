@@ -55,6 +55,7 @@ public:
 	char UserDataPath[CFG_MaxString+1];
 	char SystemDataPath[CFG_MaxString+1];
 	char ScreenshotPath[CFG_MaxString+1];
+	char TempUpdatePath[CFG_MaxString+1];
 	bool GamepadEnabled;
 	bool FirstStart;
 	int32_t DebugRec;
@@ -93,7 +94,6 @@ public:
 	int32_t VerboseObjectLoading;
 	int32_t ColorAnimation;
 	int32_t HighResLandscape;
-	int32_t SmokeLevel;
 	int32_t VideoModule;
 	int32_t MenuTransparency;
 	int32_t UpperBoard;
@@ -102,7 +102,6 @@ public:
 	int32_t WindowX,WindowY;
 	int32_t RefreshRate;	// monitor vertical refresh rate
 	int32_t Windowed; // 0: fullscreen, 1: windowed, 2: fullscreen in game, windowed in menu
-	int32_t ShowAllResolutions;
 	int32_t ShowCrewNames; // show player name above clonks?
 	int32_t ShowCrewCNames; // show clonk names above clonks?
 	int32_t BitDepth; // used bit depth for newgfx
@@ -118,6 +117,7 @@ public:
 	int32_t ClipManuallyE; // do manual clipping in the easy cases
 	int32_t NoOffscreenBlits; // if set, all blits to non-primary-surfaces are emulated
 	int32_t MultiSampling; // multisampling samples
+	int32_t AutoFrameSkip; // if true, gfx frames are skipped when they would slow down the game
 
 	void CompileFunc(StdCompiler *pComp);
 };
@@ -160,6 +160,7 @@ public:
 	char LastPassword[CFG_MaxString+1];
 	char AlternateServerAddress[CFG_MaxString+1];
 	char PuncherAddress[CFG_MaxString+1];
+	StdCopyStrBuf LastLeagueServer, LastLeaguePlayerName, LastLeagueAccount, LastLeagueLoginToken;
 #ifdef WITH_AUTOMATIC_UPDATE
 	char UpdateServerAddress[CFG_MaxString+1];
 	int32_t AutomaticUpdate;
@@ -170,6 +171,8 @@ public:
 	void CompileFunc(StdCompiler *pComp);
 	const char *GetLeagueServerAddress();
 	void CheckPortsForCollisions();
+	void SetLeagueLoginData(const char *szServer, const char *szPlayerName, const char *szAccount, const char *szLoginToken);
+	bool GetLeagueLoginData(const char *szServer, const char *szPlayerName, StdStrBuf *pAccount, StdStrBuf *pLoginToken) const;
 };
 
 class C4ConfigStartup
@@ -268,6 +271,7 @@ public:
 	bool Registered();
 	const char *AtExePath(const char *szFilename);
 	const char *AtTempPath(const char *szFilename);
+	const char *AtTempUpdatePath(const char *szFilename);
 	const char *AtNetworkPath(const char *szFilename);
 	const char *AtScreenshotPath(const char *szFilename);
 	const char *AtUserDataPath(const char *szFilename);
@@ -283,6 +287,8 @@ public:
 	bool IsModule(const char *szPath, char *szModules);
 	bool AddModule(const char *szPath, char *szModules);
 	void GetConfigFileName(StdStrBuf &filename, const char *szConfigFile);
+	void CleanupTempUpdateFolder();
+	const char *MakeTempUpdateFolder();
 
 	static void ExpandEnvironmentVariables(char *strPath, size_t iMaxLen);
 };
