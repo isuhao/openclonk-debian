@@ -1,0 +1,61 @@
+From efd7795748d7bd9d512bb01eb195a534ae3eb9fd Mon Sep 17 00:00:00 2001
+From: Philipp Kern <pkern@debian.org>
+Date: Tue, 14 Oct 2014 23:26:04 +0200
+Subject: [PATCH] Allow distributions to use the system tinyxml.
+
+Add a new cmake option WITH_SYSTEM_TINYXML=ON that allows to use the system
+tinyxml library and header instead of the bundled copy. Adjust the include
+path in the single source file referencing the header and add the thirdparty
+path to the include search path if the use system option is unset or off.
+---
+ CMakeLists.txt               | 13 +++++++++++--
+ src/lib/StdMeshLoaderXml.cpp |  2 +-
+ 2 files changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 364e031..2a29b07 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -56,6 +56,9 @@ option(WITH_AUTOMATIC_UPDATE "Automatic updates are downloaded from the project
+ # dynamic linking.
+ option(USE_STATIC_BOOST "Link Boost libraries statically" ON)
+ 
++# Allow distributions to use the system tinyxml instead of our bundled copy.
++option(USE_SYSTEM_TINYXML "Use system tinyxml library" OFF)
++
+ # Remove obsolete options
+ unset(OC_BUILD_MULTIPROCESSOR CACHE)
+ unset(USE_APPLE_CLANG CACHE)
+@@ -1270,8 +1273,14 @@ if(ICONV_FOUND)
+ endif()
+ 
+ # TinyXML
+-add_subdirectory(thirdparty/tinyxml)
+-target_link_libraries(openclonk tinyxml)
++if(WITH_SYSTEM_TINYXML)
++	pkg_search_module(TINYXML REQUIRED tinyxml)
++	target_link_libraries(openclonk ${TINYXML_LIBRARIES})
++else()
++	add_subdirectory(thirdparty/tinyxml)
++	include_directories(thirdparty/tinyxml)
++	target_link_libraries(openclonk tinyxml)
++endif()
+ 
+ if(WIN32)
+ 	find_package(DbgHelp)
+diff --git a/src/lib/StdMeshLoaderXml.cpp b/src/lib/StdMeshLoaderXml.cpp
+index 095cd07..4cf9e30 100644
+--- a/src/lib/StdMeshLoaderXml.cpp
++++ b/src/lib/StdMeshLoaderXml.cpp
+@@ -19,7 +19,7 @@
+ #include "C4Include.h"
+ #include "StdMesh.h"
+ #include "StdMeshLoader.h"
+-#include <tinyxml/tinyxml.h>
++#include <tinyxml.h>
+ 
+ // Helper class to load things from an XML file with error checking
+ class StdMeshLoader::StdMeshXML
+-- 
+2.1.0
+
