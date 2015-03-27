@@ -83,6 +83,8 @@ class C4ConfigDeveloper
 public:
 	int32_t AutoFileReload;
 	int32_t ExtraWarnings;
+	char TodoFilename[CFG_MaxString + 1];
+	char AltTodoFilename[CFG_MaxString + 1];
 	void CompileFunc(StdCompiler *pComp);
 };
 
@@ -113,11 +115,10 @@ public:
 	int32_t Monitor;    // monitor index to play on
 	int32_t FireParticles; // draw extended fire particles if enabled (default on)
 	int32_t MaxRefreshDelay; // minimum time after which graphics should be refreshed (ms)
-	int32_t EnableShaders; // enable pixel shaders on engines that support them
-	int32_t ClipManuallyE; // do manual clipping in the easy cases
 	int32_t NoOffscreenBlits; // if set, all blits to non-primary-surfaces are emulated
 	int32_t MultiSampling; // multisampling samples
 	int32_t AutoFrameSkip; // if true, gfx frames are skipped when they would slow down the game
+	int32_t DebugOpenGL; // if true, enables OpenGL debugging
 
 	void CompileFunc(StdCompiler *pComp);
 };
@@ -167,6 +168,7 @@ public:
 	int32_t LastUpdateTime;
 #endif
 	int32_t AsyncMaxWait;
+	int32_t PacketLogging;
 public:
 	void CompileFunc(StdCompiler *pComp);
 	const char *GetLeagueServerAddress();
@@ -228,7 +230,7 @@ class C4ConfigControls
 {
 public:
 	int32_t GamepadGuiControl;
-	int32_t MouseAScroll; // auto scroll strength
+	int32_t MouseAutoScroll; // auto scroll strength
 	C4PlayerControlAssignmentSets UserSets;
 
 	void CompileFunc(StdCompiler *pComp);

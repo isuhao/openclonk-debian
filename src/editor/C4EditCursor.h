@@ -44,6 +44,7 @@ protected:
 	struct ObjselItemDt {
 		C4EditCursor* EditCursor;
 		C4Object* Object;
+		StdCopyStrBuf Command;
 #if defined(USE_WIN32_WINDOWS)
 		UINT_PTR ItemId;
 #elif defined(WITH_DEVELOPER_MODE)
@@ -107,11 +108,12 @@ protected:
 	void EMMoveObject(enum C4ControlEMObjectAction eAction, C4Real tx, C4Real ty, C4Object *pTargetObj, const C4ObjectList *pObjs = NULL, const char *szScript = NULL);
 	void EMControl(enum C4PacketType eCtrlType, class C4ControlPacket *pCtrl);
 	void DoContextObjsel(C4Object *, bool clear);
+	void DoContextObjCommand(C4Object *, const char *cmd);
 	void ObjselectDelItems();
 
 	void AddToSelection(C4Object *add_obj);         // add object to selection and do script callback. Doesn't do OnSelectionChanged().
 	bool RemoveFromSelection(C4Object *remove_obj); // remove object from selection and do script callback. return true if object was in selection before. Doesn't do OnSelectionChanged().
-	void ClearSelection();                          // remove all objects from selection and do script callback. Doesn't do OnSelectionChanged().
+	void ClearSelection(C4Object *next_selection=NULL);  // remove all objects from selection and do script callback. if next_selection is non-null, passes that to the deselection callbacks. Doesn't do OnSelectionChanged().
 
 #ifdef WITH_DEVELOPER_MODE
 	static void OnDelete(GtkWidget* widget, gpointer data);

@@ -2,7 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2001-2009, RedWolf Design GmbH, http://www.clonk.de/
- * Copyright (c) 2009-2013, The OpenClonk Team and contributors
+ * Copyright (c) 2009-2015, The OpenClonk Team and contributors
  *
  * Distributed under the terms of the ISC license; see accompanying file
  * "COPYING" for details.
@@ -308,7 +308,9 @@ StdMeshTransformation StdMeshTrack::GetTransformAt(float time) const
 
 	float dt = iter->first - prev_iter->first;
 	float weight1 = (time - prev_iter->first) / dt;
+
 	float weight2 = (iter->first - time) / dt;
+	(void)weight2; // used in assertion only
 
 	assert(weight1 >= 0 && weight2 >= 0 && weight1 <= 1 && weight2 <= 1);
 	assert(fabs(weight1 + weight2 - 1) < 1e-6);
@@ -328,6 +330,8 @@ StdMeshAnimation::StdMeshAnimation(const StdMeshAnimation& other):
 	for (unsigned int i = 0; i < Tracks.size(); ++i)
 		if (other.Tracks[i])
 			Tracks[i] = new StdMeshTrack(*other.Tracks[i]);
+
+	OriginSkeleton = other.OriginSkeleton;
 }
 
 StdMeshAnimation::~StdMeshAnimation()
@@ -355,25 +359,17 @@ StdMeshAnimation& StdMeshAnimation::operator=(const StdMeshAnimation& other)
 	return *this;
 }
 
-StdSubMesh::StdSubMesh():
-		Material(NULL)
+StdMeshSkeleton::StdMeshSkeleton()
 {
 }
 
-StdMesh::StdMesh()
-{
-	BoundingBox.x1 = BoundingBox.y1 = BoundingBox.z1 = 0.0f;
-	BoundingBox.x2 = BoundingBox.y2 = BoundingBox.z2 = 0.0f;
-	BoundingRadius = 0.0f;
-}
-
-StdMesh::~StdMesh()
+StdMeshSkeleton::~StdMeshSkeleton()
 {
 	for (unsigned int i = 0; i < Bones.size(); ++i)
 		delete Bones[i];
 }
 
-void StdMesh::AddMasterBone(StdMeshBone* bone)
+void StdMeshSkeleton::AddMasterBone(StdMeshBone *bone)
 {
 	bone->Index = Bones.size(); // Remember index in master bone table
 	Bones.push_back(bone);
@@ -381,7 +377,7 @@ void StdMesh::AddMasterBone(StdMeshBone* bone)
 		AddMasterBone(bone->Children[i]);
 }
 
-const StdMeshBone* StdMesh::GetBoneByName(const StdStrBuf& name) const
+const StdMeshBone* StdMeshSkeleton::GetBoneByName(const StdStrBuf& name) const
 {
 	// Lookup parent bone
 	for (unsigned int i = 0; i < Bones.size(); ++i)
@@ -391,7 +387,7 @@ const StdMeshBone* StdMesh::GetBoneByName(const StdStrBuf& name) const
 	return NULL;
 }
 
-const StdMeshAnimation* StdMesh::GetAnimationByName(const StdStrBuf& name) const
+const StdMeshAnimation* StdMeshSkeleton::GetAnimationByName(const StdStrBuf& name) const
 {
 	StdCopyStrBuf name2(name);
 	std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator iter = Animations.find(name2);
@@ -399,28 +395,34 @@ const StdMeshAnimation* StdMesh::GetAnimationByName(const StdStrBuf& name) const
 	return &iter->second;
 }
 
-void StdMesh::MirrorAnimation(const StdStrBuf& name, const StdMeshAnimation& animation)
+void StdMeshSkeleton::MirrorAnimation(const StdMeshAnimation& animation)
 {
-	StdCopyStrBuf name2(name);
-	assert(Animations.find(name2) == Animations.end());
+	StdCopyStrBuf name(animation.Name);
 
-	StdMeshAnimation& new_anim = Animations.insert(std::make_pair(name2, animation)).first->second;
-	new_anim.Name = name2;
+	// do nothing if the name cannot be switched from *.L to *.R or vice versa
+	// or if the animation already exists
+	if (!MirrorName(name) || Animations.find(name) != Animations.end())
+	{
+		return;
+	}
+
+	StdMeshAnimation& new_anim = Animations.insert(std::make_pair(name, animation)).first->second;
+	new_anim.Name = name;
 
 	// Go through all bones
-	for(unsigned int i = 0; i < GetNumBones(); ++i)
+	for (unsigned int i = 0; i < GetNumBones(); ++i)
 	{
 		const StdMeshBone& bone = GetBone(i);
 		StdCopyStrBuf other_bone_name(bone.Name);
-		if(MirrorName(other_bone_name))
+		if (MirrorName(other_bone_name))
 		{
 			const StdMeshBone* other_bone = GetBoneByName(other_bone_name);
-			if(!other_bone)
+			if (!other_bone)
 				throw std::runtime_error(std::string("No counterpart for bone ") + bone.Name.getData() + " found");
 
 			// Make sure to not swap tracks twice
-			if( (animation.Tracks[i] != NULL || animation.Tracks[other_bone->Index] != NULL) &&
-			   other_bone->Index > bone.Index)
+			if ((animation.Tracks[i] != NULL || animation.Tracks[other_bone->Index] != NULL) &&
+				other_bone->Index > bone.Index)
 			{
 				std::swap(new_anim.Tracks[i], new_anim.Tracks[other_bone->Index]);
 
@@ -428,57 +430,184 @@ void StdMesh::MirrorAnimation(const StdStrBuf& name, const StdMeshAnimation& ani
 				StdMeshTransformation other_own_trans = other_bone->GetParent()->InverseTransformation * other_bone->Transformation;
 
 				// Mirror all the keyframes of both tracks
-				if(new_anim.Tracks[i] != NULL)
-					for(std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[i]->Frames.begin(); iter != new_anim.Tracks[i]->Frames.end(); ++iter)
+				if (new_anim.Tracks[i] != NULL)
+					for (std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[i]->Frames.begin(); iter != new_anim.Tracks[i]->Frames.end(); ++iter)
 						MirrorKeyFrame(iter->second, own_trans, StdMeshTransformation::Inverse(other_own_trans));
 
-				if(new_anim.Tracks[other_bone->Index] != NULL)
-					for(std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[other_bone->Index]->Frames.begin(); iter != new_anim.Tracks[other_bone->Index]->Frames.end(); ++iter)
+				if (new_anim.Tracks[other_bone->Index] != NULL)
+					for (std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[other_bone->Index]->Frames.begin(); iter != new_anim.Tracks[other_bone->Index]->Frames.end(); ++iter)
 						MirrorKeyFrame(iter->second, other_own_trans, StdMeshTransformation::Inverse(own_trans));
 			}
 		}
-		else if(bone.Name.Compare_(".N", bone.Name.getLength()-2) != 0)
+		else if (bone.Name.Compare_(".N", bone.Name.getLength() - 2) != 0)
 		{
-			if(new_anim.Tracks[i] != NULL)
+			if (new_anim.Tracks[i] != NULL)
 			{
 				StdMeshTransformation own_trans = bone.Transformation;
-				if(bone.GetParent()) own_trans = bone.GetParent()->InverseTransformation * bone.Transformation;
+				if (bone.GetParent()) own_trans = bone.GetParent()->InverseTransformation * bone.Transformation;
 
-				for(std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[i]->Frames.begin(); iter != new_anim.Tracks[i]->Frames.end(); ++iter)
+				for (std::map<float, StdMeshKeyFrame>::iterator iter = new_anim.Tracks[i]->Frames.begin(); iter != new_anim.Tracks[i]->Frames.end(); ++iter)
 					MirrorKeyFrame(iter->second, own_trans, StdMeshTransformation::Inverse(own_trans));
 			}
 		}
 	}
 }
 
-void StdMesh::PostInit()
+void StdMeshSkeleton::InsertAnimation(const StdMeshAnimation& animation)
 {
-	// Mirror .R and .L animations without counterpart
-	for(std::map<StdCopyStrBuf, StdMeshAnimation>::iterator iter = Animations.begin(); iter != Animations.end(); ++iter)
-	{
-		// For debugging purposes:
-//		if(iter->second.Name == "Jump")
-//			MirrorAnimation(StdCopyStrBuf("Jump.Mirror"), iter->second);
+	assert(Animations.find(animation.Name) == Animations.end());
 
-		StdCopyStrBuf buf = iter->second.Name;
-		if(MirrorName(buf))
+	Animations.insert(std::make_pair(animation.Name, animation));
+}
+
+void StdMeshSkeleton::InsertAnimation(const StdMeshSkeleton& source, const StdMeshAnimation& animation)
+{
+	assert(Animations.find(animation.Name) == Animations.end());
+
+	// get matching bones from the source
+	std::vector<int> bone_index_source = source.GetMatchingBones(*this);
+
+	// create a new animation and copy the basic data from the other animation
+	StdMeshAnimation anim;
+	anim.Name = animation.Name;
+	anim.Length = animation.Length;
+	anim.Tracks.resize(GetNumBones());
+	anim.OriginSkeleton = &source;
+
+	// sort the tracks according to the matched bones
+	for (unsigned int i = 0; i < anim.Tracks.size(); ++i)
+	{
+		if (bone_index_source[i] > -1 && animation.Tracks[bone_index_source[i]] != NULL)
 		{
-			if(Animations.find(buf) == Animations.end())
-				MirrorAnimation(buf, iter->second);
+			anim.Tracks[i] = new StdMeshTrack(*animation.Tracks[bone_index_source[i]]);
 		}
 	}
 
-	// Order submeshes so that opaque submeshes come before non-opaque ones
-	std::sort(SubMeshes.begin(), SubMeshes.end(), StdMeshSubMeshVisibilityCmpPred());
+	// and add it to the map
+	Animations.insert(std::make_pair(animation.Name, anim));
 }
 
-StdSubMeshInstance::StdSubMeshInstance(StdMeshInstance& instance, const StdSubMesh& submesh, float completion):
-		Vertices(submesh.GetNumVertices()),
-		Material(NULL), CurrentFaceOrdering(FO_Fixed)
+void StdMeshSkeleton::PostInit()
 {
-	// Copy initial Vertices/Faces
-	for (unsigned int i = 0; i < submesh.GetNumVertices(); ++i)
-		Vertices[i] = submesh.GetVertex(i);
+	// Mirror .R and .L animations without counterpart
+	for (std::map<StdCopyStrBuf, StdMeshAnimation>::iterator iter = Animations.begin(); iter != Animations.end(); ++iter)
+	{
+		// For debugging purposes:
+		//		if(iter->second.Name == "Jump")
+		//			MirrorAnimation(StdCopyStrBuf("Jump.Mirror"), iter->second);
+
+		// mirrors only if necessary
+		MirrorAnimation(iter->second);
+	}
+}
+
+std::vector<int> StdMeshSkeleton::GetMatchingBones(const StdMeshSkeleton& child_skeleton) const
+{
+	std::vector<int> MatchedBoneInParentSkeleton;
+
+	// find matching bones names in both skeletons
+	for (unsigned int i = 0; i < child_skeleton.GetNumBones(); ++i)
+	{
+		int parent_bone_index = -1; // instantiate with invalid index == no match
+
+		for (unsigned int j = 0; j < GetNumBones(); ++j)
+		{
+			// start searching at the same index
+			int sample_index = (i + j) % GetNumBones();
+
+			if (GetBone(sample_index).Name == child_skeleton.GetBone(i).Name)
+			{
+				parent_bone_index = sample_index;
+				break;
+			}
+		}
+
+		// add valid or invalid mapped index to list of mapped bones
+		MatchedBoneInParentSkeleton.push_back(parent_bone_index);
+	}
+
+	return MatchedBoneInParentSkeleton;
+}
+
+StdSubMesh::StdSubMesh() :
+	Material(NULL), buffer_offset(0)
+{
+}
+
+StdMesh::StdMesh() : Skeleton(new StdMeshSkeleton), vbo(0)
+{
+	BoundingBox.x1 = BoundingBox.y1 = BoundingBox.z1 = 0.0f;
+	BoundingBox.x2 = BoundingBox.y2 = BoundingBox.z2 = 0.0f;
+	BoundingRadius = 0.0f;
+}
+
+StdMesh::~StdMesh()
+{
+	if (vbo)
+		glDeleteBuffers(1, &vbo);
+}
+
+void StdMesh::PostInit()
+{
+	// Order submeshes so that opaque submeshes come before non-opaque ones
+	std::sort(SubMeshes.begin(), SubMeshes.end(), StdMeshSubMeshVisibilityCmpPred());
+	UpdateVBO();
+}
+
+void StdMesh::UpdateVBO()
+{
+	// We're only uploading vertices once, so there shouldn't be a VBO so far
+	assert(vbo == 0);
+	if (vbo != 0)
+		glDeleteBuffers(1, &vbo);
+	glGenBuffers(1, &vbo);
+
+	// Calculate total number of vertices
+	size_t total_vertices = SharedVertices.size();
+	for (auto &submesh : SubMeshes)
+	{
+		total_vertices += submesh.GetNumVertices();
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	// Unmapping the buffer may fail for certain reasons, in which case we need to try again.
+	do
+	{
+		// Allocate VBO backing memory. If this mesh's skeleton has no animations
+		// defined, we assume that the VBO will not change frequently.
+		glBufferData(GL_ARRAY_BUFFER, total_vertices * sizeof(StdMeshVertex), NULL, GL_STATIC_DRAW);
+		void *map = glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
+		uint8_t *buffer = static_cast<uint8_t*>(map);
+		uint8_t *cursor = buffer;
+
+		// Add shared vertices to buffer
+		if (!SharedVertices.empty())
+		{
+			size_t shared_vertices_size = SharedVertices.size() * sizeof(SharedVertices[0]);
+			std::memcpy(cursor, &SharedVertices[0], shared_vertices_size);
+			cursor += shared_vertices_size;
+		}
+
+		// Add all submeshes to buffer
+		for (auto &submesh : SubMeshes)
+		{
+			// Store the offset, so the render code can use it later
+			submesh.buffer_offset = cursor - buffer;
+
+			if (submesh.Vertices.empty()) continue;
+			size_t vertices_size = sizeof(submesh.Vertices[0]) * submesh.Vertices.size();
+			std::memcpy(cursor, &submesh.Vertices[0], vertices_size);
+			cursor += vertices_size;
+		}
+	} while (glUnmapBuffer(GL_ARRAY_BUFFER) == GL_FALSE);
+	// Unbind the buffer so following rendering calls do not use it
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+
+StdSubMeshInstance::StdSubMeshInstance(StdMeshInstance& instance, const StdSubMesh& submesh, float completion):
+	base(&submesh), Material(NULL), CurrentFaceOrdering(FO_Fixed)
+{
 	LoadFacesForCompletion(instance, submesh, completion);
 
 	SetMaterial(submesh.GetMaterial());
@@ -498,15 +627,15 @@ void StdSubMeshInstance::LoadFacesForCompletion(StdMeshInstance& instance, const
 		// At this point, all vertices are in the OGRE coordinate frame, and Z in OGRE equals
 		// Y in Clonk, so we are fine without additional transformation.
 		const StdMeshVertex* vertices;
-		if(GetNumVertices() > 0)
-			vertices = &GetVertices()[0];
+		if(submesh.GetNumVertices() > 0)
+			vertices = &submesh.GetVertices()[0];
 		else
 			vertices = &instance.GetSharedVertices()[0];
 		SortFacesArray(vertices, Faces, FO_FarthestToNearest, StdMeshMatrix::Identity());
 
 		// Third: Only use the first few ones
 		assert(submesh.GetNumFaces() >= 1);
-		Faces.resize(BoundBy<unsigned int>(static_cast<unsigned int>(completion * submesh.GetNumFaces() + 0.5), 1, submesh.GetNumFaces()));
+		Faces.resize(Clamp<unsigned int>(static_cast<unsigned int>(completion * submesh.GetNumFaces() + 0.5), 1, submesh.GetNumFaces()));
 	}
 }
 
@@ -674,7 +803,7 @@ bool StdMeshInstance::AnimationNode::GetBoneTransform(unsigned int bone, StdMesh
 	}
 }
 
-void StdMeshInstance::AnimationNode::CompileFunc(StdCompiler* pComp, const StdMesh* Mesh)
+void StdMeshInstance::AnimationNode::CompileFunc(StdCompiler* pComp, const StdMesh *Mesh)
 {
 	static const StdEnumEntry<NodeType> NodeTypes[] =
 	{
@@ -696,7 +825,7 @@ void StdMeshInstance::AnimationNode::CompileFunc(StdCompiler* pComp, const StdMe
 		{
 			StdCopyStrBuf anim_name;
 			pComp->Value(mkNamingAdapt(toC4CStrBuf(anim_name), "Animation"));
-			Leaf.Animation = Mesh->GetAnimationByName(anim_name);
+			Leaf.Animation = Mesh->GetSkeleton().GetAnimationByName(anim_name);
 			if(!Leaf.Animation) pComp->excCorrupt("No such animation: \"%s\"", anim_name.getData());
 		}
 		else
@@ -711,13 +840,13 @@ void StdMeshInstance::AnimationNode::CompileFunc(StdCompiler* pComp, const StdMe
 		{
 			StdCopyStrBuf bone_name;
 			pComp->Value(mkNamingAdapt(toC4CStrBuf(bone_name), "Bone"));
-			const StdMeshBone* bone = Mesh->GetBoneByName(bone_name);
+			const StdMeshBone* bone = Mesh->GetSkeleton().GetBoneByName(bone_name);
 			if(!bone) pComp->excCorrupt("No such bone: \"%s\"", bone_name.getData());
 			Custom.BoneIndex = bone->Index;
 		}
 		else
 		{
-			pComp->Value(mkNamingAdapt(mkParAdapt(mkDecompileAdapt(Mesh->GetBone(Custom.BoneIndex).Name), StdCompiler::RCT_All), "Bone"));
+			pComp->Value(mkNamingAdapt(mkParAdapt(mkDecompileAdapt(Mesh->GetSkeleton().GetBone(Custom.BoneIndex).Name), StdCompiler::RCT_All), "Bone"));
 		}
 
 		pComp->Value(mkNamingAdapt(mkTransformAdapt(*Custom.Transformation), "Transformation"));
@@ -793,6 +922,7 @@ StdMeshInstance::AttachedMesh::AttachedMesh(unsigned int number, StdMeshInstance
 		ParentBone(parent_bone), ChildBone(child_bone), AttachTrans(transform), Flags(flags),
 		FinalTransformDirty(true)
 {
+		MapBonesOfChildToParent(parent->GetMesh().GetSkeleton(), child->GetMesh().GetSkeleton());
 }
 
 StdMeshInstance::AttachedMesh::~AttachedMesh()
@@ -804,7 +934,7 @@ StdMeshInstance::AttachedMesh::~AttachedMesh()
 
 bool StdMeshInstance::AttachedMesh::SetParentBone(const StdStrBuf& bone)
 {
-	const StdMeshBone* bone_obj = Parent->GetMesh().GetBoneByName(bone);
+	const StdMeshBone* bone_obj = Parent->GetMesh().GetSkeleton().GetBoneByName(bone);
 	if (!bone_obj) return false;
 	ParentBone = bone_obj->Index;
 
@@ -814,7 +944,7 @@ bool StdMeshInstance::AttachedMesh::SetParentBone(const StdStrBuf& bone)
 
 bool StdMeshInstance::AttachedMesh::SetChildBone(const StdStrBuf& bone)
 {
-	const StdMeshBone* bone_obj = Child->GetMesh().GetBoneByName(bone);
+	const StdMeshBone* bone_obj = Child->GetMesh().GetSkeleton().GetBoneByName(bone);
 	if (!bone_obj) return false;
 	ChildBone = bone_obj->Index;
 
@@ -838,8 +968,8 @@ void StdMeshInstance::AttachedMesh::CompileFunc(StdCompiler* pComp, DenumeratorF
 
 	const StdBitfieldEntry<uint8_t> AM_Entries[] =
 	{
+		{ "MatchSkeleton", AM_MatchSkeleton },
 		{ "DrawBefore",    AM_DrawBefore },
-
 		{ NULL,            0 }
 	};
 
@@ -858,6 +988,11 @@ void StdMeshInstance::AttachedMesh::CompileFunc(StdCompiler* pComp, DenumeratorF
 void StdMeshInstance::AttachedMesh::DenumeratePointers()
 {
 	ChildDenumerator->DenumeratePointers(this);
+
+	assert(Child != NULL);
+	Child->AttachParent = this;
+
+	MapBonesOfChildToParent(Parent->GetMesh().GetSkeleton(), Child->GetMesh().GetSkeleton());
 }
 
 bool StdMeshInstance::AttachedMesh::ClearPointers(class C4Object* pObj)
@@ -865,16 +1000,22 @@ bool StdMeshInstance::AttachedMesh::ClearPointers(class C4Object* pObj)
 	return ChildDenumerator->ClearPointers(pObj);
 }
 
+void StdMeshInstance::AttachedMesh::MapBonesOfChildToParent(const StdMeshSkeleton& parent_skeleton, const StdMeshSkeleton& child_skeleton)
+{
+	// not necessary if we do not match anyway.
+	if (!(Flags & AM_MatchSkeleton)) return;
+
+	// clear array to avoid filling it twice
+	MatchedBoneInParentSkeleton.clear();
+	MatchedBoneInParentSkeleton = parent_skeleton.GetMatchingBones(child_skeleton);
+}
+
 StdMeshInstance::StdMeshInstance(const StdMesh& mesh, float completion):
-		Mesh(&mesh), SharedVertices(mesh.GetSharedVertices().size()), Completion(completion),
-		BoneTransforms(Mesh->GetNumBones(), StdMeshMatrix::Identity()),
+		Mesh(&mesh), Completion(completion),
+		BoneTransforms(Mesh->GetSkeleton().GetNumBones(), StdMeshMatrix::Identity()),
 		SubMeshInstances(Mesh->GetNumSubMeshes()), AttachParent(NULL),
 		BoneTransformsDirty(false)
 {
-	// Copy initial shared vertices
-	for (unsigned int i = 0; i < SharedVertices.size(); ++i)
-		SharedVertices[i] = mesh.GetSharedVertices()[i];
-
 	// Create submesh instances
 	for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
 	{
@@ -902,7 +1043,9 @@ StdMeshInstance::~StdMeshInstance()
 
 	// Delete submeshes
 	for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
+	{
 		delete SubMeshInstances[i];
+	}
 }
 
 void StdMeshInstance::SetFaceOrdering(FaceOrdering ordering)
@@ -941,7 +1084,7 @@ void StdMeshInstance::SetCompletion(float completion)
 
 StdMeshInstance::AnimationNode* StdMeshInstance::PlayAnimation(const StdStrBuf& animation_name, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight)
 {
-	const StdMeshAnimation* animation = Mesh->GetAnimationByName(animation_name);
+	const StdMeshAnimation* animation = Mesh->GetSkeleton().GetAnimationByName(animation_name);
 	if (!animation) { delete position; delete weight; return NULL; }
 
 	return PlayAnimation(*animation, slot, sibling, position, weight);
@@ -949,7 +1092,7 @@ StdMeshInstance::AnimationNode* StdMeshInstance::PlayAnimation(const StdStrBuf& 
 
 StdMeshInstance::AnimationNode* StdMeshInstance::PlayAnimation(const StdMeshAnimation& animation, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight)
 {
-	position->Value = BoundBy(position->Value, Fix0, ftofix(animation.Length));
+	position->Value = Clamp(position->Value, Fix0, ftofix(animation.Length));
 	AnimationNode* child = new AnimationNode(&animation, position);
 	InsertAnimationNode(child, slot, sibling, weight);
 	return child;
@@ -1016,7 +1159,7 @@ void StdMeshInstance::StopAnimation(AnimationNode* node)
 
 	while (!AnimationNodes.empty() && AnimationNodes.back() == NULL)
 		AnimationNodes.erase(AnimationNodes.end()-1);
-	BoneTransformsDirty = true;
+	SetBoneTransformsDirty(true);
 }
 
 StdMeshInstance::AnimationNode* StdMeshInstance::GetAnimationNodeByNumber(unsigned int number)
@@ -1038,16 +1181,16 @@ void StdMeshInstance::SetAnimationPosition(AnimationNode* node, ValueProvider* p
 	delete node->Leaf.Position;
 	node->Leaf.Position = position;
 
-	position->Value = BoundBy(position->Value, Fix0, ftofix(node->Leaf.Animation->Length));
+	position->Value = Clamp(position->Value, Fix0, ftofix(node->Leaf.Animation->Length));
 
-	BoneTransformsDirty = true;
+	SetBoneTransformsDirty(true);
 }
 
 void StdMeshInstance::SetAnimationBoneTransform(AnimationNode* node, const StdMeshTransformation& trans)
 {
 	assert(node->GetType() == AnimationNode::CustomNode);
 	*node->Custom.Transformation = trans;
-	BoneTransformsDirty = true;
+	SetBoneTransformsDirty(true);
 }
 
 void StdMeshInstance::SetAnimationWeight(AnimationNode* node, ValueProvider* weight)
@@ -1055,9 +1198,9 @@ void StdMeshInstance::SetAnimationWeight(AnimationNode* node, ValueProvider* wei
 	assert(node->GetType() == AnimationNode::LinearInterpolationNode);
 	delete node->LinearInterpolation.Weight; node->LinearInterpolation.Weight = weight;
 
-	weight->Value = BoundBy(weight->Value, Fix0, itofix(1));
+	weight->Value = Clamp(weight->Value, Fix0, itofix(1));
 
-	BoneTransformsDirty = true;
+	SetBoneTransformsDirty(true);
 }
 
 void StdMeshInstance::ExecuteAnimation(float dt)
@@ -1131,8 +1274,8 @@ StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& inst
 		if ((*iter)->Number >= number)
 			number = (*iter)->Number + 1;
 
-	const StdMeshBone* parent_bone_obj = Mesh->GetBoneByName(parent_bone);
-	const StdMeshBone* child_bone_obj = instance.Mesh->GetBoneByName(child_bone);
+	const StdMeshBone* parent_bone_obj = Mesh->GetSkeleton().GetBoneByName(parent_bone);
+	const StdMeshBone* child_bone_obj = instance.Mesh->GetSkeleton().GetBoneByName(child_bone);
 	if (!parent_bone_obj || !child_bone_obj) return NULL;
 
 	attach = new AttachedMesh(number, this, &instance, own_child, auto_denumerator.release(), parent_bone_obj->Index, child_bone_obj->Index, transformation, flags);
@@ -1181,6 +1324,31 @@ void StdMeshInstance::SetMaterial(size_t i, const StdMeshMaterial& material)
 	std::stable_sort(SubMeshInstancesOrdered.begin(), SubMeshInstancesOrdered.end(), StdMeshSubMeshInstanceVisibilityCmpPred());
 }
 
+const StdMeshMatrix& StdMeshInstance::GetBoneTransform(size_t i) const
+{
+	if ((AttachParent != NULL) && (AttachParent->GetFlags() & AM_MatchSkeleton))
+	{
+		assert(i < AttachParent->MatchedBoneInParentSkeleton.size());
+
+		int parent_bone_index = AttachParent->MatchedBoneInParentSkeleton[i];
+
+		if (parent_bone_index > -1)
+		{
+			return AttachParent->Parent->BoneTransforms[i];
+		}
+	}
+
+	return BoneTransforms[i];
+}
+
+size_t StdMeshInstance::GetBoneCount() const
+{
+	if ((AttachParent != NULL) && (AttachParent->GetFlags() & AM_MatchSkeleton))
+		return AttachParent->MatchedBoneInParentSkeleton.size();
+	else
+		return BoneTransforms.size();
+}
+
 bool StdMeshInstance::UpdateBoneTransforms()
 {
 	bool was_dirty = BoneTransformsDirty;
@@ -1193,7 +1361,7 @@ bool StdMeshInstance::UpdateBoneTransforms()
 		{
 			StdMeshTransformation Transformation;
 
-			const StdMeshBone& bone = Mesh->GetBone(i);
+			const StdMeshBone& bone = Mesh->GetSkeleton().GetBone(i);
 			const StdMeshBone* parent = bone.GetParent();
 			assert(!parent || parent->Index < i);
 
@@ -1225,19 +1393,6 @@ bool StdMeshInstance::UpdateBoneTransforms()
 				if (parent) BoneTransforms[i] = BoneTransforms[parent->Index] * BoneTransforms[i];
 			}
 		}
-
-		// Compute transformation for each vertex. We could later think about
-		// doing this on the GPU using a vertex shader. This would then probably
-		// need to go to CStdGL::PerformMesh.
-		// But first, we need to move vertex data to the GPU.
-		if(!Mesh->GetSharedVertices().empty())
-			ApplyBoneTransformToVertices(Mesh->GetSharedVertices(), SharedVertices);
-		for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
-		{
-			const StdSubMesh& submesh = Mesh->GetSubMesh(i);
-			if(!submesh.GetVertices().empty())
-				ApplyBoneTransformToVertices(submesh.GetVertices(), SubMeshInstances[i]->Vertices);
-		}
 	}
 
 	// Update attachment's attach transformations. Note this is done recursively.
@@ -1262,17 +1417,17 @@ bool StdMeshInstance::UpdateBoneTransforms()
 			// (saves per-instance memory, but requires recomputation if the animation does not change).
 			// TODO: We might also be able to cache child inverse, and only recomupte it if
 			// child bone transforms are dirty (saves matrix inversion for unanimated attach children).
-			attach->FinalTrans = BoneTransforms[attach->ParentBone]
-			                     * StdMeshMatrix::Transform(Mesh->GetBone(attach->ParentBone).Transformation)
-			                     * attach->AttachTrans
-			                     * StdMeshMatrix::Transform(attach->Child->Mesh->GetBone(attach->ChildBone).InverseTransformation)
-			                     * StdMeshMatrix::Inverse(attach->Child->BoneTransforms[attach->ChildBone]);
+			attach->FinalTrans = GetBoneTransform(attach->ParentBone)
+				* StdMeshMatrix::Transform(Mesh->GetSkeleton().GetBone(attach->ParentBone).Transformation)
+				* attach->AttachTrans
+				* StdMeshMatrix::Transform(attach->Child->Mesh->GetSkeleton().GetBone(attach->ChildBone).InverseTransformation)
+				* StdMeshMatrix::Inverse(attach->Child->GetBoneTransform(attach->ChildBone));
 
 			attach->FinalTransformDirty = false;
 		}
 	}
 
-	BoneTransformsDirty = false;
+	SetBoneTransformsDirty(false);
 	return was_dirty;
 }
 
@@ -1286,8 +1441,8 @@ void StdMeshInstance::ReorderFaces(StdMeshMatrix* global_trans)
 		if(inst.Faces.size() > 0 && inst.CurrentFaceOrdering != StdSubMeshInstance::FO_Fixed)
 		{
 			const StdMeshVertex* vertices;
-			if(inst.GetNumVertices() > 0)
-				vertices = &inst.GetVertices()[0];
+			if(inst.GetSubMesh().GetNumVertices() > 0)
+				vertices = &inst.GetSubMesh().GetVertices()[0];
 			else
 				vertices = &GetSharedVertices()[0];
 			SortFacesArray(vertices, inst.Faces, inst.CurrentFaceOrdering, global_trans ? *global_trans : StdMeshMatrix::Identity());
@@ -1305,7 +1460,7 @@ void StdMeshInstance::CompileFunc(StdCompiler* pComp, AttachedMesh::DenumeratorF
 		assert(!AttachParent);
 		assert(AttachChildren.empty());
 		assert(AnimationStack.empty());
-		BoneTransformsDirty = true;
+		SetBoneTransformsDirty(true);
 
 		bool valid;
 		pComp->Value(mkNamingAdapt(valid, "Valid"));
@@ -1397,7 +1552,9 @@ void StdMeshInstance::DenumeratePointers()
 			AnimationNodes[i]->DenumeratePointers();
 
 	for(unsigned int i = 0; i < AttachChildren.size(); ++i)
+	{
 		AttachChildren[i]->DenumeratePointers();
+	}
 }
 
 void StdMeshInstance::ClearPointers(class C4Object* pObj)
@@ -1456,7 +1613,7 @@ void StdMeshInstance::InsertAnimationNode(AnimationNode* node, int slot, Animati
 	      break;*/
 	Number2 = Number1 + 1;
 
-	weight->Value = BoundBy(weight->Value, Fix0, itofix(1));
+	weight->Value = Clamp(weight->Value, Fix0, itofix(1));
 
 	if (Number1 == AnimationNodes.size()) AnimationNodes.push_back( (StdMeshInstance::AnimationNode*) NULL);
 	if (sibling && Number2 == AnimationNodes.size()) AnimationNodes.push_back( (StdMeshInstance::AnimationNode*) NULL);
@@ -1502,7 +1659,7 @@ void StdMeshInstance::InsertAnimationNode(AnimationNode* node, int slot, Animati
 		*iter = node;
 	}
 
-	BoneTransformsDirty = true;
+	SetBoneTransformsDirty(true);
 }
 
 bool StdMeshInstance::ExecuteAnimationNode(AnimationNode* node)
@@ -1558,8 +1715,8 @@ bool StdMeshInstance::ExecuteAnimationNode(AnimationNode* node)
 	{
 		if (provider->Value != old_value)
 		{
-			provider->Value = BoundBy(provider->Value, min, max);
-			BoneTransformsDirty = true;
+			provider->Value = Clamp(provider->Value, min, max);
+			SetBoneTransformsDirty(true);
 		}
 
 		if (node->GetType() == AnimationNode::LinearInterpolationNode)
@@ -1582,28 +1739,22 @@ bool StdMeshInstance::ExecuteAnimationNode(AnimationNode* node)
 	return true;
 }
 
-void StdMeshInstance::ApplyBoneTransformToVertices(const std::vector<StdSubMesh::Vertex>& mesh_vertices, std::vector<StdMeshVertex>& instance_vertices)
+void StdMeshInstance::SetBoneTransformsDirty(bool value)
 {
-	assert(mesh_vertices.size() == instance_vertices.size());
-	for (unsigned int j = 0; j < instance_vertices.size(); ++j)
-	{
-		const StdSubMesh::Vertex& vertex = mesh_vertices[j];
-		StdMeshVertex& instance_vertex = instance_vertices[j];
-		if (!vertex.BoneAssignments.empty())
-		{
-			instance_vertex.x = instance_vertex.y = instance_vertex.z = 0.0f;
-			instance_vertex.nx = instance_vertex.ny = instance_vertex.nz = 0.0f;
-			instance_vertex.u = vertex.u; instance_vertex.v = vertex.v;
+	BoneTransformsDirty = value;
 
-			for (unsigned int k = 0; k < vertex.BoneAssignments.size(); ++k)
-			{
-				const StdMeshVertexBoneAssignment& assignment = vertex.BoneAssignments[k];
-				instance_vertex += assignment.Weight * (BoneTransforms[assignment.BoneIndex] * vertex);
-			}
-		}
-		else
+	// only if the value is true, so that updates happen
+	if (value)
+	{
+		// Update attachment's attach transformations. Note this is done recursively.
+		for (AttachedMeshList::iterator iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
 		{
-			instance_vertex = vertex;
+			AttachedMesh* attach = *iter;
+
+			if (attach->GetFlags() & AM_MatchSkeleton)
+			{
+				attach->Child->SetBoneTransformsDirty(value);
+			}
 		}
 	}
 }

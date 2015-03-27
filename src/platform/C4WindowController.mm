@@ -1,28 +1,24 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Portions might be copyrighted by other authors who have contributed
- * to OpenClonk.
+ * Copyright (c) 2009-2015, The OpenClonk Team and contributors
  *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- * See isc_license.txt for full license and disclaimer.
+ * Distributed under the terms of the ISC license; see accompanying file
+ * "COPYING" for details.
  *
- * "Clonk" is a registered trademark of Matthes Bender.
- * See clonk_trademark_license.txt for full license.
+ * "Clonk" is a registered trademark of Matthes Bender, used with permission.
+ * See accompanying file "TRADEMARK" for details.
+ *
+ * To redistribute this file separately, substitute the full license texts
+ * for the above references.
  */
 
 #include <C4Include.h>
-#include <C4Fullscreen.h>
-#include <C4GraphicsSystem.h>
+#include <C4Application.h>
 #include <C4Viewport.h>
 #include <C4ViewportWindow.h>
-#include <C4Console.h>
-#include <C4Game.h>
+#include <C4FullScreen.h>
 #include <C4Landscape.h>
-
-#import <C4DrawGL.h>
 
 #import "C4WindowController.h"
 #import "C4DrawGLMac.h"
@@ -247,16 +243,16 @@ bool C4Viewport::ScrollBarsByViewPosition()
 {
 	if (PlayerLock) return false;
 	NSScrollView* scrollView = pWindow->objectiveCObject<C4WindowController>().scrollView;
-	[scrollView.horizontalScroller setToLandscapeCoordinate:ViewX size:GBackWdt viewportSize:ViewWdt zoom:GetZoom()];
-	[scrollView.verticalScroller setToLandscapeCoordinate:ViewY size:GBackHgt viewportSize:ViewHgt zoom:GetZoom()];
+	[scrollView.horizontalScroller setToLandscapeCoordinate:GetViewX() size:GBackWdt viewportSize:ViewWdt zoom:GetZoom()];
+	[scrollView.verticalScroller setToLandscapeCoordinate:GetViewY() size:GBackHgt viewportSize:ViewHgt zoom:GetZoom()];
 	return true;
 }
 
 bool C4Viewport::ViewPositionByScrollBars()
 {
 	NSScrollView* scrollView = pWindow->objectiveCObject<C4WindowController>().scrollView;
-	ViewX = [scrollView.horizontalScroller landscapeCoordinateForSize:GBackWdt viewportSize:ViewWdt zoom:GetZoom()];
-	ViewY = [scrollView.verticalScroller landscapeCoordinateForSize:GBackHgt viewportSize:ViewHgt zoom:GetZoom()];
+	SetViewX([scrollView.horizontalScroller landscapeCoordinateForSize:GBackWdt viewportSize:ViewWdt zoom:GetZoom()]);
+	SetViewY([scrollView.verticalScroller landscapeCoordinateForSize:GBackHgt viewportSize:ViewHgt zoom:GetZoom()]);
 	return true;
 }
 

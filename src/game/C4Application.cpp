@@ -133,6 +133,9 @@ bool C4Application::DoInit(int argc, char * argv[])
 	// Parse command line
 	ParseCommandLine(argc, argv);
 
+	// Open additional logs that depend on command line
+	OpenExtraLogs();
+
 	// Init external language packs
 	Languages.Init();
 	// Load language string table
@@ -172,7 +175,7 @@ bool C4Application::DoInit(int argc, char * argv[])
 	Add(pGameTimer = new C4ApplicationGameTimer());
 
 	// Initialize OpenGL
-	bool success = DDrawInit(this, !!isEditor, false, GetConfigWidth(), GetConfigHeight(), Config.Graphics.BitDepth, Config.Graphics.Monitor);
+	bool success = DDrawInit(this, GetConfigWidth(), GetConfigHeight(), Config.Graphics.BitDepth, Config.Graphics.Monitor);
 	if (!success) { LogFatal(LoadResStr("IDS_ERR_DDRAW")); Clear(); ShowGfxErrorDialog(); return false; }
 
 	if (!isEditor)
@@ -256,6 +259,8 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 			{"record", no_argument, 0, 'r'},
 
 			{"lobby", required_argument, 0, 'l'},
+
+			{"debug-opengl", no_argument, &Config.Graphics.DebugOpenGL, 1},
 			{0, 0, 0, 0}
 		};
 		int option_index = 0;
@@ -506,6 +511,13 @@ bool C4Application::PreInit()
 	// startup dialog: Only use if no next mission has been provided
 	bool fUseStartupDialog = !Game.HasScenario();
 
+	// Load graphics early, before we draw anything, since we need shaders
+	// loaded to draw.
+	Game.SetInitProgress(0.0f);
+	Log(LoadResStr("IDS_PRC_GFXRES"));
+	if (!GraphicsResource.Init()) return false;
+	Game.SetInitProgress(fUseStartupDialog ? 10.0f : 1.0f);
+
 	// Startup message board
 	if (!isEditor)
 		if (Config.Graphics.ShowStartupMessages || Game.NetworkActive)
@@ -513,7 +525,6 @@ bool C4Application::PreInit()
 			C4Facet cgo; cgo.Set(FullScreen.pSurface,0,0,C4GUI::GetScreenWdt(), C4GUI::GetScreenHgt());
 			GraphicsSystem.MessageBoard.Init(cgo,true);
 		}
-	Game.SetInitProgress(0.0f);
 
 	// init loader: Black screen for first start if a video is to be shown; otherwise default spec
 	if (fUseStartupDialog && !isEditor)
@@ -521,7 +532,7 @@ bool C4Application::PreInit()
 		if (!::GraphicsSystem.InitLoaderScreen(C4CFN_StartupBackgroundMain))
 			{ LogFatal(LoadResStr("IDS_PRC_ERRLOADER")); return false; }
 	}
-	Game.SetInitProgress(fUseStartupDialog ? 10.0f : 1.0f);
+	Game.SetInitProgress(fUseStartupDialog ? 20.0f : 2.0f);
 
 	if (!Game.PreInit()) return false;
 
@@ -700,6 +711,7 @@ void C4Application::GameTick()
 			Game.Execute();
 		// Sound
 		SoundSystem.Execute();
+		MusicSystem.Execute();
 		// Gamepad
 		if (pGamePadControl) pGamePadControl->Execute();
 		break;

@@ -39,7 +39,7 @@ global func Loc_Not(cond)
 	return [LOC_NOT, cond];
 }
 
-global func Loc_Or()
+global func Loc_Or(...)
 {
 	var conds = [LOC_OR];
 	for (var i = 0; i < 10; ++i)
@@ -50,7 +50,7 @@ global func Loc_Or()
 	return conds;
 }
 
-global func Loc_And()
+global func Loc_And(...)
 {
 	var conds = [LOC_AND];
 	for (var i = 0; i < 10; ++i)
@@ -116,8 +116,8 @@ global func Loc_Wall(int direction)
 	else
 	if(direction & CNAT_Bottom) y = 1;
 	
-	var both_left_right = !!((direction & CNAT_Top) && (direction & CNAT_Bottom));
-	var both_top_bottom = !!((direction & CNAT_Left) && (direction & CNAT_Right));	
+	var both_left_right = !!((direction & CNAT_Left) && (direction & CNAT_Right));
+	var both_top_bottom = !!((direction & CNAT_Top) && (direction & CNAT_Bottom));
 	
 	return [LOC_WALL, x, y, both_left_right, both_top_bottom];
 }
@@ -131,7 +131,7 @@ global func Loc_Space(int space, bool vertical)
 	return [LOC_SPACE, space, vertical];
 }
 
-global func FindLocation(condition1)
+global func FindLocation(condition1, ...)
 {
 	var rect = nil;
 	var xdir = 0, ydir = 0, xmod = nil, ymod = nil;

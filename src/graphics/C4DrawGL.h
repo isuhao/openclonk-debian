@@ -25,17 +25,53 @@
 #endif
 #include <GL/glew.h>
 
-#if defined(__APPLE__)
 #ifdef USE_COCOA
 #import "ObjectiveCAssociated.h"
 #endif
-#include <OpenGL/glu.h>
-#else
-#include <GL/glu.h>
-#endif
 #include <C4Draw.h>
+#include <C4Shader.h>
 
 class C4Window;
+
+class C4DrawGLError: public std::exception
+{
+public:
+	C4DrawGLError(const StdStrBuf& buf): Buf(buf) {}
+	virtual ~C4DrawGLError() throw() {}
+
+	virtual const char* what() const throw() { return Buf.getData(); }
+
+private:
+	StdCopyStrBuf Buf;
+};
+
+// Shader combinations
+static const int C4SSC_MOD2 = 1; // signed addition instead of multiplication for clrMod
+static const int C4SSC_BASE = 2; // use a base texture instead of just a single color
+static const int C4SSC_OVERLAY = 4; // use a colored overlay on top of base texture
+static const int C4SSC_LIGHT = 8; // use dynamic+ambient lighting
+static const int C4SSC_NORMAL = 16; // extract normals from normal map instead of (0,0,1)
+
+// Uniform data we give the sprite shader (constants from its viewpoint)
+enum C4SS_Uniforms
+{
+	C4SSU_ClrMod, // always
+	C4SSU_BaseTex, // C4SSC_BASE
+	C4SSU_OverlayTex, // C4SSC_OVERLAY
+	C4SSU_OverlayClr, // C4SSC_OVERLAY
+
+	C4SSU_LightTex, // C4SSC_LIGHT
+	C4SSU_LightTransform, // C4SSC_LIGHT
+	C4SSU_NormalTex, // C4SSC_LIGHT | C4SSC_NORMAL
+
+	C4SSU_AmbientTex, // C4SSC_LIGHT
+	C4SSU_AmbientTransform, // C4SSC_LIGHT
+	C4SSU_AmbientBrightness, // C4SSC_LIGHT
+
+	C4SSU_Bones, // for meshes
+
+	C4SSU_Count
+};
 
 // one OpenGL context
 class CStdGLCtx
@@ -92,53 +128,69 @@ protected:
 	CStdGLCtx * pMainCtx;         // main GL context
 	CStdGLCtx *pCurrCtx;        // current context (owned if fullscreen)
 	int iClrDpt;                // color depth
-	// shaders for the ARB extension
-	GLuint shaders[12];
-	// vertex buffer object
-	GLuint vbo;
 	// texture for smooth lines
 	GLuint lines_tex;
+	// programs for drawing points, lines, quads
+
+	// Sprite shaders -- there is a variety of shaders to avoid
+	// conditionals in the GLSL code.
+	C4Shader SpriteShader;
+	C4Shader SpriteShaderMod2;
+	C4Shader SpriteShaderBase;
+	C4Shader SpriteShaderBaseMod2;
+	C4Shader SpriteShaderBaseOverlay;
+	C4Shader SpriteShaderBaseOverlayMod2;
+
+	C4Shader SpriteShaderLight;
+	C4Shader SpriteShaderLightMod2;
+	C4Shader SpriteShaderLightBase;
+	C4Shader SpriteShaderLightBaseMod2;
+	C4Shader SpriteShaderLightBaseOverlay;
+	C4Shader SpriteShaderLightBaseOverlayMod2;
+	C4Shader SpriteShaderLightBaseNormal;
+	C4Shader SpriteShaderLightBaseNormalMod2;
+	C4Shader SpriteShaderLightBaseNormalOverlay;
+	C4Shader SpriteShaderLightBaseNormalOverlayMod2;
 public:
 	// General
 	void Clear();
 	void Default();
 	virtual bool IsOpenGL() { return true; }
-	virtual bool IsShaderific() { return shaders[0] != 0; }
+	virtual bool IsShaderific() { return true; }
 	virtual bool OnResolutionChanged(unsigned int iXRes, unsigned int iYRes); // reinit clipper for new resolution
 	// Clipper
 	bool UpdateClipper(); // set current clipper to render target
-	bool PrepareMaterial(StdMeshMaterial& mat);
+	bool PrepareMaterial(StdMeshMatManager& mat_manager, StdMeshMaterialLoader& loader, StdMeshMaterial& mat);
 	// Surface
 	bool PrepareRendering(C4Surface * sfcToSurface); // check if/make rendering possible to given surface
 	virtual CStdGLCtx *CreateContext(C4Window * pWindow, C4AbstractApp *pApp);
 #ifdef USE_WIN32_WINDOWS
 	virtual CStdGLCtx *CreateContext(HWND hWindow, C4AbstractApp *pApp);
-	void TaskOut();
 #endif
 	// Blit
-	void SetupTextureEnv(bool fMod2, bool landscape);
-	virtual void PerformBlt(C4BltData &rBltData, C4TexRef *pTex, DWORD dwModClr, bool fMod2, bool fExact);
+	void SetupMultiBlt(C4ShaderCall& call, const C4BltTransform* pTransform, GLuint baseTex, GLuint overlayTex, GLuint normalTex, DWORD dwOverlayModClr);
+	void ResetMultiBlt();
 	virtual void PerformMesh(StdMeshInstance &instance, float tx, float ty, float twdt, float thgt, DWORD dwPlayerColor, C4BltTransform* pTransform);
-	virtual void BlitLandscape(C4Surface * sfcSource, float fx, float fy,
-	                           C4Surface * sfcTarget, float tx, float ty, float wdt, float hgt, const C4Surface * textures[]);
 	void FillBG(DWORD dwClr=0);
 	// Drawing
-	void DrawQuadDw(C4Surface * sfcTarget, float *ipVtx, DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, DWORD dwClr4);
-	void PerformLine(C4Surface * sfcTarget, float x1, float y1, float x2, float y2, DWORD dwClr, float width);
-	void PerformPix(C4Surface * sfcDest, float tx, float ty, DWORD dwCol);
+	virtual void PerformMultiPix(C4Surface* sfcTarget, const C4BltVertex* vertices, unsigned int n_vertices);
+	virtual void PerformMultiLines(C4Surface* sfcTarget, const C4BltVertex* vertices, unsigned int n_vertices, float width);
+	virtual void PerformMultiTris(C4Surface* sfcTarget, const C4BltVertex* vertices, unsigned int n_vertices, const C4BltTransform* pTransform, C4TexRef* pTex, C4TexRef* pOverlay, C4TexRef* pNormal, DWORD dwOverlayClrMod);
 	// device objects
 	bool RestoreDeviceObjects();    // restore device dependent objects
 	bool InvalidateDeviceObjects(); // free device dependent objects
-	void SetTexture();
-	void ResetTexture();
 	bool DeviceReady() { return !!pMainCtx; }
-	bool EnsureAnyContext();
+	bool InitShaders(C4GroupSet* pGroups); // load shaders from given group
+	C4Shader* GetSpriteShader(int ssc);
+	C4Shader* GetSpriteShader(bool haveBase, bool haveOverlay, bool haveNormal);
 
 protected:
-	bool CreatePrimarySurfaces(bool Editor, unsigned int iXRes, unsigned int iYRes, int iColorDepth, unsigned int iMonitor);
+	bool CreatePrimarySurfaces(unsigned int iXRes, unsigned int iYRes, int iColorDepth, unsigned int iMonitor);
 
 	bool CheckGLError(const char *szAtOp);
 	virtual bool Error(const char *szMsg);
+
+	bool CreateSpriteShader(C4Shader& shader, const char* name, int ssc, C4GroupSet* pGroups);
 
 	friend class C4Surface;
 	friend class C4TexRef;
@@ -147,6 +199,7 @@ protected:
 	friend class C4StartupOptionsDlg;
 	friend class C4FullScreen;
 	friend class C4Window;
+	friend class C4ShaderCall;
 };
 
 // Global access pointer

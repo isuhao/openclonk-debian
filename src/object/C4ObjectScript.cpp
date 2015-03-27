@@ -155,10 +155,10 @@ static C4Void FnSetPosition(C4Object *Obj, long iX, long iY, bool fCheckBounds, 
 	return C4Void();
 }
 
-static C4Void FnDoCon(C4Object *Obj, long iChange, long iPrec)
+static C4Void FnDoCon(C4Object *Obj, long iChange, long iPrec, bool bGrowFromCenter)
 {
 	if (!iPrec) iPrec = 100;
-	Obj->DoCon(FullCon*iChange/iPrec);
+	Obj->DoCon(FullCon*iChange / iPrec, bGrowFromCenter);
 	return C4Void();
 }
 
@@ -1079,7 +1079,6 @@ static bool FnAddMenuItem(C4Object *Obj, C4String * szCaption, C4String * szComm
 	{
 		C4PropList *gfx_proplist = XPar.getPropList();
 		fctSymbol.Create(iSymbolSize,iSymbolSize);
-		uint32_t dwClr = XPar.getInt();
 		if (!Game.DrawPropListSpecImage(fctSymbol, gfx_proplist))
 			return false;
 	}
@@ -1336,10 +1335,17 @@ static C4Void FnSetColor(C4Object *Obj, long iValue)
 	return C4Void();
 }
 
-static C4Void FnSetPlrViewRange(C4Object *Obj, long iRange)
+static C4Void FnSetLightRange(C4Object *Obj, long iRange, Nillable<long> iFadeoutRange)
 {
+	if (iFadeoutRange.IsNil())
+	{
+		if(iRange == 0)
+			iFadeoutRange = 0;
+		else
+			iFadeoutRange = C4FOW_DefLightFadeoutRangeX;
+	}
 	// set range
-	Obj->SetPlrViewRange(iRange);
+	Obj->SetLightRange(iRange, iFadeoutRange);
 	// success
 	return C4Void();
 }
@@ -1532,7 +1538,7 @@ static bool FnSetMenuSize(C4Object *Obj, long iCols, long iRows)
 	// get menu
 	C4Menu *pMnu=Obj->Menu;
 	if (!pMnu || !pMnu->IsActive()) return false;
-	pMnu->SetSize(BoundBy<long>(iCols, 0, 50), BoundBy<long>(iRows, 0, 50));
+	pMnu->SetSize(Clamp<long>(iCols, 0, 50), Clamp<long>(iRows, 0, 50));
 	return true;
 }
 
@@ -1605,9 +1611,9 @@ static C4Void FnSetObjectLayer(C4Object *Obj, C4Object *pNewLayer)
 	// set layer object
 	Obj->Layer = pNewLayer;
 	// set for all contents as well
-	for (C4ObjectLink *pLnk=Obj->Contents.First; pLnk; pLnk=pLnk->Next)
-		if ((Obj=pLnk->Obj) && Obj->Status)
-			Obj->Layer = pNewLayer;
+	for (C4Object* contentObj : Obj->Contents)
+		if (contentObj && contentObj->Status)
+			contentObj->Layer = pNewLayer;
 	// success
 	return C4Void();
 }
@@ -1866,7 +1872,7 @@ static Nillable<int> FnTransformBone(C4Object *Obj, C4String *szBoneName, C4Valu
 		if (!s_node || s_node->GetSlot() != iSlot) return C4Void();
 	}
 
-	const StdMeshBone* bone = Instance->GetMesh().GetBoneByName(szBoneName->GetData());
+	const StdMeshBone* bone = Instance->GetMesh().GetSkeleton().GetBoneByName(szBoneName->GetData());
 	if(!bone) return C4Void();
 
 	StdMeshInstance::ValueProvider* w_provider = CreateValueProviderFromArray(Obj, *WeightProvider);
@@ -1947,7 +1953,7 @@ static Nillable<int> FnGetAnimationLength(C4Object *Obj, C4String *szAnimation, 
 		Instance = Attached->Child;
 	}
 
-	const StdMeshAnimation* animation = Instance->GetMesh().GetAnimationByName(szAnimation->GetData());
+	const StdMeshAnimation* animation = Instance->GetMesh().GetSkeleton().GetAnimationByName(szAnimation->GetData());
 	if (!animation) return C4Void();
 	return fixtoi(ftofix(animation->Length), 1000); // sync critical!
 }
@@ -2206,7 +2212,7 @@ static bool FnCreateParticleAtBone(C4Object* Obj, C4String* szName, C4String* sz
 	// Get bone
 	if(!Obj->pMeshInstance) return false;
 	const StdMesh& mesh = Obj->pMeshInstance->GetMesh();
-	const StdMeshBone* bone = mesh.GetBoneByName(szBoneName->GetData());
+	const StdMeshBone* bone = mesh.GetSkeleton().GetBoneByName(szBoneName->GetData());
 	if(!bone) return false;
 	// get particle
 	C4ParticleDef *pDef=::Particles.definitions.GetDef(FnStringPar(szName));
@@ -2283,29 +2289,33 @@ static bool FnCreateParticleAtBone(C4Object* Obj, C4String* szName, C4String* sz
 	// However, the block would no longer be equal to where it came from.
 	x.x -= fixtof(Obj->fix_x);
 	x.y -= fixtof(Obj->fix_y);
-	// Finally, apply DrawTransform to the world coordinates
-	StdMeshMatrix DrawTransform;
+	// Finally, apply DrawTransform to the world coordinates,
+	// and incorporate object rotation into the transformation
+	C4DrawTransform draw_transform;
 	if(Obj->pDrawTransform)
 	{
-		C4DrawTransform transform(*Obj->pDrawTransform, fixtof(Obj->fix_x), fixtof(Obj->fix_y));
-
-		DrawTransform(0, 0) = transform.mat[0];
-		DrawTransform(0, 1) = transform.mat[1];
-		DrawTransform(0, 2) = 0.0f;
-		DrawTransform(0, 3) = transform.mat[2];
-		DrawTransform(1, 0) = transform.mat[3];
-		DrawTransform(1, 1) = transform.mat[4];
-		DrawTransform(1, 2) = 0.0f;
-		DrawTransform(1, 3) = transform.mat[5];
-		DrawTransform(2, 0) = 0.0f;
-		DrawTransform(2, 1) = 0.0f;
-		DrawTransform(2, 2) = 1.0f;
-		DrawTransform(2, 3) = 0.0f;
+		draw_transform.SetTransformAt(*Obj->pDrawTransform, fixtof(Obj->fix_x), fixtof(Obj->fix_y));
+		draw_transform.Rotate(fixtof(Obj->fix_r), 0.0f, 0.0f);
 	}
 	else
 	{
-		DrawTransform = StdMeshMatrix::Identity();
+		draw_transform.SetRotate(fixtof(Obj->fix_r), 0.0f, 0.0f);
 	}
+
+	StdMeshMatrix DrawTransform;
+	DrawTransform(0, 0) = draw_transform.mat[0];
+	DrawTransform(0, 1) = draw_transform.mat[1];
+	DrawTransform(0, 2) = 0.0f;
+	DrawTransform(0, 3) = draw_transform.mat[2];
+	DrawTransform(1, 0) = draw_transform.mat[3];
+	DrawTransform(1, 1) = draw_transform.mat[4];
+	DrawTransform(1, 2) = 0.0f;
+	DrawTransform(1, 3) = draw_transform.mat[5];
+	DrawTransform(2, 0) = 0.0f;
+	DrawTransform(2, 1) = 0.0f;
+	DrawTransform(2, 2) = 1.0f;
+	DrawTransform(2, 3) = 0.0f;
+
 	x = DrawTransform * x;
 	dir = DrawTransform * dir;
 	x.x += DrawTransform(0,3);
@@ -2333,6 +2343,7 @@ static bool FnCreateParticleAtBone(C4Object* Obj, C4String* szName, C4String* sz
 
 C4ScriptConstDef C4ScriptObjectConstMap[]=
 {
+	{ "C4D_None"               ,C4V_Int,          C4D_None},
 	{ "C4D_All"                ,C4V_Int,          C4D_All},
 	{ "C4D_StaticBack"         ,C4V_Int,          C4D_StaticBack},
 	{ "C4D_Structure"          ,C4V_Int,          C4D_Structure},
@@ -2485,9 +2496,11 @@ C4ScriptConstDef C4ScriptObjectConstMap[]=
 	{ "C4AVP_R"                   ,C4V_Int,      C4AVP_R },
 	{ "C4AVP_AbsX"                ,C4V_Int,      C4AVP_AbsX },
 	{ "C4AVP_AbsY"                ,C4V_Int,      C4AVP_AbsY },
+	{ "C4AVP_Dist"                ,C4V_Int,      C4AVP_Dist },
 	{ "C4AVP_XDir"                ,C4V_Int,      C4AVP_XDir },
 	{ "C4AVP_YDir"                ,C4V_Int,      C4AVP_YDir },
 	{ "C4AVP_RDir"                ,C4V_Int,      C4AVP_RDir },
+	{ "C4AVP_AbsRDir"             ,C4V_Int,      C4AVP_AbsRDir },
 	{ "C4AVP_CosR"                ,C4V_Int,      C4AVP_CosR },
 	{ "C4AVP_SinR"                ,C4V_Int,      C4AVP_SinR },
 	{ "C4AVP_CosV"                ,C4V_Int,      C4AVP_CosV },
@@ -2500,6 +2513,7 @@ C4ScriptConstDef C4ScriptObjectConstMap[]=
 
 	{ "AM_None"                   ,C4V_Int,      StdMeshInstance::AM_None },
 	{ "AM_DrawBefore"             ,C4V_Int,      StdMeshInstance::AM_DrawBefore },
+	{ "AM_MatchSkeleton"          ,C4V_Int,      StdMeshInstance::AM_MatchSkeleton },
 
 	{ NULL, C4V_Nil, 0}
 };
@@ -2603,7 +2617,7 @@ void InitObjectFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "SetMass", FnSetMass);
 	AddFunc(pEngine, "GetColor", FnGetColor);
 	AddFunc(pEngine, "SetColor", FnSetColor);
-	AddFunc(pEngine, "SetPlrViewRange", FnSetPlrViewRange);
+	AddFunc(pEngine, "SetLightRange", FnSetLightRange);
 	AddFunc(pEngine, "SetPicture", FnSetPicture);
 	AddFunc(pEngine, "GetProcedure", FnGetProcedure);
 	AddFunc(pEngine, "CanConcatPictureWith", FnCanConcatPictureWith);

@@ -40,6 +40,8 @@
 #include <locale.h>
 #endif
 
+#include <C4Application.h>
+
 void C4ConfigGeneral::CompileFunc(StdCompiler *pComp)
 {
 	// For those without the ability to intuitively guess what the falses and trues mean:
@@ -78,8 +80,10 @@ void C4ConfigGeneral::CompileFunc(StdCompiler *pComp)
 
 void C4ConfigDeveloper::CompileFunc(StdCompiler *pComp)
 {
-	pComp->Value(mkNamingAdapt(AutoFileReload,      "AutoFileReload",     1              ,false, true));
-	pComp->Value(mkNamingAdapt(ExtraWarnings,      "ExtraWarnings",     0              ,false, true));
+	pComp->Value(mkNamingAdapt(AutoFileReload,      "AutoFileReload",     1                   , false, true));
+	pComp->Value(mkNamingAdapt(ExtraWarnings,      "ExtraWarnings",       0                   , false, true));
+	pComp->Value(mkNamingAdapt(s(TodoFilename),    "TodoFilename",       "{SCENARIO}/TODO.txt", false, true));
+	pComp->Value(mkNamingAdapt(s(AltTodoFilename), "AltTodoFilename",    "TODO.txt"           , false, true));
 }
 
 void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
@@ -112,9 +116,7 @@ void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(Monitor,               "Monitor",              0             )); // 0 = D3DADAPTER_DEFAULT
 	pComp->Value(mkNamingAdapt(FireParticles,         "FireParticles",        1         ));
 	pComp->Value(mkNamingAdapt(MaxRefreshDelay,       "MaxRefreshDelay",      30            ));
-	pComp->Value(mkNamingAdapt(EnableShaders,         "Shader",               0             ,false, true));
 	pComp->Value(mkNamingAdapt(NoOffscreenBlits,      "NoOffscreenBlits",     1             ));
-	pComp->Value(mkNamingAdapt(ClipManuallyE,         "ClipManuallyE",        1             ));
 	pComp->Value(mkNamingAdapt(MultiSampling,         "MultiSampling",        4             ));
 	pComp->Value(mkNamingAdapt(AutoFrameSkip,         "AutoFrameSkip",        1          ));
 }
@@ -163,6 +165,8 @@ void C4ConfigNetwork::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(LastUpdateTime,          "LastUpdateTime",       0             ));
 #endif
 	pComp->Value(mkNamingAdapt(AsyncMaxWait,            "AsyncMaxWait",         2             ));
+	pComp->Value(mkNamingAdapt(PacketLogging,           "PacketLogging",        0             ));
+	
 
 	pComp->Value(mkNamingAdapt(s(PuncherAddress),       "PuncherAddress",       "clonk.de:11115")); // maybe store default for this one?
 	pComp->Value(mkNamingAdapt(mkParAdapt(LastLeagueServer, StdCompiler::RCT_All),     "LastLeagueServer",     ""            ));
@@ -179,7 +183,7 @@ void C4ConfigLobby::CompileFunc(StdCompiler *pComp)
 
 void C4ConfigIRC::CompileFunc(StdCompiler *pComp)
 {
-	pComp->Value(mkNamingAdapt(s(Server),               "Server",               "irc.ham.de.euirc.net", false, true));
+	pComp->Value(mkNamingAdapt(s(Server),               "Server",               "irc.euirc.net", false, true));
 	pComp->Value(mkNamingAdapt(s(Nick),                 "Nick",                 ""                    , false, true));
 	pComp->Value(mkNamingAdapt(s(RealName),             "RealName",             ""                    , false, true));
 	pComp->Value(mkNamingAdapt(s(Channel),              "Channel",              "#openclonk"    , false, true));
@@ -240,7 +244,7 @@ void C4ConfigControls::CompileFunc(StdCompiler *pComp)
 {
 #ifndef USE_CONSOLE
 	pComp->Value(mkNamingAdapt(UserSets, "UserSets",    C4PlayerControlAssignmentSets()));
-	pComp->Value(mkNamingAdapt(MouseAScroll,      "MouseAutoScroll",      0));
+	pComp->Value(mkNamingAdapt(MouseAutoScroll,      "MouseAutoScroll",      0 /* change default 33 to enable */ ));
 	pComp->Value(mkNamingAdapt(GamepadGuiControl, "GamepadGuiControl",    0,     false, true));
 #endif
 }

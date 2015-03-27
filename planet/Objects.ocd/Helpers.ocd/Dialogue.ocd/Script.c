@@ -1,7 +1,8 @@
 /**
 	Dialogue
-	
 	Attach to a non player charachter to provide a message interface.
+	
+	@author Sven
 */
 
 
@@ -28,7 +29,7 @@ global func SetDialogue(string name, bool attention)
 {
 	if (!this)
 		return;
-	var dialogue = CreateObject(Dialogue);
+	var dialogue = CreateObjectAbove(Dialogue);
 	dialogue->InitDialogue(name, this, attention);
 	
 	dialogue->SetObjectLayer(nil);

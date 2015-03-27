@@ -45,7 +45,7 @@ public func ContainedUseStart(object clonk, int ix, int iy)
 	}
 	else
 	{
-		reticle = CreateObject(GUI_Reticle);
+		reticle = CreateObjectAbove(GUI_Reticle);
 		reticle->SetOwner(clonk->GetController());
 		reticle->SetAction("Show", this);
 	}
@@ -288,6 +288,12 @@ public func FaceRight()
 {
 	SetR(90);
 	RollPlane(1,true);
+}
+
+public func FaceLeft()
+{
+	SetR(-90);
+	RollPlane(0,true);
 }
 
 public func IsProjectileTarget(target,shooter) { return true; }

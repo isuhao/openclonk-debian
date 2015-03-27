@@ -38,26 +38,27 @@
 #include <set>
 
 const int32_t
-C4D_All            =      ~0,
-C4D_StaticBack     =    1<<0,
-C4D_Structure      =    1<<1,
-C4D_Vehicle        =    1<<2,
-C4D_Living         =    1<<3,
-C4D_Object         =    1<<4,
+C4D_None           =     0,
+C4D_All            =    ~0,
+C4D_StaticBack     =  1<<0,
+C4D_Structure      =  1<<1,
+C4D_Vehicle        =  1<<2,
+C4D_Living         =  1<<3,
+C4D_Object         =  1<<4,
 
-C4D_Goal             =  1<<5,
-C4D_Rule             =  1<<6,
-C4D_Environment      =  1<<7,
+C4D_Goal           =  1<<5,
+C4D_Rule           =  1<<6,
+C4D_Environment    =  1<<7,
 
-C4D_Background       =  1<<12,
-C4D_Parallax         =  1<<13,
-C4D_MouseSelect      =  1<<14,
-C4D_Foreground       =  1<<15,
-C4D_MouseIgnore      =  1<<16,
-C4D_IgnoreFoW        =  1<<17,
+C4D_Background     = 1<<12,
+C4D_Parallax       = 1<<13,
+C4D_MouseSelect    = 1<<14,
+C4D_Foreground     = 1<<15,
+C4D_MouseIgnore    = 1<<16,
+C4D_IgnoreFoW      = 1<<17,
 
-C4D_SortLimit = C4D_StaticBack | C4D_Structure | C4D_Vehicle | C4D_Living | C4D_Object
-              | C4D_Background | C4D_Foreground;
+C4D_SortLimit      = C4D_StaticBack | C4D_Structure | C4D_Vehicle | C4D_Living | C4D_Object
+                   | C4D_Background | C4D_Foreground;
 
 const int32_t C4Plane_Structure = 200;
 
@@ -101,7 +102,7 @@ class C4Def: public C4PropListStatic
 {
 public:
 	C4ID id;
-	int32_t rC4XVer[3];
+	int32_t rC4XVer[2];
 	C4IDList RequireDef;
 	C4Shape Shape;
 	C4Rect Entrance;
@@ -127,7 +128,6 @@ public:
 	int32_t BorderBound;
 	int32_t LiftTop;
 	int32_t GrabPutGet;
-	int32_t ContainBlast;
 	int32_t UprightAttach;
 	int32_t ContactFunctionCalls;
 	int32_t Line;
@@ -161,6 +161,16 @@ public:
 protected:
 	bool Compile(const char *szSource, const char *szName);
 	bool Decompile(StdStrBuf *pOut, const char *szName);
+private:
+	void LoadMeshMaterials(C4Group &hGroup);
+	bool LoadParticleDef(C4Group &hGroup);
+	bool LoadSolidMask(C4Group &hGroup);
+	bool LoadGraphics(C4Group &hGroup, StdMeshSkeletonLoader &loader);
+	void LoadScript(C4Group &hGroup, const char* szLanguage);
+	void LoadClonkNames(C4Group &hGroup, C4ComponentHost* pClonkNames, const char* szLanguage);
+	void LoadRankNames(C4Group &hGroup, const char* szLanguage);
+	void LoadRankFaces(C4Group &hGroup);
+	void LoadSounds(C4Group &hGroup, C4SoundSystem* pSoundSystem);
 
 
 // Here begins the C4Def
@@ -196,6 +206,7 @@ public:
 	void Clear();
 	void Default();
 	bool Load(C4Group &hGroup,
+		      StdMeshSkeletonLoader &loader,
 	          DWORD dwLoadWhat, const char *szLanguage,
 	          class C4SoundSystem *pSoundSystem = NULL);
 	void Draw(C4Facet &cgo, bool fSelected=false, DWORD iColor=0, C4Object *pObj=NULL, int32_t iPhaseX=0, int32_t iPhaseY=0,C4DrawTransform* trans=NULL);

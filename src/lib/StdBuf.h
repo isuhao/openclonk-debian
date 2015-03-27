@@ -26,7 +26,6 @@
 #include <cstring>
 #include <cassert>
 #include <cstdarg>
-#include <utility>
 #include <algorithm>
 
 // debug memory management
@@ -735,16 +734,6 @@ public:
 	StdCopyStrBuf &operator = (const char *szString) { Copy(szString); return *this; }
 
 };
-
-#if 0
-// const char* + StdStrBuf
-inline StdStrBuf operator + (const char* szString, const StdStrBuf& Buf2)
-{
-	StdStrBuf Buf(szString);
-	Buf.Append(Buf2);
-	return Buf;
-}
-#endif
 
 // Wrappers
 extern StdStrBuf FormatString(const char *szFmt, ...) GNUC_FORMAT_ATTRIBUTE;

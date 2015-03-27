@@ -20,19 +20,17 @@
 
 #include <C4Components.h>
 #include <C4Game.h>
-#include <C4League.h>
-#include <C4Console.h>
 #include <C4Log.h>
-#include <C4Player.h>
 #include <C4Landscape.h>
 #include <C4PXS.h>
 #include <C4MassMover.h>
-#include <C4ScriptHost.h>
 #include <C4PlayerList.h>
-#include <C4GameObjects.h>
 #include <C4RoundResults.h>
 #include <C4Record.h>
 #include <C4Version.h>
+#include <C4GameParameters.h>
+#include <C4Value.h>
+#include <C4Network2.h>
 
 // *** C4GameSave main class
 
@@ -62,7 +60,6 @@ bool C4GameSave::SaveCore()
 	rC4S = Game.C4S;
 	// Always mark current engine version
 	rC4S.Head.C4XVer[0]=C4XVER1; rC4S.Head.C4XVer[1]=C4XVER2;
-	rC4S.Head.C4XVer[2]=C4XVER3;
 	// Some flags are not to be set for initial settings:
 	//  They depend on whether specific runtime data is present, which may simply not be stored into initial
 	//  saves, because they rely on any data present and up-to-date within the scenario!
@@ -297,7 +294,7 @@ void C4GameSave::WriteDescGameTime(StdStrBuf &sBuf)
 
 void C4GameSave::WriteDescEngine(StdStrBuf &sBuf)
 {
-	char ver[32]; sprintf(ver, "%d.%d.%d", (int)C4XVER1, (int)C4XVER2, (int)C4XVER3);
+	char ver[32]; sprintf(ver, "%d.%d", (int)C4XVER1, (int)C4XVER2);
 	sBuf.AppendFormat(LoadResStr("IDS_DESC_VERSION"), ver);
 	WriteDescLineFeed(sBuf);
 }
@@ -539,7 +536,7 @@ void C4GameSaveRecord::AdjustCore(C4Scenario &rC4S)
 	rC4S.Head.Icon=29;
 	// default record title
 	char buf[1024 + 1];
-	sprintf(buf, "%03i %s [%d.%d.%d]", iNum, Game.ScenarioTitle.getData(), (int)C4XVER1, (int)C4XVER2, (int)C4XVER3);
+	sprintf(buf, "%03i %s [%d.%d]", iNum, Game.ScenarioTitle.getData(), (int)C4XVER1, (int)C4XVER2);
 	SCopy(buf, rC4S.Head.Title, C4MaxTitle);
 }
 

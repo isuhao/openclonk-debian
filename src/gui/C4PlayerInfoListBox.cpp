@@ -20,7 +20,6 @@
 
 #include <C4PlayerInfo.h>
 #include <C4Network2Dialogs.h>
-#include <C4GameDialogs.h>
 #include <C4Teams.h>
 #include <C4Game.h>
 #include <C4FileSelDlg.h>
@@ -29,6 +28,7 @@
 #include <C4Network2.h>
 #include <C4GameControl.h>
 #include <C4RoundResults.h>
+#include <C4GameLobby.h>
 
 DWORD GenerateRandomPlayerColor(int32_t iTry); // in C4PlayerInfoConflicts.cpp
 
@@ -433,7 +433,7 @@ void C4PlayerInfoListBox::PlayerListItem::UpdateScoreLabel(C4PlayerInfo *pInfo)
 			iSym = pInfo->getLeagueRankSymbol();
 		if (iSym && !fShownCollapsed)
 		{
-			C4GUI::Icons eRankIcon = (C4GUI::Icons) (C4GUI::Ico_Rank1 + BoundBy<int32_t>(iSym-1, 0, C4GUI::Ico_Rank9-C4GUI::Ico_Rank1));
+			C4GUI::Icons eRankIcon = (C4GUI::Icons) (C4GUI::Ico_Rank1 + Clamp<int32_t>(iSym-1, 0, C4GUI::Ico_Rank9-C4GUI::Ico_Rank1));
 			pRankIcon->SetVisibility(true);
 			pRankIcon->SetIcon(eRankIcon);
 		}

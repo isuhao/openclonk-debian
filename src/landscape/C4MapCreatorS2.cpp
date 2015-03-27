@@ -18,12 +18,11 @@
 #include <C4Include.h>
 #include <C4MapCreatorS2.h>
 #include <C4Random.h>
-#include <C4Game.h>
-#include <C4Aul.h>
 #include <C4Material.h>
 #include <C4ScriptHost.h>
 #include <C4Texture.h>
 #include <C4Record.h>
+#include <CSurface8.h>
 
 namespace {
 	// node attribute entry for SetField search
@@ -420,7 +419,7 @@ bool C4MCOverlay::SetField(C4MCParser *pParser, const char *szField, const char 
 				break;
 			case C4MCV_Zoom:
 				// store calculated zoom
-				Target.As<int32_t>()=BoundBy<int32_t>(C4MC_ZoomRes-IntPar,1,C4MC_ZoomRes*2);
+				Target.As<int32_t>()=Clamp<int32_t>(C4MC_ZoomRes-IntPar,1,C4MC_ZoomRes*2);
 				break;
 			case C4MCV_ScriptFunc:
 			{

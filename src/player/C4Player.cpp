@@ -57,9 +57,8 @@ C4Player::~C4Player()
 
 bool C4Player::ObjectInCrew(C4Object *tobj)
 {
-	C4Object *cobj; C4ObjectLink *clnk;
 	if (!tobj) return false;
-	for (clnk=Crew.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
+	for (C4Object *cobj : Crew)
 		if (cobj==tobj) return true;
 	return false;
 }
@@ -78,11 +77,6 @@ void C4Player::ClearPointers(C4Object *pObj, bool fDeath)
 	if (ViewCursor==pObj) ViewCursor = NULL;
 	// View
 	if (ViewTarget==pObj) ViewTarget=NULL;
-	// FoW
-	// (do not clear locals!)
-	// no clear when death to do normal decay
-	if (!fDeath)
-		while (FoWViewObjs.Remove(pObj)) {}
 	// Menu
 	Menu.ClearPointers(pObj);
 	// messageboard-queries
@@ -184,24 +178,9 @@ void C4Player::Execute()
 	}
 
 	// Tick1
-	UpdateCounts();
 	UpdateView();
 	ExecuteControl();
 	Menu.Execute();
-
-	// decay of dead viewtargets
-	C4ObjectLink *pLnkNext = FoWViewObjs.First, *pLnk;
-	while ((pLnk = pLnkNext))
-	{
-		pLnkNext = pLnk->Next;
-		C4Object *pDeadClonk = pLnk->Obj;
-		if (!pDeadClonk->GetAlive() && (pDeadClonk->Category & C4D_Living) && pDeadClonk->Status)
-		{
-			pDeadClonk->PlrViewRange -= 10;
-			if (pDeadClonk->PlrViewRange <= 0)
-				FoWViewObjs.Remove(pDeadClonk);
-		}
-	}
 
 	// ::Game.iTick35
 	if (!::Game.iTick35 && Status==PS_Normal)
@@ -360,11 +339,10 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 	GameJoinTime = Game.Time;
 
 	// Init FoW-viewobjects: NO_OWNER-FoW-repellers might need to be added
-	for (C4ObjectLink *pLnk = ::Objects.First; pLnk; pLnk = pLnk->Next)
+	for (C4Object *pObj : Objects)
 	{
-		C4Object *pObj = pLnk->Obj;
-		if (pObj->PlrViewRange && pObj->Owner == NO_OWNER)
-			pObj->PlrFoWActualize();
+		if ((pObj->lightRange || pObj->lightFadeoutRange) && pObj->Owner == NO_OWNER)
+			pObj->UpdateLight();
 	}
 
 	// init graphs
@@ -470,7 +448,7 @@ void C4Player::PlaceReadyCrew(int32_t tx1, int32_t tx2, int32_t ty, C4Object *Fi
 				// Add object to crew
 				Crew.Add(nobj, C4ObjectList::stNone);
 				// add visibility range
-				nobj->SetPlrViewRange(C4FOW_Def_View_RangeX);
+				nobj->SetLightRange(C4FOW_DefLightRangeX, C4FOW_DefLightFadeoutRangeX);
 				// If base is present, enter base
 				if (FirstBase) { nobj->Enter(FirstBase); nobj->SetCommand(C4CMD_Exit); }
 				// OnJoinCrew callback
@@ -594,8 +572,8 @@ bool C4Player::ScenarioInit()
 	pty = Game.C4S.PlrStart[PlrStartIndex].Position[1];
 
 	// Zoomed position
-	if (ptx>-1) ptx = BoundBy<int32_t>( ptx * Game.C4S.Landscape.MapZoom.Evaluate(), 0, GBackWdt-1 );
-	if (pty>-1) pty = BoundBy<int32_t>( pty * Game.C4S.Landscape.MapZoom.Evaluate(), 0, GBackHgt-1 );
+	if (ptx>-1) ptx = Clamp<int32_t>( ptx * Game.C4S.Landscape.MapZoom.Evaluate(), 0, GBackWdt-1 );
+	if (pty>-1) pty = Clamp<int32_t>( pty * Game.C4S.Landscape.MapZoom.Evaluate(), 0, GBackHgt-1 );
 
 	// Standard position (PrefPosition)
 	if (ptx<0)
@@ -603,7 +581,7 @@ bool C4Player::ScenarioInit()
 		{
 			int32_t iMaxPos=Game.StartupPlayerCount;
 			// Map preferred position to available positions
-			int32_t iStartPos=BoundBy(PrefPosition*iMaxPos/C4P_MaxPosition,0,iMaxPos-1);
+			int32_t iStartPos=Clamp(PrefPosition*iMaxPos/C4P_MaxPosition,0,iMaxPos-1);
 			int32_t iPosition=iStartPos;
 			// Distribute according to availability
 			while (::Players.PositionTaken(iPosition))
@@ -615,7 +593,7 @@ bool C4Player::ScenarioInit()
 			}
 			Position=iPosition;
 			// Set x position
-			ptx=BoundBy(16+Position*(GBackWdt-32)/(iMaxPos-1),0,GBackWdt-16);
+			ptx=Clamp(16+Position*(GBackWdt-32)/(iMaxPos-1),0,GBackWdt-16);
 		}
 
 	// All-random position
@@ -640,13 +618,6 @@ bool C4Player::ScenarioInit()
 
 	// set initial hostility by team info
 	if (Team) SetTeamHostility();
-
-	if (fFogOfWar && !fFogOfWarInitialized)
-	{
-		fFogOfWarInitialized = true;
-		// reset view objects
-		::Objects.AssignPlrViewRange();
-	}
 
 	// Scenario script initialization
 	::GameScript.GRBroadcast(PSF_InitializePlayer, &C4AulParSet(C4VInt(Number),
@@ -679,24 +650,13 @@ bool C4Player::FinalInit(bool fInitialScore)
 	// Update counts, pointers, views
 	Execute();
 
-	// Restore FoW after savegame
-	if (fFogOfWar && !fFogOfWarInitialized)
-	{
-		fFogOfWarInitialized = true;
-		// reset view objects
-		::Objects.AssignPlrViewRange();
-	}
-
 	return true;
 }
 
 void C4Player::SetFoW(bool fEnable)
 {
-	// enable FoW
-	if (fEnable && !fFogOfWarInitialized)
-		::Objects.AssignPlrViewRange();
 	// set flag
-	fFogOfWar = fFogOfWarInitialized = fEnable;
+	fFogOfWar = fEnable;
 }
 
 bool C4Player::DoWealth(int32_t iChange)
@@ -715,7 +675,7 @@ bool C4Player::SetWealth(int32_t iVal)
 {
 	if (iVal == Wealth) return true;
 
-	Wealth=BoundBy<int32_t>(iVal,0,10000);
+	Wealth=Clamp<int32_t>(iVal,0,10000);
 
 	::GameScript.GRBroadcast(PSF_OnWealthChanged,&C4AulParSet(C4VInt(Number)));
 
@@ -817,10 +777,10 @@ bool C4Player::IsHostileTowards(const C4Player *plr) const
 
 C4Object* C4Player::GetHiExpActiveCrew()
 {
-	C4ObjectLink *clnk;
-	C4Object *cobj,*hiexp=NULL;
+	C4Object *hiexp=NULL;
 	int32_t iHighestExp=-2, iExp;
-	for (clnk=Crew.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
+	for (C4Object *cobj : Crew)
+	{
 		if (!cobj->CrewDisabled)
 		{
 			if (cobj->Info) iExp = cobj->Info->Experience; else iExp=-1;
@@ -830,15 +790,16 @@ C4Object* C4Player::GetHiExpActiveCrew()
 				iHighestExp=iExp;
 			}
 		}
+	}
 	return hiexp;
 }
 
 C4Object* C4Player::GetHiRankActiveCrew()
 {
-	C4ObjectLink *clnk;
-	C4Object *cobj,*hirank=NULL;
+	C4Object *hirank=NULL;
 	int32_t iHighestRank=-2, iRank;
-	for (clnk=Crew.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
+	for (C4Object *cobj : Crew)
+	{
 		if (!cobj->CrewDisabled)
 		{
 			if (cobj->Info) iRank = cobj->Info->Rank; else iRank=-1;
@@ -848,6 +809,7 @@ C4Object* C4Player::GetHiRankActiveCrew()
 				iHighestRank=iRank;
 			}
 		}
+	}
 	return hirank;
 }
 
@@ -891,8 +853,6 @@ void C4Player::Clear()
 	Menu.Clear();
 	BigIcon.Clear();
 	fFogOfWar=true;
-	FoWViewObjs.Clear();
-	fFogOfWarInitialized=false;
 	while (pMsgBoardQuery)
 	{
 		C4MessageBoardQuery *pNext = pMsgBoardQuery->pNext;
@@ -918,8 +878,7 @@ void C4Player::Default()
 	LocalControl=false;
 	BigIcon.Default();
 	Next=NULL;
-	fFogOfWar=true; fFogOfWarInitialized=false;
-	FoWViewObjs.Default();
+	fFogOfWar=true;
 	LeagueEvaluated=false;
 	GameJoinTime=0; // overwritten in Init
 	pstatControls = pstatActions = NULL;
@@ -1033,8 +992,11 @@ bool C4Player::MakeCrewMember(C4Object *pObj, bool fForceInfo, bool fDoCalls)
 	if (!Crew.GetLink(pObj))
 		Crew.Add(pObj, C4ObjectList::stNone);
 
-	// add plr view
-	if (!pObj->PlrViewRange) pObj->SetPlrViewRange(C4FOW_Def_View_RangeX); else pObj->PlrFoWActualize();
+	// add light
+	if (!pObj->lightRange)
+		pObj->SetLightRange(C4FOW_DefLightRangeX, C4FOW_DefLightFadeoutRangeX);
+	else
+		pObj->UpdateLight();
 
 	// controlled by the player
 	pObj->Controller = Number;
@@ -1067,38 +1029,6 @@ void C4Player::AdjustCursorCommand()
 		SetCursor(pHiRank,true);
 		UpdateView();
 	}
-}
-
-void C4Player::CursorRight()
-{
-	C4ObjectLink *cLnk;
-	// Get next crew member
-	if ((cLnk=Crew.GetLink(Cursor)))
-		for (cLnk=cLnk->Next; cLnk; cLnk=cLnk->Next)
-			if (cLnk->Obj->Status && !cLnk->Obj->CrewDisabled) break;
-	if (!cLnk)
-		for (cLnk=Crew.First; cLnk; cLnk=cLnk->Next)
-			if (cLnk->Obj->Status && !cLnk->Obj->CrewDisabled) break;
-	if (cLnk) SetCursor(cLnk->Obj, true);
-	// Updates
-	CursorFlash=30;
-	UpdateView();
-}
-
-void C4Player::CursorLeft()
-{
-	C4ObjectLink *cLnk;
-	// Get prev crew member
-	if ((cLnk=Crew.GetLink(Cursor)))
-		for (cLnk=cLnk->Prev; cLnk; cLnk=cLnk->Prev)
-			if (cLnk->Obj->Status && !cLnk->Obj->CrewDisabled) break;
-	if (!cLnk)
-		for (cLnk=Crew.Last; cLnk; cLnk=cLnk->Prev)
-			if (cLnk->Obj->Status && !cLnk->Obj->CrewDisabled) break;
-	if (cLnk) SetCursor(cLnk->Obj, true);
-	// Updates
-	CursorFlash=30;
-	UpdateView();
 }
 
 bool C4Player::ObjectCommand(int32_t iCommand, C4Object *pTarget, int32_t iX, int32_t iY, C4Object *pTarget2, C4Value iData, int32_t iMode)
@@ -1151,8 +1081,6 @@ void C4Player::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 	pComp->Value(mkNamingAdapt(ZoomLimitMaxVal,     "ZoomLimitMaxVal",      Fix0));
 	pComp->Value(mkNamingAdapt(ZoomVal,             "ZoomVal",              Fix0));
 	pComp->Value(mkNamingAdapt(fFogOfWar,           "FogOfWar",             false));
-	bool bForceFogOfWar = false;
-	pComp->Value(mkNamingAdapt(bForceFogOfWar,      "ForceFogOfWar",        false));
 	pComp->Value(mkNamingAdapt(ShowStartup,         "ShowStartup",          false));
 	pComp->Value(mkNamingAdapt(Wealth,              "Wealth",               0));
 	pComp->Value(mkNamingAdapt(CurrentScore,        "Score",                0));
@@ -1207,26 +1135,16 @@ void C4Player::ExecBaseProduction()
 		ProductionDelay=0; ProductionUnit++;
 		for (int32_t cnt=0; BaseProduction.GetID(cnt); cnt++)
 			if (BaseProduction.GetCount(cnt)>0)
-				if (ProductionUnit % BoundBy<int32_t>(11-BaseProduction.GetCount(cnt),1,10) ==0)
+				if (ProductionUnit % Clamp<int32_t>(11-BaseProduction.GetCount(cnt),1,10) ==0)
 					if (BaseMaterial.GetIDCount(BaseProduction.GetID(cnt)) < MaxBaseProduction)
 						BaseMaterial.IncreaseIDCount(BaseProduction.GetID(cnt));
-	}
-}
-
-void C4Player::UpdateCounts()
-{
-	C4Object *cobj; C4ObjectLink *clnk;
-	CrewCnt = 0;
-	for (clnk=Crew.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
-	{
-		++CrewCnt;
 	}
 }
 
 void C4Player::CheckElimination()
 {
 	// Standard elimination: no crew
-	if (CrewCnt<=0)
+	if (!Crew.GetFirstObject())
 		// Already eliminated safety
 		if (!Eliminated)
 			// No automatic elimination desired?
@@ -1278,7 +1196,6 @@ void C4Player::DefaultRuntimeData()
 	ViewX=ViewY=0;
 	ViewTarget=NULL;
 	ShowStartup=true;
-	CrewCnt=0;
 	Wealth=0;
 	CurrentScore=InitialScore=0;
 	ObjectsOwned=0;
@@ -1369,13 +1286,11 @@ int32_t C4Player::FindNewOwner() const
 
 void C4Player::NotifyOwnedObjects()
 {
-	C4Object *cobj; C4ObjectLink *clnk;
-
 	int32_t iNewOwner = FindNewOwner();
 	// notify objects in all object lists
 	for (C4ObjectList *pList = &::Objects; pList; pList = ((pList == &::Objects) ? &::Objects.InactiveObjects : NULL))
 	{
-		for (clnk = pList->First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
+		for (C4Object *cobj : *pList)
 		{
 			if (cobj->Status && cobj->Owner == Number)
 			{
@@ -1402,7 +1317,7 @@ void C4Player::NotifyOwnedObjects()
 
 bool C4Player::DoScore(int32_t iChange)
 {
-	CurrentScore = BoundBy<int32_t>( CurrentScore+iChange, -100000, 100000 );
+	CurrentScore = Clamp<int32_t>( CurrentScore+iChange, -100000, 100000 );
 	return true;
 }
 
@@ -1427,8 +1342,8 @@ void C4Player::ScrollView(float iX, float iY, float ViewWdt, float ViewHgt)
 	if (ViewLock) return;
 	SetViewMode(C4PVM_Scrolling);
 	float ViewportScrollBorder = Application.isEditor ? 0 : C4ViewportScrollBorder;
-	ViewX = BoundBy<C4Real>( ViewX+ftofix(iX), ftofix(ViewWdt/2.0f-ViewportScrollBorder), ftofix(GBackWdt+ViewportScrollBorder-ViewWdt/2.0f) );
-	ViewY = BoundBy<C4Real>( ViewY+ftofix(iY), ftofix(ViewHgt/2.0f-ViewportScrollBorder), ftofix(GBackHgt+ViewportScrollBorder-ViewHgt/2.0f) );
+	ViewX = Clamp<C4Real>( ViewX+ftofix(iX), ftofix(ViewWdt/2.0f-ViewportScrollBorder), ftofix(GBackWdt+ViewportScrollBorder-ViewWdt/2.0f) );
+	ViewY = Clamp<C4Real>( ViewY+ftofix(iY), ftofix(ViewHgt/2.0f-ViewportScrollBorder), ftofix(GBackHgt+ViewportScrollBorder-ViewHgt/2.0f) );
 }
 
 void C4Player::ClearControl()
@@ -1504,87 +1419,6 @@ int VisibilityCheck(int iVis, int sx, int sy, int cx, int cy)
 	return iVis;
 }
 
-void C4Player::FoW2Map(C4FogOfWar &rMap, int iOffX, int iOffY)
-{
-	// No fog of war
-	if (!fFogOfWar) return;
-	igOffX = iOffX; igOffY = iOffY;
-	// Add view for all FoW-repellers - keep track of FoW-generators, which should be avaluated finally
-	// so they override repellers
-	bool fAnyGenerators = false;
-	C4Object *cobj; C4ObjectLink *clnk;
-	for (clnk=FoWViewObjs.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
-		if (!cobj->Contained || cobj->Contained->Def->ClosedContainer != 1)
-		{
-			if (cobj->PlrViewRange > 0)
-				rMap.ReduceModulation(cobj->GetX() + iOffX, cobj->GetY() + iOffY, cobj->PlrViewRange, VisibilityCheck);
-			else
-				fAnyGenerators = true;
-		}
-	// Add view for target view object
-	if (ViewMode==C4PVM_Target)
-		if (ViewTarget)
-			if (!ViewTarget->Contained || ViewTarget->Contained->Def->ClosedContainer != 1)
-			{
-				int iRange = ViewTarget->PlrViewRange;
-				if (!iRange && Cursor) iRange = Cursor->PlrViewRange;
-				if (!iRange) iRange = C4FOW_Def_View_RangeX;
-				rMap.ReduceModulation(ViewTarget->GetX() + iOffX, ViewTarget->GetY() + iOffY, iRange, VisibilityCheck);
-			}
-	// apply generators
-	// do this check, be cause in 99% of all normal scenarios, there will be no FoW-generators
-	if (fAnyGenerators) FoWGenerators2Map(rMap, iOffX, iOffY);
-}
-
-void C4Player::FoWGenerators2Map(C4FogOfWar &rMap, int iOffX, int iOffY)
-{
-	// add fog to any generator pos (view range
-	C4Object *cobj; C4ObjectLink *clnk;
-	for (clnk=FoWViewObjs.First; clnk && (cobj=clnk->Obj); clnk=clnk->Next)
-		if (!cobj->Contained || cobj->Contained->Def->ClosedContainer != 1)
-			if (cobj->PlrViewRange < 0)
-				rMap.AddModulation(cobj->GetX() + iOffX, cobj->GetY() + iOffY,-cobj->PlrViewRange, ((uint32_t)cobj->ColorMod)>>24);
-}
-
-bool C4Player::FoWIsVisible(int32_t x, int32_t y)
-{
-	// check repellers and generators and ViewTarget
-	bool fSeen=false;
-	C4Object *cobj=NULL; C4ObjectLink *clnk;
-	clnk=FoWViewObjs.First;
-	int32_t iRange;
-	for (;;)
-	{
-		if (clnk)
-		{
-			cobj=clnk->Obj;
-			clnk=clnk->Next;
-			iRange = cobj->PlrViewRange;
-		}
-		else if (ViewMode!=C4PVM_Target || !ViewTarget || ViewTarget == cobj)
-			break;
-		else
-		{
-			cobj = ViewTarget;
-			iRange = cobj->PlrViewRange;
-			if (!iRange && Cursor) iRange = Cursor->PlrViewRange;
-			if (!iRange) iRange = C4FOW_Def_View_RangeX;
-		}
-		if (!cobj->Contained || cobj->Contained->Def->ClosedContainer != 1)
-			if (Distance(cobj->GetX(), cobj->GetY(), x, y) < Abs(iRange))
-			{
-				if (iRange < 0)
-				{
-					if ((cobj->ColorMod & 0xff000000) != 0xff000000) // faded generators generate darkness only; no FoW blocking
-						return false; // shadowed by FoW-generator
-				}
-				else
-					fSeen = true; // made visible by FoW-repeller
-			}
-	}
-	return fSeen;
-}
-
 void C4Player::CloseMenu()
 {
 	// cancel all player menus
@@ -1619,9 +1453,8 @@ int32_t C4Player::ActiveCrewCount()
 {
 	// get number of objects in crew that is not disabled
 	int32_t iNum=0;
-	C4Object *cObj;
-	for (C4ObjectLink *cLnk=Crew.First; cLnk; cLnk=cLnk->Next)
-		if ((cObj=cLnk->Obj))
+	for (C4Object *cObj : Crew)
+		if (cObj)
 			if (!cObj->CrewDisabled)
 				++iNum;
 	// return it
@@ -1838,15 +1671,12 @@ void C4Player::SetPlayerColor(uint32_t dwNewClr)
 	// this can never catch everything (thinking of overlays, etc.); scenarios that allow team changes should take care of the rest
 	uint32_t dwOldClr = ColorDw;
 	ColorDw = dwNewClr;
-	C4Object *pObj;
-	for (C4ObjectLink *pLnk = ::Objects.First; pLnk; pLnk = pLnk->Next)
-		if ((pObj = pLnk->Obj))
-			if ((pObj->Status))
-				if (pObj->Owner == Number)
-				{
-					if ((pObj->Color & 0xffffff) == (dwOldClr & 0xffffff))
-						pObj->Color = (pObj->Color & 0xff000000u) | (dwNewClr & 0xffffff);
-				}
+	for (C4Object *pObj : Objects)
+		if (pObj && pObj->Status && pObj->Owner == Number)
+		{
+			if ((pObj->Color & 0xffffff) == (dwOldClr & 0xffffff))
+				pObj->Color = (pObj->Color & 0xff000000u) | (dwNewClr & 0xffffff);
+		}
 }
 
 C4PlayerType C4Player::GetType() const
@@ -2033,10 +1863,12 @@ bool C4Player::GainScenarioAchievement(const char *achievement_id, int32_t value
 {
 	// Determine full ID of achievement
 	if (!scen_name_override)
+	{
 		if (::Game.C4S.Head.Origin.getLength())
 			scen_name_override = ::Game.C4S.Head.Origin.getData();
 		else
 			scen_name_override = ::Game.ScenarioFilename;
+	}
 	StdStrBuf sAchvID = C4ScenarioParameters::AddFilename2ID(scen_name_override, achievement_id);
 	// Gain achievement iff it's an improvement
 	Achievements.SetValue(sAchvID.getData(), value, true);

@@ -6,7 +6,7 @@
   <title>Object Definitions</title>
   <h>Object Definitions</h>
   <part>
-    <text>Object definitions are used for all game objects in clonk: fire monsters, the wooden hut, and the clonk himself. An object definition is a group file composed from the following components:</text>
+    <text>Object definitions are used for all game objects in clonk: the wooden hut, goal objects and the clonk himself. An object definition is a group file composed from the following components:</text>
     <h id="Properties">Object properties</h>
     <dl>
       <dt><img height="16" src="../../images/icon_text.png" width="16"/><emlink href="definition/defcore.html">DefCore.txt</emlink></dt>
@@ -34,6 +34,10 @@
       <dt id="Overlaypng"><img height="16" src="../../images/icon_image.png" width="16"/>Overlay.png</dt>
       <dd>
         <text>The part of the object's graphics which is to be colored in the player color (see ColorByOwner in <emlink href="definition/defcore.html">DefCore.txt</emlink>) can also be defined using a separate graphics file. In Overlay.png gray scales should be used instead of blue color.</text>
+      </dd>
+      <dt id="Normalpng"><img height="16" src="../../images/icon_image.png" width="16"/>Normal.png</dt>
+      <dd>
+        <text>An optional normal map for the object, where the red, green and blue components in the image correspond to the normal vectors to be used for the lighting of the object. If this file is not present, the normal vector at each pixel points straight into Z direction (outside of the screen).</text>
       </dd>
       <dt id="Graphicsex"><img height="16" src="../../images/icon_image.png" width="16"/>Graphics*.png/Overlay*.png</dt>
       <dd>

@@ -26,7 +26,7 @@
 #include "C4ObjectList.h"
 #include "C4ObjectPtr.h"
 #include "C4PlayerControl.h"
-
+#include <C4Value.h>
 #include <set>
 
 const int32_t C4PVM_Cursor    = 0,
@@ -42,7 +42,9 @@ const int32_t C4MaxClient = 5000; // ought to be enough for everybody (used to c
 static const int C4VP_DefViewRangeX    = 300,
                  C4VP_DefMinViewRangeX = 150,
                  C4VP_DefMaxViewRangeX = 750;
-#define C4FOW_Def_View_RangeX 500
+
+static const int C4FOW_DefLightRangeX = 300,
+                 C4FOW_DefLightFadeoutRangeX = 80;
 
 class C4Player: public C4PlayerInfoCore
 {
@@ -108,8 +110,6 @@ public:
 	bool ShowStartup;
 	int32_t FlashCom; // NoSave //
 	bool fFogOfWar;
-	bool fFogOfWarInitialized; // No Save //
-	C4ObjectList FoWViewObjs; // No Save //
 	int32_t ZoomLimitMinWdt,ZoomLimitMinHgt,ZoomLimitMaxWdt,ZoomLimitMaxHgt,ZoomWdt,ZoomHgt; // zoom limits and last zoom set by script
 	C4Fixed ZoomLimitMinVal,ZoomLimitMaxVal,ZoomVal; // direct zoom values. 
 	// Game
@@ -124,7 +124,6 @@ public:
 	// Crew
 	C4ObjectInfoList CrewInfoList; // No Save //
 	C4ObjectList Crew; // Save new in 4.95.2 (for sync reasons)
-	int32_t CrewCnt; // No Save //
 	// Knowledge
 	C4IDList Knowledge;
 	// Control
@@ -170,8 +169,6 @@ public:
 	void DefaultRuntimeData();
 	void DrawHostility(C4Facet &cgo, int32_t iIndex);
 	void AdjustCursorCommand();
-	void CursorRight();
-	void CursorLeft();
 
 	bool ObjectCommand(int32_t iCommand, C4Object *pTarget, int32_t iTx, int32_t iTy, C4Object *pTarget2=NULL, C4Value iData=C4VNull, int32_t iAddMode=C4P_Command_Set);
 	void ObjectCommand2Obj(C4Object *cObj, int32_t iCommand, C4Object *pTarget, int32_t iX, int32_t iY, C4Object *pTarget2, C4Value iData, int32_t iMode);
@@ -214,7 +211,6 @@ protected:
 	void InitControl();
 	void UpdateView();
 	void CheckElimination();
-	void UpdateCounts();
 	void ExecBaseProduction();
 	void PlaceReadyBase(int32_t &tx, int32_t &ty, C4Object **pFirstBase);
 	void PlaceReadyVehic(int32_t tx1, int32_t tx2, int32_t ty, C4Object *FirstBase);
@@ -228,10 +224,6 @@ public:
 	void CloseMenu(); // close all player menus (keep sync object menus!)
 
 	void EvaluateLeague(bool fDisconnected, bool fWon);
-
-	void FoW2Map(C4FogOfWar &rMap, int iOffX, int iOffY);
-	void FoWGenerators2Map(C4FogOfWar &rMap, int iOffX, int iOffY);
-	bool FoWIsVisible(int32_t x, int32_t y); // check whether a point in the landscape is visible
 
 	// runtime statistics
 	void CreateGraphs();

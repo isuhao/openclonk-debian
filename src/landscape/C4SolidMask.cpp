@@ -287,10 +287,10 @@ void C4SolidMask::Remove(bool fBackupAttachment)
 		MaskRemovalY = pForObject->GetFixedY();
 		iAttachingObjectsCount = 0;
 		C4LArea SolidArea(&::Objects.Sectors, MaskPutRect.x-1, MaskPutRect.y-1, MaskPutRect.Wdt+2, MaskPutRect.Hgt+2);
-		C4LSector *pSct; C4Object *pObj;
+		C4LSector *pSct;
 		for (C4ObjectList *pLst=SolidArea.FirstObjectShapes(&pSct); pLst; pLst=SolidArea.NextObjectShapes(pLst, &pSct))
-			for (C4ObjectLink *clnk=pLst->First; clnk; clnk=clnk->Next)
-				if ((pObj = clnk->Obj) && pObj != pForObject && pObj->IsMoveableBySolidMask(pForObject->GetSolidMaskPlane()) && !pObj->Shape.CheckContact(pObj->GetX(),pObj->GetY()))
+			for (C4Object *pObj : *pLst)
+				if (pObj && pObj != pForObject && pObj->IsMoveableBySolidMask(pForObject->GetSolidMaskPlane()) && !pObj->Shape.CheckContact(pObj->GetX(),pObj->GetY()))
 				{
 					// check for any contact to own SolidMask - attach-directions, bottom - "stuck" (CNAT_Center) is ignored, because that causes problems with things being stuck in basements :(
 					int iVtx = 0;
@@ -478,7 +478,7 @@ CSurface8 *C4SolidMask::LoadMaskFromFile(class C4Group &hGroup, const char *szFi
 	CPNGFile png;
 	StdBuf png_buf;
 	if (!hGroup.LoadEntry(szFilename, &png_buf)) return NULL; // error messages done by caller
-	if (!png.Load((BYTE*)png_buf.getData(), png_buf.getSize())) return NULL;
+	if (!png.Load((BYTE*)png_buf.getMData(), png_buf.getSize())) return NULL;
 	CSurface8 *result = new CSurface8(png.iWdt, png.iHgt);
 	for (size_t y=0u; y<png.iHgt; ++y)
 		for (size_t x=0u; x<png.iWdt; ++x)

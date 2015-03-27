@@ -1,7 +1,7 @@
 /*
  * OpenClonk, http://www.openclonk.org
  *
- * Copyright (c) 2010-2013, The OpenClonk Team and contributors
+ * Copyright (c) 2010-2015, The OpenClonk Team and contributors
  *
  * Distributed under the terms of the ISC license; see accompanying file
  * "COPYING" for details.
@@ -26,6 +26,9 @@
 #include <boost/foreach.hpp>
 #include <boost/ptr_container/ptr_map.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
+
+#include <C4DefList.h>
+#include <C4Def.h>
 
 namespace
 {
@@ -181,102 +184,137 @@ namespace
 	}
 }
 
-StdMesh *StdMeshLoader::LoadMeshBinary(const char *src, size_t length, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename)
+void StdMeshSkeletonLoader::StoreSkeleton(const char* groupname, const char* filename, std::shared_ptr<StdMeshSkeleton> skeleton)
 {
-	boost::scoped_ptr<Ogre::Mesh::Chunk> root;
-	Ogre::DataStream stream(src, length);
+	assert(groupname != NULL);
+	assert(filename != NULL);
+	assert(skeleton != NULL);
 
-	// First chunk must be the header
-	root.reset(Ogre::Mesh::Chunk::Read(&stream));
-	if (root->GetType() != Ogre::Mesh::CID_Header)
-		throw Ogre::Mesh::InvalidVersion();
+	// Create mirrored animations (#401)
+	// this is still going to be somewhere else, but for now it will keep moving around
+	skeleton->PostInit();
 
-	// Second chunk is the mesh itself
-	root.reset(Ogre::Mesh::Chunk::Read(&stream));
-	if (root->GetType() != Ogre::Mesh::CID_Mesh)
-		throw Ogre::Mesh::InvalidVersion();
+	
+	// save in map
+	StdCopyStrBuf filepath;
+	MakeFullSkeletonPath(filepath, groupname, filename);
+	
+	AddSkeleton(filepath, skeleton);
 
-	// Generate mesh from data
-	Ogre::Mesh::ChunkMesh &cmesh = *static_cast<Ogre::Mesh::ChunkMesh*>(root.get());
-	std::unique_ptr<StdMesh> mesh(new StdMesh);
-	mesh->BoundingBox = cmesh.bounds;
-	mesh->BoundingRadius = cmesh.radius;
+	// memorize which skeletons can be appended
+	// skins get broken down to their original definition, which is a little messy at the moment.
+	StdCopyStrBuf buf_filename(GetFilenameOnly(filename));
+	StdCopyStrBuf command_with_definition(GetFilenameOnly(buf_filename.getData())); // include.Clonk becomes include, include.Clonk.Farmer becomes include.Clonk
+	StdCopyStrBuf command(GetFilenameOnly(command_with_definition.getData()));      // include stays include, include.Clonk becomes include
+	StdCopyStrBuf definition(GetExtension(buf_filename.getData())); // include.Clonk becomes Clonk, include.Clonk.Farmer becomes Farmer
 
-	// We allow bounding box to be empty if it's only due to X direction since
-	// this is what goes inside the screen in Clonk.
-	if(mesh->BoundingBox.y1 == mesh->BoundingBox.y2 || mesh->BoundingBox.z1 == mesh->BoundingBox.z2)
-		throw Ogre::Mesh::EmptyBoundingBox();
-
-	// Read skeleton (if exists)
-	if (!cmesh.skeletonFile.empty())
+	if (!(command_with_definition == command)) // include.Clonk != include?
 	{
-		StdStrBuf skel = loader.LoadSkeleton(cmesh.skeletonFile.c_str());
-		if (skel.isNull())
-			throw Ogre::InsufficientData("The specified skeleton file was not found");
-		LoadSkeletonBinary(mesh.get(), skel.getData(), skel.getLength());
+		definition = StdCopyStrBuf(GetExtension(command_with_definition.getData())); // change definition to the part behind the .: Clonk
 	}
 
-	// Build bone handle->index quick access table
-	std::map<uint16_t, size_t> bone_lookup;
-	for (size_t i = 0; i < mesh->GetNumBones(); ++i)
+	const char* appendto = "appendto"; // has to be a constant
+	const char* include = "include";   // dito
+
+	// check where to store
+	if (command == appendto)
 	{
-		bone_lookup[mesh->GetBone(i).ID] = i;
+		AppendtoSkeletons.insert(std::make_pair(filepath, definition));
 	}
-
-	// Read submeshes
-	mesh->SubMeshes.reserve(cmesh.submeshes.size());
-	for (size_t i = 0; i < cmesh.submeshes.size(); ++i)
+	else if (command == include)
 	{
-		mesh->SubMeshes.push_back(StdSubMesh());
-		StdSubMesh &sm = mesh->SubMeshes.back();
-		Ogre::Mesh::ChunkSubmesh &csm = cmesh.submeshes[i];
-		sm.Material = mat_mgr.GetMaterial(csm.material.c_str());
-		if (!sm.Material)
-			throw Ogre::Mesh::InvalidMaterial();
-		if (csm.operation != Ogre::Mesh::ChunkSubmesh::SO_TriList)
-			throw Ogre::Mesh::NotImplemented("Submesh operations other than TriList aren't implemented yet");
-		sm.Faces.resize(csm.faceVertices.size() / 3);
-		for (size_t face = 0; face < sm.Faces.size(); ++face)
-		{
-			sm.Faces[face].Vertices[0] = csm.faceVertices[face * 3 + 0];
-			sm.Faces[face].Vertices[1] = csm.faceVertices[face * 3 + 1];
-			sm.Faces[face].Vertices[2] = csm.faceVertices[face * 3 + 2];
-		}
-		Ogre::Mesh::ChunkGeometry &geo = *(csm.hasSharedVertices ? cmesh.geometry : csm.geometry);
-		sm.Vertices = ReadSubmeshGeometry(geo, filename);
-
-		// Read bone assignments
-		std::vector<Ogre::Mesh::BoneAssignment> &boneAssignments = (csm.hasSharedVertices ? cmesh.boneAssignments : csm.boneAssignments);
-		assert(!csm.hasSharedVertices || csm.boneAssignments.empty());
-		BOOST_FOREACH(const Ogre::Mesh::BoneAssignment &ba, boneAssignments)
-		{
-			if (ba.vertex >= sm.GetNumVertices())
-				throw Ogre::Mesh::VertexNotFound();
-			if (bone_lookup.find(ba.bone) == bone_lookup.end())
-				throw Ogre::Skeleton::BoneNotFound();
-			StdMeshVertexBoneAssignment assignment;
-			assignment.BoneIndex = bone_lookup[ba.bone];
-			assignment.Weight = ba.weight;
-			sm.Vertices[ba.vertex].BoneAssignments.push_back(assignment);
-		}
-
-		// Normalize bone assignments
-		BOOST_FOREACH(StdSubMesh::Vertex &vertex, sm.Vertices)
-		{
-			float sum = 0;
-			BOOST_FOREACH(StdMeshVertexBoneAssignment &ba, vertex.BoneAssignments)
-			sum += ba.Weight;
-			BOOST_FOREACH(StdMeshVertexBoneAssignment &ba, vertex.BoneAssignments)
-			ba.Weight /= sum;
-		}
+		IncludeSkeletons.insert(std::make_pair(filepath, definition));
 	}
-	return mesh.release();
 }
 
-void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t size)
+void StdMeshSkeletonLoader::RemoveSkeletonsInGroup(const char* groupname)
+{
+	// DebugLogF("Removing skeletons in group: %s", groupname);
+
+	std::vector<StdCopyStrBuf> delete_skeletons;
+
+	std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::iterator it;
+	for (it = Skeletons.begin(); it != Skeletons.end(); it++)
+	{
+		StdCopyStrBuf skeletonpath(it->first.getData());
+		StdCopyStrBuf group(groupname);
+		group.ToLowerCase();
+
+		StdCopyStrBuf skeletongroup;
+		GetParentPath(skeletonpath.getData(), &skeletongroup);
+		
+		if (skeletongroup == group)
+		{
+			// DebugLogF("Found skeleton in group: %s", it->first.getData());
+
+			delete_skeletons.push_back(skeletonpath);
+		}
+	}
+
+	for (unsigned i = 0; i < delete_skeletons.size(); i++)
+	{
+		RemoveSkeleton(delete_skeletons[i]);
+	}
+}
+
+void StdMeshSkeletonLoader::RemoveSkeleton(const char* groupname, const char* filename)
+{
+	StdCopyStrBuf filepath;
+	MakeFullSkeletonPath(filepath, groupname, filename);
+	RemoveSkeleton(filepath);
+}
+
+void StdMeshSkeletonLoader::RemoveSkeleton(const StdCopyStrBuf &filepath)
+{
+	std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::iterator existing_skeleton = Skeletons.find(filepath);
+	if (existing_skeleton != Skeletons.end())
+	{
+		Skeletons.erase(existing_skeleton);
+	}
+
+	std::map<StdCopyStrBuf, StdCopyStrBuf>::iterator appendto_skeleton = AppendtoSkeletons.find(filepath);
+	if (appendto_skeleton != AppendtoSkeletons.end())
+	{
+		AppendtoSkeletons.erase(appendto_skeleton);
+	}
+
+	std::map<StdCopyStrBuf, StdCopyStrBuf>::iterator include_skeleton = IncludeSkeletons.find(filepath);
+	if (include_skeleton != IncludeSkeletons.end())
+	{
+		IncludeSkeletons.erase(include_skeleton);
+	}
+}
+
+void StdMeshSkeletonLoader::AddSkeleton(const StdCopyStrBuf& filepath, std::shared_ptr<StdMeshSkeleton> skeleton)
+{
+	std::pair<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>> key_and_value = std::make_pair(filepath, skeleton);
+	std::pair<std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::iterator, bool> insert = Skeletons.insert(key_and_value);
+
+	if (insert.second == false)
+	{
+		LogF("WARNING: Overloading skeleton %s", filepath.getData());
+		
+		Skeletons[filepath] = skeleton;
+	}
+}
+
+std::shared_ptr<StdMeshSkeleton> StdMeshSkeletonLoader::GetSkeletonByName(const StdStrBuf& name) const
+{
+	StdCopyStrBuf filename(name);
+
+	//DebugLogF("Loading skeleton %s\n", filename.getData());
+
+	std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::const_iterator iter = Skeletons.find(filename);
+	if (iter == Skeletons.end()) return NULL;
+	return iter->second;
+}
+
+void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char* filename, const char *sourcefile, size_t size)
 {
 	boost::scoped_ptr<Ogre::Skeleton::Chunk> chunk;
-	Ogre::DataStream stream(src, size);
+	Ogre::DataStream stream(sourcefile, size);
+
+	std::shared_ptr<StdMeshSkeleton> Skeleton(new StdMeshSkeleton);
 
 	// First chunk must be the header
 	chunk.reset(Ogre::Skeleton::Chunk::Read(&stream));
@@ -286,9 +324,9 @@ void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t si
 	boost::ptr_map<uint16_t, StdMeshBone> bones;
 	boost::ptr_vector<Ogre::Skeleton::ChunkAnimation> animations;
 	for (Ogre::Skeleton::ChunkID id = Ogre::Skeleton::Chunk::Peek(&stream);
-	     id == Ogre::Skeleton::CID_BlendMode || id == Ogre::Skeleton::CID_Bone || id == Ogre::Skeleton::CID_Bone_Parent || id == Ogre::Skeleton::CID_Animation;
-	     id = Ogre::Skeleton::Chunk::Peek(&stream)
-	    )
+		id == Ogre::Skeleton::CID_BlendMode || id == Ogre::Skeleton::CID_Bone || id == Ogre::Skeleton::CID_Bone_Parent || id == Ogre::Skeleton::CID_Animation;
+		id = Ogre::Skeleton::Chunk::Peek(&stream)
+		)
 	{
 		std::unique_ptr<Ogre::Skeleton::Chunk> chunk(Ogre::Skeleton::Chunk::Read(&stream));
 		switch (chunk->GetType())
@@ -297,7 +335,7 @@ void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t si
 		{
 			Ogre::Skeleton::ChunkBlendMode& cblend = *static_cast<Ogre::Skeleton::ChunkBlendMode*>(chunk.get());
 			// TODO: Handle it
-			if(cblend.blend_mode != 0) // 0 is average, 1 is cumulative. I'm actually not sure what the difference really is... anyway we implement only one method yet. I think it's average, but not 100% sure.
+			if (cblend.blend_mode != 0) // 0 is average, 1 is cumulative. I'm actually not sure what the difference really is... anyway we implement only one method yet. I think it's average, but not 100% sure.
 				LogF("StdMeshLoader: CID_BlendMode not implemented.");
 		}
 		break;
@@ -345,7 +383,7 @@ void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t si
 		if (!it->second->Parent)
 		{
 			master = it->second;
-			mesh->AddMasterBone(master);
+			Skeleton->AddMasterBone(master);
 		}
 	}
 	if (!master)
@@ -356,21 +394,23 @@ void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t si
 
 	// Build handle->index quick access table
 	std::map<uint16_t, size_t> handle_lookup;
-	for (size_t i = 0; i < mesh->GetNumBones(); ++i)
+	for (size_t i = 0; i < Skeleton->GetNumBones(); ++i)
 	{
-		handle_lookup[mesh->GetBone(i).ID] = i;
+		handle_lookup[Skeleton->GetBone(i).ID] = i;
 	}
 
 	// Fixup animations
 	BOOST_FOREACH(Ogre::Skeleton::ChunkAnimation &canim, animations)
 	{
-		StdMeshAnimation &anim = mesh->Animations[StdCopyStrBuf(canim.name.c_str())];
+		StdMeshAnimation &anim = Skeleton->Animations[StdCopyStrBuf(canim.name.c_str())];
 		anim.Name = canim.name.c_str();
 		anim.Length = canim.duration;
-		anim.Tracks.resize(mesh->GetNumBones());
+		anim.Tracks.resize(Skeleton->GetNumBones());
+		anim.OriginSkeleton = &(*Skeleton);
+
 		BOOST_FOREACH(Ogre::Skeleton::ChunkAnimationTrack &catrack, canim.tracks)
 		{
-			const StdMeshBone &bone = mesh->GetBone(handle_lookup[catrack.bone]);
+			const StdMeshBone &bone = Skeleton->GetBone(handle_lookup[catrack.bone]);
 			StdMeshTrack *&track = anim.Tracks[bone.Index];
 			if (track != NULL)
 				throw Ogre::Skeleton::MultipleBoneTracks();
@@ -386,12 +426,248 @@ void StdMeshLoader::LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t si
 	}
 
 	// Fixup bone transforms
-	BOOST_FOREACH(StdMeshBone *bone, mesh->Bones)
+	BOOST_FOREACH(StdMeshBone *bone, Skeleton->Bones)
 	{
 		if (bone->Parent)
 		{
 			bone->Transformation = bone->Parent->Transformation * bone->Transformation;
 			bone->InverseTransformation = StdMeshTransformation::Inverse(bone->Transformation);
+		}
+	}
+
+	StoreSkeleton(groupname, filename, Skeleton);
+}
+
+StdMesh *StdMeshLoader::LoadMeshBinary(const char *sourcefile, size_t length, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename)
+{
+	boost::scoped_ptr<Ogre::Mesh::Chunk> root;
+	Ogre::DataStream stream(sourcefile, length);
+
+	// First chunk must be the header
+	root.reset(Ogre::Mesh::Chunk::Read(&stream));
+	if (root->GetType() != Ogre::Mesh::CID_Header)
+		throw Ogre::Mesh::InvalidVersion();
+
+	// Second chunk is the mesh itself
+	root.reset(Ogre::Mesh::Chunk::Read(&stream));
+	if (root->GetType() != Ogre::Mesh::CID_Mesh)
+		throw Ogre::Mesh::InvalidVersion();
+
+	// Generate mesh from data
+	Ogre::Mesh::ChunkMesh &cmesh = *static_cast<Ogre::Mesh::ChunkMesh*>(root.get());
+	std::unique_ptr<StdMesh> mesh(new StdMesh);
+	mesh->BoundingBox = cmesh.bounds;
+	mesh->BoundingRadius = cmesh.radius;
+
+	// We allow bounding box to be empty if it's only due to X direction since
+	// this is what goes inside the screen in Clonk.
+	if(mesh->BoundingBox.y1 == mesh->BoundingBox.y2 || mesh->BoundingBox.z1 == mesh->BoundingBox.z2)
+		throw Ogre::Mesh::EmptyBoundingBox();
+
+	// if the mesh has a skeleton, then try loading
+	// it from the loader by the definition name
+	if (!cmesh.skeletonFile.empty())
+	{
+		StdCopyStrBuf skeleton_filename = StdCopyStrBuf();
+		StdMeshSkeletonLoader::MakeFullSkeletonPath(skeleton_filename, filename, cmesh.skeletonFile.c_str());
+
+		mesh->Skeleton = loader.GetSkeletonByName(skeleton_filename);
+
+		// with this exception the assert below is useless
+		// also, I think the bone_lookup should only be used if there is a skeleton anyway
+		// so there could be meshes without bones even?
+		if (mesh->Skeleton == NULL)
+		{
+			StdCopyStrBuf exception("The specified skeleton file was not found: ");
+			exception.Append(skeleton_filename.getData());
+			throw Ogre::InsufficientData(exception.getData());
+		}
+	}
+
+	assert(mesh->Skeleton != NULL); // the bone assignments could instead be added only, if there is a skeleton
+
+	// Build bone handle->index quick access table
+	std::map<uint16_t, size_t> bone_lookup;
+	for (size_t i = 0; i < mesh->GetSkeleton().GetNumBones(); ++i)
+	{
+		bone_lookup[mesh->GetSkeleton().GetBone(i).ID] = i;
+	}
+
+	// Read submeshes
+	mesh->SubMeshes.reserve(cmesh.submeshes.size());
+	for (size_t i = 0; i < cmesh.submeshes.size(); ++i)
+	{
+		mesh->SubMeshes.push_back(StdSubMesh());
+		StdSubMesh &sm = mesh->SubMeshes.back();
+		Ogre::Mesh::ChunkSubmesh &csm = cmesh.submeshes[i];
+		sm.Material = mat_mgr.GetMaterial(csm.material.c_str());
+		if (!sm.Material)
+			throw Ogre::Mesh::InvalidMaterial();
+		if (csm.operation != Ogre::Mesh::ChunkSubmesh::SO_TriList)
+			throw Ogre::Mesh::NotImplemented("Submesh operations other than TriList aren't implemented yet");
+		sm.Faces.resize(csm.faceVertices.size() / 3);
+		for (size_t face = 0; face < sm.Faces.size(); ++face)
+		{
+			sm.Faces[face].Vertices[0] = csm.faceVertices[face * 3 + 0];
+			sm.Faces[face].Vertices[1] = csm.faceVertices[face * 3 + 1];
+			sm.Faces[face].Vertices[2] = csm.faceVertices[face * 3 + 2];
+		}
+		Ogre::Mesh::ChunkGeometry &geo = *(csm.hasSharedVertices ? cmesh.geometry : csm.geometry);
+		sm.Vertices = ReadSubmeshGeometry(geo, filename);
+
+		// Read bone assignments
+		std::vector<Ogre::Mesh::BoneAssignment> &boneAssignments = (csm.hasSharedVertices ? cmesh.boneAssignments : csm.boneAssignments);
+		assert(!csm.hasSharedVertices || csm.boneAssignments.empty());
+		for(const auto &ba : boneAssignments)
+		{
+			if (ba.vertex >= sm.GetNumVertices())
+				throw Ogre::Mesh::VertexNotFound();
+			if (bone_lookup.find(ba.bone) == bone_lookup.end())
+				throw Ogre::Skeleton::BoneNotFound();
+			size_t bone_index = bone_lookup[ba.bone];
+			// Check quickly if all weight slots are used
+			StdSubMesh::Vertex &vertex = sm.Vertices[ba.vertex];
+			if (vertex.bone_weight[StdMeshVertex::MaxBoneWeightCount - 1] != 0)
+			{
+				throw Ogre::Mesh::NotImplemented("Vertex is influenced by too many bones");
+			}
+			for (size_t weight_index = 0; weight_index < StdMeshVertex::MaxBoneWeightCount; ++weight_index)
+			{
+				if (vertex.bone_weight[weight_index] == 0)
+				{
+					vertex.bone_weight[weight_index] = ba.weight;
+					vertex.bone_index[weight_index] = bone_index;
+					break;
+				}
+			}
+		}
+
+		// Normalize bone assignments
+		for(StdSubMesh::Vertex &vertex : sm.Vertices)
+		{
+			float sum = 0;
+			for (float weight : vertex.bone_weight)
+				sum += weight;
+			if (sum != 0)
+				for (float &weight : vertex.bone_weight)
+					weight /= sum;
+			else
+				vertex.bone_weight[0] = 1.0f;
+		}
+	}
+	return mesh.release();
+}
+
+void StdMeshSkeletonLoader::ResolveIncompleteSkeletons()
+{
+	DoResetSkeletons();
+	DoAppendSkeletons();
+	DoIncludeSkeletons();
+}
+
+void StdMeshSkeletonLoader::DoResetSkeletons()
+{
+	std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::iterator it;
+	for (it = Skeletons.begin(); it != Skeletons.end(); it++)
+	{
+		std::shared_ptr<StdMeshSkeleton> skeleton = it->second;
+
+		// remove animations from destination
+		std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator animations = skeleton->Animations.begin();
+
+		while (animations != skeleton->Animations.end())
+		{
+			if (animations->second.OriginSkeleton != &(*(skeleton)))
+			{
+				//DebugLogF("Erasing animation %s from %s", animations->first.getData(), it->first.getData());
+				animations = skeleton->Animations.erase(animations);
+			}
+			else
+			{
+				++animations;
+			}
+		}
+	}
+}
+
+void StdMeshSkeletonLoader::DoAppendSkeletons()
+{
+	// handle the "appendto.<C4ID>.skeleton" files.
+
+	std::map<StdCopyStrBuf, StdCopyStrBuf>::iterator it;
+	for (it = AppendtoSkeletons.begin(); it != AppendtoSkeletons.end(); it++)
+	{
+		StdCopyStrBuf id(it->second);
+
+		StdMeshSkeleton* destination = GetSkeletonByDefinition(id.getData());
+
+		// append animations, if the definition has a mesh
+		if (destination == NULL)
+		{
+			// Note that GetSkeletonByDefinition logs already why
+			// the skeleton does not exist.
+			LogF("WARNING: Appending skeleton '%s' failed", it->first.getData());
+		}
+		else
+		{
+			std::shared_ptr<StdMeshSkeleton> source = GetSkeletonByName(it->first);
+
+			std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator animations;
+			
+			// append animations from source
+			for (animations = source->Animations.begin(); animations != source->Animations.end(); animations++)
+			{
+				if (destination->Animations.find(animations->first) != destination->Animations.end())
+				{
+					LogF("WARNING: Overloading animation '%s' is not allowed. This animation already exists in '%s'.", animations->first.getData(), id.getData());
+				}
+				else
+				{
+					//DebugLogF("Appending animation %s to definition %s", animations->second.Name.getData(), id.getData());
+					destination->InsertAnimation(*source, animations->second);
+				}
+			}
+		}
+	}
+}
+
+void StdMeshSkeletonLoader::DoIncludeSkeletons()
+{
+	// handle the "include.<C4ID>.skeleton" files.
+
+	std::map<StdCopyStrBuf, StdCopyStrBuf>::iterator it;
+	for (it = IncludeSkeletons.begin(); it != IncludeSkeletons.end(); it++)
+	{
+		StdCopyStrBuf id(it->second);
+
+		StdMeshSkeleton* source = GetSkeletonByDefinition(id.getData());
+
+		// append animations, if the definition has a mesh
+		if (source == NULL)
+		{
+			// Note that GetSkeletonByDefinition logs already why
+			// the skeleton does not exist.
+			LogF("WARNING: Including skeleton '%s' failed", it->first.getData());
+		}
+		else
+		{
+			std::shared_ptr<StdMeshSkeleton> destination = GetSkeletonByName(it->first);
+
+			std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator animations;
+
+			// append animations from source
+			for (animations = source->Animations.begin(); animations != source->Animations.end(); animations++)
+			{
+				if (destination->Animations.find(animations->first) != destination->Animations.end())
+				{
+					LogF("WARNING: Animation '%s' from %s is not included. A newer version of the animation exists in the destination file.", animations->first.getData(), id.getData());
+				}
+				else
+				{
+					//DebugLogF("Including animation %s from skeleton %s", animations->second.Name.getData(), id.getData());
+					destination->InsertAnimation(*source, animations->second);
+				}
+			}
 		}
 	}
 }

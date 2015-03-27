@@ -28,7 +28,6 @@
 #include <zlib.h>
 #include <zlib/gzio.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -53,7 +52,6 @@ CStdFile::~CStdFile()
 
 bool CStdFile::Create(const char *szFilename, bool fCompressed, bool fExecutable, bool fMemory)
 {
-	SCopy(szFilename,Name,_MAX_PATH);
 	thread_check.Set();
 	// Set modes
 	ModeWrite=true;
@@ -62,10 +60,15 @@ bool CStdFile::Create(const char *szFilename, bool fCompressed, bool fExecutable
 	{
 		if (!(pMemory = new StdBuf())) return false;
 		MemoryPtr = 0;
+
+		StdStrBuf buf;
+		buf.Format("<%p>", pMemory);
+		SCopy(buf.getData(), Name, _MAX_PATH);
 	}
 	// Open standard file
 	else
 	{
+		SCopy(szFilename,Name,_MAX_PATH);
 		int flags = _O_BINARY|O_CLOEXEC|O_CREAT|O_WRONLY|O_TRUNC;
 #ifdef _WIN32
 		int mode = _S_IREAD|_S_IWRITE;
@@ -130,7 +133,7 @@ bool CStdFile::Open(const char *szFilename, bool fCompressed)
 	return true;
 }
 
-bool CStdFile::Append(const char *szFilename)
+bool CStdFile::Append(const char *szFilename, bool text)
 {
 	SCopy(szFilename,Name,_MAX_PATH);
 	thread_check.Set();
@@ -138,9 +141,9 @@ bool CStdFile::Append(const char *szFilename)
 	ModeWrite=true;
 	// Open standard file
 #ifdef _WIN32
-	if (!(hFile=_wfopen(GetWideChar(Name),L"ab"))) return false;
+	if (!(hFile = _wfopen(GetWideChar(Name), text ? L"at" : L"ab"))) return false;
 #else
-	if (!(hFile=fopen(Name,"ab"))) return false;
+	if (!(hFile=fopen(Name,text ? "at" : "ab"))) return false;
 #endif
 	// Reset buffer
 	ClearBuffer();
@@ -265,7 +268,7 @@ bool CStdFile::Write(const void *pBuffer, int iSize)
 bool CStdFile::WriteString(const char *szStr)
 {
 	thread_check.Check();
-	BYTE nl[2]={0x0D,0x0A};
+	BYTE nl[2]={0x0D,0x0A};	
 	if (!szStr) return false;
 	int size=SLen(szStr);
 	if (!Write((void*)szStr,size)) return false;

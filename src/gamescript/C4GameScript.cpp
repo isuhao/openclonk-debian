@@ -33,7 +33,6 @@
 #include <C4Log.h>
 #include <C4MessageInput.h>
 #include <C4MouseControl.h>
-#include <C4ObjectInfoList.h>
 #include <C4Player.h>
 #include <C4PlayerList.h>
 #include <C4PXS.h>
@@ -41,6 +40,7 @@
 #include <C4Texture.h>
 #include <C4Weather.h>
 #include <C4Viewport.h>
+#include <C4FoW.h>
 
 // undocumented!
 static bool FnIncinerateLandscape(C4PropList * _this, long iX, long iY)
@@ -51,7 +51,7 @@ static bool FnIncinerateLandscape(C4PropList * _this, long iX, long iY)
 
 static C4Void FnSetGravity(C4PropList * _this, long iGravity)
 {
-	::Landscape.Gravity = C4REAL100(BoundBy<long>(iGravity,-1000,1000));
+	::Landscape.Gravity = C4REAL100(Clamp<long>(iGravity,-1000,1000));
 	return C4Void();
 }
 
@@ -118,13 +118,13 @@ static Nillable<long> FnGetY(C4PropList * _this, long iPrec)
 	return fixtoi(Object(_this)->fix_y, iPrec);
 }
 
-static C4Object *FnCreateObject(C4PropList * _this,
+static C4Object *FnCreateObjectAbove(C4PropList * _this,
                                 C4PropList * PropList, long iXOffset, long iYOffset, Nillable<long> owner)
 {
 	if (Object(_this)) // Local object calls override
 	{
-		iXOffset+=Object(_this)->GetX();
-		iYOffset+=Object(_this)->GetY();
+		iXOffset += Object(_this)->GetX();
+		iYOffset += Object(_this)->GetY();
 	}
 
 	long iOwner = owner;
@@ -136,13 +136,40 @@ static C4Object *FnCreateObject(C4PropList * _this,
 			iOwner = NO_OWNER;
 	}
 
-	C4Object *pNewObj = Game.CreateObject(PropList,Object(_this),iOwner,iXOffset,iYOffset);
+	C4Object *pNewObj = Game.CreateObject(PropList, Object(_this), iOwner, iXOffset, iYOffset);
 
 	// Set initial controller to creating controller, so more complicated cause-effect-chains can be traced back to the causing player
 	if (pNewObj && Object(_this) && Object(_this)->Controller > NO_OWNER) pNewObj->Controller = Object(_this)->Controller;
 
 	return pNewObj;
 }
+
+static C4Object *FnCreateObject(C4PropList * _this,
+	C4PropList * PropList, long iXOffset, long iYOffset, Nillable<long> owner)
+{
+	if (Object(_this)) // Local object calls override
+	{
+		iXOffset += Object(_this)->GetX();
+		iYOffset += Object(_this)->GetY();
+	}
+
+	long iOwner = owner;
+	if (owner.IsNil())
+	{
+		if (Object(_this))
+			iOwner = Object(_this)->Controller;
+		else
+			iOwner = NO_OWNER;
+	}
+
+	C4Object *pNewObj = Game.CreateObject(PropList, Object(_this), iOwner, iXOffset, iYOffset, 0, true);
+
+	// Set initial controller to creating controller, so more complicated cause-effect-chains can be traced back to the causing player
+	if (pNewObj && Object(_this) && Object(_this)->Controller > NO_OWNER) pNewObj->Controller = Object(_this)->Controller;
+
+	return pNewObj;
+}
+
 
 static C4Object *FnCreateConstruction(C4PropList * _this,
                                       C4PropList * PropList, long iXOffset, long iYOffset, Nillable<long> owner,
@@ -501,7 +528,7 @@ static bool FnSound(C4PropList * _this, C4String *szSound, bool fGlobal, Nillabl
 	return true;
 }
 
-static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop)
+static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop, long iFadeTime_ms)
 {
 	bool success;
 	if (!szSongname)
@@ -510,7 +537,7 @@ static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop)
 	}
 	else
 	{
-		success = Application.MusicSystem.Play(FnStringPar(szSongname), !!fLoop);
+		success = Application.MusicSystem.Play(FnStringPar(szSongname), !!fLoop, iFadeTime_ms);
 	}
 	if (::Control.SyncMode()) return true;
 	return success;
@@ -522,7 +549,7 @@ static long FnMusicLevel(C4PropList * _this, long iLevel)
 	return Application.MusicSystem.SetVolume(iLevel);
 }
 
-static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<long> iAtPlayer)
+static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<long> iAtPlayer, bool fForceSwitch, long iFadeTime_ms)
 {
 	// If a player number is provided, set play list for clients where given player is local only
 	if (!iAtPlayer.IsNil() && iAtPlayer != NO_OWNER)
@@ -532,7 +559,7 @@ static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<lon
 		if (!at_plr->LocalControl) return 0;
 	}
 	// Set playlist; count entries
-	long iFilesInPlayList = Application.MusicSystem.SetPlayList(FnStringPar(szPlayList));
+	long iFilesInPlayList = Application.MusicSystem.SetPlayList(FnStringPar(szPlayList), fForceSwitch, iFadeTime_ms);
 	Game.PlayList.Copy(FnStringPar(szPlayList));
 	// network/record/replay: return 0 for sync reasons
 	if (::Control.SyncMode()) return 0;
@@ -814,21 +841,39 @@ static bool FnDoBaseProduction(C4PropList * _this, long iPlr, C4ID id, long iCha
 	return ::Players.Get(iPlr)->BaseProduction.SetIDCount(id,iLastcount+iChange,true);
 }
 
-static bool FnSetPlrKnowledge(C4PropList * _this, long iPlr, C4ID id, bool fRemove)
+bool FnSetPlrKnowledge(C4Player *player, C4ID id, bool fRemove)
 {
-	C4Player *pPlr=::Players.Get(iPlr);
-	if (!pPlr) return false;
 	if (fRemove)
 	{
-		long iIndex=pPlr->Knowledge.GetIndex(id);
+		long iIndex = player->Knowledge.GetIndex(id);
 		if (iIndex<0) return false;
-		return pPlr->Knowledge.DeleteItem(iIndex);
+		return player->Knowledge.DeleteItem(iIndex);
 	}
 	else
 	{
 		if (!C4Id2Def(id)) return false;
-		return pPlr->Knowledge.SetIDCount(id,1,true);
+		return player->Knowledge.SetIDCount(id, 1, true);
 	}
+}
+
+static bool FnSetPlrKnowledge(C4PropList * _this, Nillable<long> iPlr, C4ID id, bool fRemove)
+{
+	
+	bool success = false;
+	// iPlr == nil: Call for all players
+	if (iPlr.IsNil())
+	{
+		for (C4Player *player = ::Players.First; player; player = player->Next)
+			if (FnSetPlrKnowledge(player, id, fRemove))
+				success = true;
+	}
+	else
+	{
+		// Otherwise call for requested player
+		C4Player *player = ::Players.Get(iPlr);
+		if (player) success = FnSetPlrKnowledge(player, id, fRemove);
+	}
+	return success;
 }
 
 static C4Value FnGetPlrKnowledge(C4PropList * _this, int iPlr, C4ID id, int iIndex, int dwCategory)
@@ -1086,6 +1131,20 @@ static C4Void FnSetTemperature(C4PropList * _this, long iTemperature)
 static long FnGetTemperature(C4PropList * _this)
 {
 	return ::Weather.GetTemperature();
+}
+
+static C4Void FnSetAmbientBrightness(C4PropList * _this, long iBrightness)
+{
+	if (::Landscape.pFoW)
+		::Landscape.pFoW->Ambient.SetBrightness(iBrightness / 100.);
+	return C4Void();
+}
+
+static long FnGetAmbientBrightness(C4PropList * _this)
+{
+	if (!::Landscape.pFoW)
+		return 100;
+	return static_cast<long>(::Landscape.pFoW->Ambient.GetBrightness() * 100. + 0.5);
 }
 
 static C4Void FnSetSeason(C4PropList * _this, long iSeason)
@@ -2074,15 +2133,14 @@ static C4Value FnEffectCall(C4PropList * _this, C4Value * Pars)
 
 static bool FnSetViewOffset(C4PropList * _this, long iPlayer, long iX, long iY)
 {
-	if (!ValidPlr(iPlayer)) return 0;
+	if (!ValidPlr(iPlayer)) return false;
 	// get player viewport
 	C4Viewport *pView = ::Viewports.GetViewport(iPlayer);
 	if (!pView) return 1; // sync safety
 	// set
-	pView->ViewOffsX = iX;
-	pView->ViewOffsY = iY;
+	pView->SetViewOffset(iX, iY);
 	// ok
-	return 1;
+	return true;
 }
 
 // undocumented!
@@ -2325,7 +2383,7 @@ static bool FnCustomMessage(C4PropList * _this, C4String *pMsg, C4Object *pObj, 
 
 /*static long FnSetSaturation(C4AulContext *ctx, long s)
   {
-  return pDraw->SetSaturation(BoundBy(s,0l,255l));
+  return pDraw->SetSaturation(Clamp(s,0l,255l));
   }*/
 
 // undocumented!
@@ -2491,6 +2549,25 @@ static bool FnGainScenarioAchievement(C4PropList * _this, C4String *achievement_
 	return true;
 }
 
+static long FnGetPXSCount(C4PropList * _this, Nillable<long> iMaterial, Nillable<long> iX0, Nillable<long> iY0, Nillable<long> iWdt, Nillable<long> iHgt)
+{
+	if (iX0.IsNil())
+	{
+		// Search everywhere
+		// All materials everywhere
+		if (iMaterial.IsNil() || iMaterial == MNone) return ::PXS.GetCount();
+		// Specific material everywhere
+		return ::PXS.GetCount(iMaterial);
+	}
+	else
+	{
+		// Material in area; offset by caller
+		int32_t x = iX0, y = iY0;
+		if (Object(_this)) { x += Object(_this)->GetX(); y += Object(_this)->GetY(); }
+		return ::PXS.GetCount(iMaterial.IsNil() ? MNone : static_cast<int32_t>(iMaterial), x, y, iWdt, iHgt);
+	}
+}
+
 extern C4ScriptConstDef C4ScriptGameConstMap[];
 extern C4ScriptFnDef C4ScriptGameFnMap[];
 
@@ -2516,6 +2593,7 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "GetPlayerColor", FnGetPlayerColor);
 	AddFunc(pEngine, "GetPlrClonkSkin", FnGetPlrClonkSkin);
 	AddFunc(pEngine, "CreateObject", FnCreateObject);
+	AddFunc(pEngine, "CreateObjectAbove", FnCreateObjectAbove);
 	AddFunc(pEngine, "CreateConstruction", FnCreateConstruction);
 	AddFunc(pEngine, "FindConstructionSite", FnFindConstructionSite);
 	AddFunc(pEngine, "CheckConstructionSite", FnCheckConstructionSite);
@@ -2577,6 +2655,8 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "CanInsertMaterial", FnCanInsertMaterial);
 	AddFunc(pEngine, "LandscapeWidth", FnLandscapeWidth);
 	AddFunc(pEngine, "LandscapeHeight", FnLandscapeHeight);
+	AddFunc(pEngine, "SetAmbientBrightness", FnSetAmbientBrightness);
+	AddFunc(pEngine, "GetAmbientBrightness", FnGetAmbientBrightness);
 	AddFunc(pEngine, "SetSeason", FnSetSeason);
 	AddFunc(pEngine, "GetSeason", FnGetSeason);
 	AddFunc(pEngine, "SetClimate", FnSetClimate);
@@ -2658,6 +2738,7 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "PlayerObjectCommand", FnPlayerObjectCommand);
 	AddFunc(pEngine, "EditCursor", FnEditCursor);
 	AddFunc(pEngine, "GainScenarioAchievement", FnGainScenarioAchievement);
+	AddFunc(pEngine, "GetPXSCount", FnGetPXSCount);
 
 	F(GetPlrKnowledge);
 	F(GetComponent);

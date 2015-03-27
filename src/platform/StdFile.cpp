@@ -143,7 +143,7 @@ const char *GetExtension(const char *szFilename)
 	for (end=0; szFilename[end]; end++) {}
 	pos = end;
 	while ((pos>0) && (szFilename[pos-1] != '.') && (szFilename[pos-1] != DirectorySeparator)) pos--;
-	if (szFilename[pos-1] == '.') return szFilename+pos;
+	if ((pos > 0) && szFilename[pos-1] == '.') return szFilename+pos;
 	return szFilename+end;
 }
 
@@ -823,12 +823,6 @@ bool EraseDirectory(const char *szDirName)
 }
 
 /* Items */
-
-/*int ItemAttributes(const char *szItemName)
-  {
-  return FileAttributes(szItemName);
-  }*/
-
 bool RenameItem(const char *szItemName, const char *szNewItemName)
 {
 	// FIXME: What if the directory would have to be copied?

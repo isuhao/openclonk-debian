@@ -22,16 +22,11 @@
 
 #include <C4Viewport.h>
 #include <C4Console.h>
-#include <C4MouseControl.h>
-#include <C4GraphicsSystem.h>
 #include <C4Landscape.h>
 #include <C4PlayerList.h>
-#include <StdRegistry.h>
 
-#ifdef USE_X11
 #ifdef WITH_DEVELOPER_MODE
 #include <gtk/gtk.h>
-#endif
 #endif
 
 #ifdef USE_WIN32_WINDOWS
@@ -74,11 +69,11 @@ bool C4Viewport::ViewPositionByScrollBars()
 	// Vertical
 	scroll.fMask=SIF_POS;
 	GetScrollInfo(pWindow->hWindow,SB_VERT,&scroll);
-	ViewY=float(scroll.nPos);
+	SetViewY(float(scroll.nPos));
 	// Horizontal
 	scroll.fMask=SIF_POS;
 	GetScrollInfo(pWindow->hWindow,SB_HORZ,&scroll);
-	ViewX=float(scroll.nPos);
+	SetViewX(float(scroll.nPos));
 	return true;
 }
 
@@ -90,16 +85,16 @@ bool C4Viewport::ScrollBarsByViewPosition()
 	// Vertical
 	scroll.fMask=SIF_ALL;
 	scroll.nMin=0;
-	scroll.nMax=GBackHgt;
+	scroll.nMax = GBackHgt * Zoom;
 	scroll.nPage=ViewHgt;
-	scroll.nPos=int(ViewY);
+	scroll.nPos=int(GetViewY() * Zoom);
 	SetScrollInfo(pWindow->hWindow,SB_VERT,&scroll,true);
 	// Horizontal
 	scroll.fMask=SIF_ALL;
 	scroll.nMin=0;
-	scroll.nMax=GBackWdt;
+	scroll.nMax=GBackWdt * Zoom;
 	scroll.nPage=ViewWdt;
-	scroll.nPos=int(ViewX);
+	scroll.nPos = int(GetViewX() * Zoom);
 	SetScrollInfo(pWindow->hWindow,SB_HORZ,&scroll,true);
 	return true;
 }
@@ -134,7 +129,7 @@ bool C4Viewport::ScrollBarsByViewPosition()
 	GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->h_scrollbar));
 
 	gtk_adjustment_configure(adjustment,
-	                         ViewX, // value
+	                         GetViewX(), // value
 	                         0, // lower
 	                         GBackWdt, // upper
 	                         ViewportScrollSpeed, // step_increment
@@ -144,7 +139,7 @@ bool C4Viewport::ScrollBarsByViewPosition()
 
 	adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->v_scrollbar));
 	gtk_adjustment_configure(adjustment,
-	                         ViewY, // value
+	                         GetViewY(), // value
 	                         0, // lower
 	                         GBackHgt, // upper
 	                         ViewportScrollSpeed, // step_increment
@@ -159,10 +154,10 @@ bool C4Viewport::ViewPositionByScrollBars()
 	if (PlayerLock) return false;
 
 	GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->h_scrollbar));
-	ViewX = static_cast<int32_t>(gtk_adjustment_get_value(adjustment));
+	SetViewX(gtk_adjustment_get_value(adjustment));
 
 	adjustment = gtk_range_get_adjustment(GTK_RANGE(pWindow->v_scrollbar));
-	ViewY = static_cast<int32_t>(gtk_adjustment_get_value(adjustment));
+	SetViewY(gtk_adjustment_get_value(adjustment));
 
 	return true;
 }
@@ -199,5 +194,5 @@ void C4ViewportWindow::Close()
 }
 void C4ViewportWindow::EditCursorMove(int X, int Y, uint32_t state)
 {
-	Console.EditCursor.Move(cvp->ViewX + X / cvp->Zoom, cvp->ViewY + Y / cvp->Zoom, state);
+	Console.EditCursor.Move(cvp->GetViewX() + X / cvp->Zoom, cvp->GetViewY() + Y / cvp->Zoom, state);
 }
