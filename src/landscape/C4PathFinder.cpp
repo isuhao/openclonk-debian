@@ -47,7 +47,6 @@
 #include <C4PathFinder.h>
 
 #include <C4FacetEx.h>
-#include <C4Game.h>
 #include <C4GraphicsSystem.h>
 
 const int32_t C4PF_MaxDepth        = 35,
@@ -578,7 +577,7 @@ void C4PathFinder::EnableTransferZones(bool fEnabled)
 
 void C4PathFinder::SetLevel(int iLevel)
 {
-	Level = BoundBy(iLevel, 1, 10);
+	Level = Clamp(iLevel, 1, 10);
 }
 
 void C4PathFinder::Draw(C4TargetFacet &cgo)

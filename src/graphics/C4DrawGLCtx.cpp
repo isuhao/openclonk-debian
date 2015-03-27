@@ -19,10 +19,8 @@
 #include "C4Include.h"
 #include <C4DrawGL.h>
 
-#include <C4App.h>
-#include <C4Surface.h>
 #include <C4Window.h>
-#include <C4Config.h>
+#include <C4App.h>
 
 #ifndef USE_CONSOLE
 
@@ -32,7 +30,6 @@ void CStdGLCtx::SelectCommon()
 	// set some default states
 	glDisable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
-	glShadeModel(GL_FLAT);
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
@@ -309,7 +306,20 @@ bool CStdGLCtx::Init(C4Window * pWindow, C4AbstractApp *pApp, HWND hWindow)
 			else
 			{
 				// create context
-				hrc = wglCreateContext(hDC);
+				if (Config.Graphics.DebugOpenGL && wglCreateContextAttribsARB)
+				{
+					const int attribs[] = {
+						WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB,
+						0
+					};
+					DebugLog("  gl: Creating debug context.");
+					hrc = wglCreateContextAttribsARB(hDC, 0, attribs);
+				}
+				else
+				{
+					hrc = wglCreateContext(hDC);
+				}
+
 				if(!hrc)
 				{
 					pGL->Error("  gl: Error creating gl context");
@@ -320,7 +330,7 @@ bool CStdGLCtx::Init(C4Window * pWindow, C4AbstractApp *pApp, HWND hWindow)
 
 					// share textures
 					bool success = false;
-					wglMakeCurrent(NULL, NULL); pGL->pCurrCtx=NULL;
+					wglMakeCurrent(hDC, NULL); pGL->pCurrCtx=NULL;
 					if (this != pGL->pMainCtx)
 					{
 						if(!wglShareLists(pGL->pMainCtx->hrc, hrc))

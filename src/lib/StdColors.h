@@ -58,77 +58,46 @@ inline void ModulateClr(DWORD &dwDst, DWORD dwMod) // modulate two color values
 	// get alpha
 	int iA1=dwDst>>24, iA2=dwMod>>24;
 	// modulate color values; mod alpha upwards
-#if 0
-	dwDst = ((dwDst     & 0xff) * (dwMod    &   0xff))    >>  8   | // blue
-	        ((dwDst>> 8 & 0xff) * (dwMod>>8 &   0xff)) &   0xff00 | // green
-	        ((dwDst>>16 & 0xff) * (dwMod>>8 & 0xff00)) & 0xff0000 | // red
-	        Min(iA1*iA2>>8, 255) << 24; // alpha (TODO: We don't need Min() here, do we?)
-#else
-	// More exact calculation, but might be slightly slower:
 	dwDst = ((dwDst     & 0xff) * (dwMod     & 0xff) / 0xff)      | // blue
 	        ((dwDst>> 8 & 0xff) * (dwMod>> 8 & 0xff) / 0xff) << 8 | // green
 	        ((dwDst>>16 & 0xff) * (dwMod>>16 & 0xff) / 0xff) << 16| // red
 	        Min(iA1*iA2/0xff, 255)                           << 24; // alpha (TODO: We don't need Min() here, do we?)
-#endif
 }
 
 inline void ModulateClrA(DWORD &dwDst, DWORD dwMod) // modulate two color values and add alpha value
 {
 	// modulate two color values and add alpha value
-#if 0
-	dwDst = (((dwDst&0xff)*(dwMod&0xff))>>8) |  // B
-	        (((dwDst>>8&0xff)*(dwMod>>8&0xff))&0xff00) | // G
-	        (((dwDst>>16&0xff)*(dwMod>>8&0xff00))&0xff0000) | // R
-	        (Max<uint32_t>((dwDst>>24)+(dwMod>>24), 0xff) - 0xff)<<24;
-#else
-	// More exact calculation, but might be slightly slower:
 	dwDst = ((dwDst     & 0xff) * (dwMod     & 0xff) / 0xff)      | // B
 	        ((dwDst>> 8 & 0xff) * (dwMod>> 8 & 0xff) / 0xff) << 8 | // G
 	        ((dwDst>>16 & 0xff) * (dwMod>>16 & 0xff) / 0xff) << 16| // R
 	        (Max<uint32_t>((dwDst>>24)+(dwMod>>24), 0xff) - 0xff)<<24;
-#endif
 }
 inline void ModulateClrMOD2(DWORD &dwDst, DWORD dwMod) // clr1+clr2-0.5
 {
 	// signed color addition
-	dwDst = (BoundBy<int>(((int)(dwDst&0xff)+(dwMod&0xff)-0x7f)<<1,0,0xff)&0xff) |  // B
-	        (BoundBy<int>(((int)(dwDst&0xff00)+(dwMod&0xff00)-0x7f00)<<1,0,0xff00)&0xff00) | // G
-	        (BoundBy<int>(((int)(dwDst&0xff0000)+(dwMod&0xff0000)-0x7f0000)<<1,0,0xff0000)&0xff0000) | // R
+	dwDst = (Clamp<int>(((int)(dwDst&0xff)+(dwMod&0xff)-0x7f)<<1,0,0xff)&0xff) |  // B
+	        (Clamp<int>(((int)(dwDst&0xff00)+(dwMod&0xff00)-0x7f00)<<1,0,0xff00)&0xff00) | // G
+	        (Clamp<int>(((int)(dwDst&0xff0000)+(dwMod&0xff0000)-0x7f0000)<<1,0,0xff0000)&0xff0000) | // R
 	        (Max<uint32_t>((dwDst>>24)+(dwMod>>24), 0xff) - 0xff)<<24;
 }
 
 inline void ModulateClrMono(DWORD &dwDst, BYTE byMod)
 {
 	// darken a color value by constant modulation
-#if 0
-	dwDst = ((dwDst     & 0xff) * byMod)    >>  8   | // blue
-	        ((dwDst>> 8 & 0xff) * byMod) &   0xff00 | // green
-	        ((dwDst>> 8 & 0xff00) * byMod) & 0xff0000 | // red
-	        (dwDst & 0xff000000);                     // alpha
-#else
 	// More exact calculation, but might be slightly slower:
 	dwDst = ((dwDst     & 0xff) * byMod / 0xff)      | // blue
 	        ((dwDst>> 8 & 0xff) * byMod / 0xff) << 8 | // green
 	        ((dwDst>>16 & 0xff) * byMod / 0xff) << 16| // red
 	        (dwDst & 0xff000000);                     // alpha
-#endif
 }
 
 inline void ModulateClrMonoA(DWORD &dwDst, BYTE byMod, BYTE byA)
 {
 	// darken a color value by constant modulation and add an alpha value
-#if 0
-	dwDst = ((dwDst     & 0xff) * byMod)    >>  8   | // blue
-	        ((dwDst>> 8 & 0xff) * byMod) &   0xff00 | // green
-	        ((dwDst>> 8 & 0xff00) * byMod) & 0xff0000 | // red
-	        (Max<uint32_t>((dwDst>>24) + byA, 0xff) - 0xff) << 24; // alpha
-#else
-	// More exact calculation, but might be slightly slower:
 	dwDst = ((dwDst     & 0xff) * byMod / 0xff)      | // blue
 	        ((dwDst>> 8 & 0xff) * byMod / 0xff) << 8 | // green
 	        ((dwDst>>16 & 0xff) * byMod / 0xff) << 16| // red
 	        (Max<uint32_t>((dwDst>>24) + byA, 0xff) - 0xff) << 24; // alpha
-#endif
 }
 
 
@@ -296,52 +265,6 @@ struct CStdPalette
 
 	DWORD GetClr(BYTE byCol)
 	{ return Colors[byCol]; }
-};
-
-// clrmod-add-map to cover a drawing range in which all draws shall be adjusted by the map
-class C4FogOfWar
-{
-private:
-	class C4Surface * pSurface;
-	unsigned char *pMap; size_t MapSize;
-	int Wdt, Hgt;   // number of sections in the map
-	bool FadeTransparent; // if set, ReduceModulation and AddModulation fade transparent instead of black
-	int ResolutionX, ResolutionY;
-	DWORD dwBackClr;
-public:
-	int OffX, OffY; // offset to add to drawing positions before applying the map
-	enum { DefResolutionX = 64, DefResolutionY = 64 };
-
-	C4FogOfWar() : pSurface(0), pMap(NULL), MapSize(0), Wdt(0), Hgt(0),
-			FadeTransparent(false), ResolutionX(DefResolutionX), ResolutionY(DefResolutionY), dwBackClr(0), OffX(0), OffY(0) { }
-	~C4FogOfWar();
-
-	// reset all of map to given values; uses transparent mode and clears rect if a back color is given
-	void Reset(int ResX, int ResY, int WdtPx, int HgtPx, int OffX, int OffY,
-	           unsigned char StartVis, int x0, int y0, uint32_t dwBackClr=0, class C4Surface *backsfc=NULL);
-	class C4Surface *GetSurface();
-	// "landscape" coordinates
-	void ReduceModulation(int cx, int cy, int Radius, int (*VisProc)(int, int, int, int, int));                              // reveal all within iRadius1; fade off until iRadius2
-	void AddModulation(int cx, int cy, int Radius, uint8_t Transparency);                                 // hide all within iRadius1; fade off until iRadius2
-
-	// display coordinates
-	uint32_t GetModAt(int x, int y) const;
-	int GetResolutionX() const { return ResolutionX; }
-	int GetResolutionY() const { return ResolutionY; }
-
-	inline bool IsColored() const { return !!dwBackClr; }
-};
-
-// used to calc intermediate points of color fades
-class CColorFadeMatrix
-{
-private:
-	int ox,oy,w,h; // offset of x/y
-	struct { int c0,cx,cy,ce; } clrs[4];
-
-public:
-	CColorFadeMatrix(int iX, int iY, int iWdt, int iHgt, uint32_t dwClr1, uint32_t dwClr2, uint32_t dwClr3, uint32_t dwClr4);
-	uint32_t GetColorAt(int iX, int iY);
 };
 
 #endif

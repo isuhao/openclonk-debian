@@ -20,12 +20,9 @@
 #include <C4Include.h>
 #include <C4MessageBoard.h>
 
-#include <C4Object.h>
 #include <C4Application.h>
 #include <C4LoaderScreen.h>
 #include <C4Gui.h>
-#include <C4Console.h>
-#include <C4Network2Dialogs.h>
 #include <C4Player.h>
 #include <C4GraphicsSystem.h>
 #include <C4GraphicsResource.h>
@@ -189,7 +186,7 @@ void C4MessageBoard::Draw(C4Facet &cgo)
 		//if (iMsgY < cgo.Y)
 		//{
 			float fade = Max(ScreenFader, 0.0f) + ((iMsg + 2.0f + float(Fader) / iLineHgt) / Min(2-iMsgFader, -1));
-			dwFade = (0xff - BoundBy(int(fade * 0xff), 0, 0xff)) << 24;
+			dwFade = (0xff - Clamp(int(fade * 0xff), 0, 0xff)) << 24;
 		//}
 		//else
 		//	dwFade = 0xff000000;

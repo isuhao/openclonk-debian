@@ -20,12 +20,10 @@
 #include <C4Include.h>
 #include <C4Scenario.h>
 
-#include <C4Config.h>
 #include <C4InputValidation.h>
 #include <C4Random.h>
 #include <C4Group.h>
 #include <C4Components.h>
-#include <C4Game.h>
 #include <StdColors.h>
 
 //==================================== C4SVal ==============================================
@@ -42,7 +40,7 @@ void C4SVal::Set(int32_t std, int32_t rnd, int32_t min, int32_t max)
 
 int32_t C4SVal::Evaluate()
 {
-	return BoundBy(Std+Random(2*Rnd+1)-Rnd,Min,Max);
+	return Clamp(Std+Random(2*Rnd+1)-Rnd,Min,Max);
 }
 
 void C4SVal::Default()
@@ -142,7 +140,7 @@ void C4SHead::Default()
 	Origin.Clear();
 	Icon=18;
 	*Title = *Loader = *Font = *Engine = *MissionAccess = '\0';
-	C4XVer[0] = C4XVer[1] = C4XVer[2] = 0;
+	C4XVer[0] = C4XVer[1] = 0;
 	Difficulty = StartupPlayerCount = RandomSeed = 0;
 	SaveGame = Replay = NoInitialize = false;
 	Film = 0;
@@ -189,7 +187,7 @@ void C4SGame::Default()
 {
 	Goals.Clear();
 	Rules.Clear();
-	FoWColor=0;
+	FoWEnabled = true;
 }
 
 void C4SGame::CompileFunc(StdCompiler *pComp, bool fSection)
@@ -203,7 +201,7 @@ void C4SGame::CompileFunc(StdCompiler *pComp, bool fSection)
 
 	pComp->Value(mkNamingAdapt(Goals,                    "Goals",               C4IDList()));
 	pComp->Value(mkNamingAdapt(Rules,                    "Rules",               C4IDList()));
-	pComp->Value(mkNamingAdapt(FoWColor,                 "FoWColor",            0u));
+	pComp->Value(mkNamingAdapt(FoWEnabled,               "FoWEnabled",          true));
 }
 
 void C4SPlrStart::Default()
@@ -281,7 +279,6 @@ void C4SLandscape::Default()
 	NoScan=0;
 	KeepMapCreator=0;
 	SkyScrollMode=0;
-	FoWRes=C4FogOfWar::DefResolutionX;
 	MaterialZoom=4;
 	FlatChunkShapes=false;
 }
@@ -325,7 +322,6 @@ void C4SLandscape::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(NoScan,                  "NoScan",                false));
 	pComp->Value(mkNamingAdapt(KeepMapCreator,          "KeepMapCreator",        false));
 	pComp->Value(mkNamingAdapt(SkyScrollMode,           "SkyScrollMode",         0));
-	pComp->Value(mkNamingAdapt(FoWRes,                  "FoWRes",                static_cast<int32_t>(C4FogOfWar::DefResolutionX)));
 	pComp->Value(mkNamingAdapt(MaterialZoom,            "MaterialZoom",          4));
 	pComp->Value(mkNamingAdapt(FlatChunkShapes,         "FlatChunkShapes",       false));
 }

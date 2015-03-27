@@ -20,10 +20,8 @@
 #include <C4Include.h>
 #include <C4MouseControl.h>
 
-#include <C4DefList.h>
 #include <C4Viewport.h>
 #include <C4Object.h>
-#include <C4Command.h>
 #include <C4Application.h>
 #include <C4FullScreen.h>
 #include <C4Gui.h>
@@ -32,9 +30,7 @@
 #include <C4Player.h>
 #include "C4ChatDlg.h"
 #include <C4GraphicsResource.h>
-#include <C4GraphicsSystem.h>
 #include <C4PlayerList.h>
-#include <C4GameObjects.h>
 #include <C4GameControl.h>
 
 const int32_t C4MC_Drag_None            = 0,
@@ -209,7 +205,7 @@ void C4MouseControl::Move(int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyFl
 	// get view position
 	C4Rect rcViewport = Viewport->GetOutputRect();
 	fctViewport.Set(NULL, rcViewport.x, rcViewport.y, rcViewport.Wdt, rcViewport.Hgt);
-	ViewX=Viewport->ViewX; ViewY=Viewport->ViewY;
+	ViewX=Viewport->GetViewX(); ViewY=Viewport->GetViewY();
 	fctViewportGame = Viewport->last_game_draw_cgo;
 	fctViewportGUI = Viewport->last_gui_draw_cgo;
 	// First time viewport attachment: center mouse
@@ -397,11 +393,15 @@ void C4MouseControl::Draw(C4TargetFacet &cgo, const ZoomData &GameZoom)
 				ImageWdt = Def->PictureRect.Wdt;
 				ImageHgt = Def->PictureRect.Hgt;
 			}
-			else
+			else if (pGfx->Type == C4DefGraphics::TYPE_Mesh)
 			{
 				// Note bounding box is in OGRE coordinate system
 				ImageWdt = pGfx->Mesh->GetBoundingBox().y2 - pGfx->Mesh->GetBoundingBox().y1;
 				ImageHgt = pGfx->Mesh->GetBoundingBox().z2 - pGfx->Mesh->GetBoundingBox().z1;
+			}
+			else
+			{
+				ImageWdt = ImageHgt = 1.0f;
 			}
 
 			// zoom mode: Drag in GUI or Game depending on source object
@@ -542,7 +542,7 @@ void C4MouseControl::UpdateCursorTarget()
 	}
 
 	// Make a script callback if the object being hovered changes
-	if(OldTargetObject != TargetObject)
+	if(!IsPassive() && OldTargetObject != TargetObject)
 	{
 		// TODO: This might put a heavy load on the network, depending on the number of
 		// selectable objects around. If it turns out to be a problem we might want to
@@ -850,7 +850,9 @@ void C4MouseControl::UpdateFogOfWar()
 	// Assume no fog of war
 	FogOfWar=false;
 	// Check for fog of war
-	if ((pPlayer->fFogOfWar && !pPlayer->FoWIsVisible(int32_t(GameX),int32_t(GameY))) || GameX<0 || GameY<0 || int32_t(GameX)>=GBackWdt || int32_t(GameY)>=GBackHgt)
+	// TODO: Check C4FoWRegion... should maybe be passed as a parameter?
+	// pDraw->GetFoW() might not be current at this time.
+	if (/*(pPlayer->fFogOfWar && !pPlayer->FoWIsVisible(int32_t(GameX),int32_t(GameY))) || */GameX<0 || GameY<0 || int32_t(GameX)>=GBackWdt || int32_t(GameY)>=GBackHgt)
 	{
 		FogOfWar=true;
 		// allow dragging, scrolling, region selection and manipulations of objects not affected by FoW
@@ -898,9 +900,7 @@ void C4MouseControl::ScrollView(float iX, float iY, float ViewWdt, float ViewHgt
 	else if (Viewport)
 	{
 		// no player: Scroll fullscreen viewport
-		Viewport->ViewX = Viewport->ViewX+iX;
-		Viewport->ViewY = Viewport->ViewY+iY;
-		Viewport->UpdateViewPosition();
+		Viewport->ScrollView(iX, iY);
 	}
 
 }

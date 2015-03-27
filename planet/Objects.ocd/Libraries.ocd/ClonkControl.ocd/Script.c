@@ -472,6 +472,8 @@ protected func Ejection(object obj)
 		for(var c = 0; c < ContentsCount(); ++c)
 		{
 			var o = Contents(c);
+			if (!o)
+				continue;			
 			if(o->~IsCarryHeavy())
 				continue;
 			if (GetItemPos(o) == nil)
@@ -1137,7 +1139,7 @@ public func ObjectControl(int plr, int ctrl, int x, int y, int strength, bool re
 			if (ctrl == CON_ThrowAlt)
 			{
 				CancelUse();
-				if (proc == "SCALE" || proc == "HANGLE")
+				if (proc == "SCALE" || proc == "HANGLE" || proc == "SWIM")
 					return ObjectCommand("Drop", contents2);
 				else
 					return ObjectCommand("Throw", contents2, x, y);
@@ -1275,6 +1277,7 @@ private func GetUseCallString(string action) {
 private func StartUseControl(int ctrl, int x, int y, object obj)
 {
 	using = obj;
+	obj->SetController(GetController());
 	using_type = DetermineUsageType(obj);
 	alt = ctrl != CON_Use;
 	
@@ -1719,7 +1722,7 @@ private func VirtualCursor()
 	}
 	if (!virtual_cursor)
 	{
-		virtual_cursor = CreateObject(GUI_Crosshair,0,0,GetOwner());
+		virtual_cursor = CreateObjectAbove(GUI_Crosshair,0,0,GetOwner());
 	}
 	
 	return virtual_cursor;

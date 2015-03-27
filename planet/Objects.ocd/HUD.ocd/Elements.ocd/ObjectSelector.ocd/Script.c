@@ -68,18 +68,18 @@ public func ShowsItem()
 
 public func MouseSelectionAlt(int plr)
 {
-	if(!myobject) return;
+	if (!myobject) return;
 	
 	var desc = myobject.UsageHelp;
-	if(!desc) desc = myobject.Description; // fall back to general description
+	if (!desc) desc = myobject.Description; // fall back to general description
 	
 	// close other messages...
 	crew->OnDisplayInfoMessage();
 	
-	if(desc)
+	if (desc)
 	{
-		var msg = Format("<c ff0000>%s</c>",desc);
-		CustomMessage(msg,this,plr);
+		var msg = Format("<c ff0000>%s</c>", desc);
+		CustomMessage(msg, this, plr);
 	}
 	return true;
 }
@@ -329,7 +329,7 @@ public func SetObject(object obj, int type, int pos, int hot, int number, propli
 		{
 			if(!subselector)
 			{
-				subselector = CreateObject(GUI_ExtraSlot,0,0,GetOwner());
+				subselector = CreateObjectAbove(GUI_ExtraSlot,0,0,GetOwner());
 				subselector->SetPosition(GetX()+24,GetY()+24);
 			}
 			subselector->SetContainer(myobject);
@@ -402,7 +402,7 @@ public func Selected()
 public func UpdateSelectionStatus()
 {
 	if(!crew) return;
-	
+
 	// determine...
 	var sel = 0;
 
@@ -434,11 +434,15 @@ public func UpdateSelectionStatus()
 		return;
 	}
 	else if(actiontype == ACTIONTYPE_VEHICLE)
+	{
 		if(crew->GetProcedure() == "PUSH" && crew->GetActionTarget() == myobject)
 			sel = 1;
+	}
 	else if(actiontype == ACTIONTYPE_STRUCTURE)
+	{
 		if(crew->Contained() == myobject)
 			sel = 1;
+	}
 	else if(actiontype == ACTIONTYPE_INVENTORY)
 	{
 		if(0 == position)

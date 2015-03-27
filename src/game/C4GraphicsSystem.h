@@ -20,11 +20,9 @@
 #ifndef INC_C4GraphicsSystem
 #define INC_C4GraphicsSystem
 
-#include <C4FacetEx.h>
 #include <C4MessageBoard.h>
 #include <C4UpperBoard.h>
 #include <C4Video.h>
-#include <C4Shape.h>
 
 class C4GraphicsSystem
 {
@@ -42,6 +40,7 @@ public:
 	bool ShowPathfinder;
 	bool ShowNetstatus;
 	bool ShowSolidMask;
+	bool ShowLights;
 	C4Video Video;
 	C4LoaderScreen *pLoaderScreen;
 	void Default();

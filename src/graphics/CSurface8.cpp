@@ -18,13 +18,10 @@
 
 #include "C4Include.h"
 #include <CSurface8.h>
-#include <Bitmap256.h>
-#include <StdPNG.h>
-#include <C4Draw.h>
-#include <CStdFile.h>
-#include <Bitmap256.h>
 
-#include "limits.h"
+#include <Bitmap256.h>
+#include <CStdFile.h>
+#include <StdColors.h>
 
 CSurface8::CSurface8()
 {
@@ -69,8 +66,8 @@ void CSurface8::NoClip()
 
 void CSurface8::Clip(int iX, int iY, int iX2, int iY2)
 {
-	ClipX=BoundBy(iX,0,Wdt-1); ClipY=BoundBy(iY,0,Hgt-1);
-	ClipX2=BoundBy(iX2,0,Wdt-1); ClipY2=BoundBy(iY2,0,Hgt-1);
+	ClipX=Clamp(iX,0,Wdt-1); ClipY=Clamp(iY,0,Hgt-1);
+	ClipX2=Clamp(iX2,0,Wdt-1); ClipY2=Clamp(iY2,0,Hgt-1);
 }
 
 void CSurface8::HLine(int iX, int iX2, int iY, int iCol)
@@ -88,6 +85,7 @@ bool CSurface8::Create(int iWdt, int iHgt)
 	// create pal
 	pPal = new CStdPalette;
 	if (!pPal) return false;
+	memset(pPal->Colors, 0, sizeof(pPal->Colors));
 
 	Bits=new BYTE[Wdt*Hgt];
 	if (!Bits) return false;
@@ -163,6 +161,7 @@ bool CSurface8::Read(CStdStream &hGroup)
 bool CSurface8::Save(const char *szFilename, CStdPalette *bpPalette)
 {
 	C4BMP256Info BitmapInfo;
+	ZeroMem(&BitmapInfo, sizeof(BitmapInfo));
 	BitmapInfo.Set(Wdt,Hgt, bpPalette ? bpPalette : pPal);
 
 	// Create file & write info
@@ -173,7 +172,8 @@ bool CSurface8::Save(const char *szFilename, CStdPalette *bpPalette)
 		{ return false; }
 
 	// Write lines
-	char bpEmpty[4]; int iEmpty = DWordAligned(Wdt)-Wdt;
+	char bpEmpty[4]; ZeroMem(bpEmpty, 4);
+	const int iEmpty = DWordAligned(Wdt)-Wdt;
 	for (int cnt=Hgt-1; cnt>=0; cnt--)
 	{
 		if (!hFile.Write(Bits+(Pitch*cnt),Wdt))

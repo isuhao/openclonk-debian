@@ -27,7 +27,7 @@ public func IsProduct(id product_id)
 }
 
 private func ProductionTime(id toProduce) { return 150; }
-private func PowerNeed() { return 100; }
+public func PowerNeed() { return 40; }
 
 public func NeedRawMaterial(id rawmat_id)
 {
@@ -70,8 +70,8 @@ protected func FxWorkingTimer()
 
 private func Smoking()
 {
-	if (Random(6)) Smoke(16 * GetCalcDir(),-14,16);
-	if (Random(8)) Smoke(10 * GetCalcDir(),-14,15+Random(3));
+	if (Random(6)) Smoke(16 * GetCalcDir(), -20, 10);
+	if (Random(8)) Smoke(14 * GetCalcDir(), -20, 8 + Random(3));
 	return 1;
 }
 
@@ -101,5 +101,6 @@ func Definition(def) {
 }
 local Name = "$Name$";
 local Description ="$Description$";
+local ContainBlast = true;
 local BlastIncinerate = 100;
 local HitPoints = 70;

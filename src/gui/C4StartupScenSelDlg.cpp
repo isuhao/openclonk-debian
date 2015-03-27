@@ -18,6 +18,8 @@
 #include <C4Include.h>
 #include <C4StartupScenSelDlg.h>
 
+#include <C4Application.h>
+#include <C4GameOptions.h>
 #include <C4Network2Dialogs.h>
 #include <C4StartupMainDlg.h>
 #include <C4StartupNetDlg.h>
@@ -31,8 +33,6 @@
 #include <C4FileSelDlg.h>
 #include <C4MouseControl.h>
 #include <C4GraphicsResource.h>
-#include <C4GameOptions.h>
-
 #include <set>
 
 // singleton
@@ -467,7 +467,6 @@ bool C4ScenarioListLoader::Entry::Load(C4Group *pFromGrp, const StdStrBuf *psFil
 		char *szBuf = sName.GrabPointer();
 		RemoveExtension(szBuf);
 		sName.Take(szBuf);
-		sName.Take(C4Language::IconvClonk(sName.getData()));
 		// load entry specific stuff that's in the front of the group
 		if (!LoadCustomPre(Group))
 			return false;
@@ -1420,15 +1419,6 @@ C4StartupScenSelDlg::C4StartupScenSelDlg(bool fNetwork) : C4StartupDlg(LoadResSt
 	C4GUI::ComponentAligner caMain(GetClientRect(), 0,0, true);
 	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(caMain.GetHeight()/8),rcBounds.Wdt/(rcBounds.Wdt >= 700 ? 128 : 256),0);
 	C4Rect rcMap = caMain.GetCentered(caMain.GetWidth(), caMain.GetHeight());
-#if 0
-	// Was used for the custom map scenario selection style
-	int iYOversize = caMain.GetHeight()/10; // overlap of map to top
-	rcMap.y -= iYOversize; rcMap.Hgt += iYOversize;
-#endif
-	C4GUI::ComponentAligner caMap(rcMap, caMain.GetWidth()/10,0, true);
-#if 0
-	caMap.ExpandTop(-iYOversize);
-#endif
 
 	// tabular for different scenario selection designs
 	pScenSelStyleTabular = new C4GUI::Tabular(rcMap, C4GUI::Tabular::tbNone);
@@ -1536,10 +1526,6 @@ void C4StartupScenSelDlg::DrawElement(C4TargetFacet &cgo)
 	// draw background
 	if (pfctBackground)
 		DrawBackground(cgo, *pfctBackground);
-#if 0
-	else
-		DrawBackground(cgo, C4Startup::Get()->Graphics.fctScenSelBG);
-#endif
 }
 
 void C4StartupScenSelDlg::OnShown()

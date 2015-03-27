@@ -341,7 +341,9 @@ private func FuelNeed(id product) { return product->~GetFuelNeed(); }
 private func LiquidNeed(id product) { return product->~GetLiquidNeed(); }
 private func MaterialNeed(id product) { return product->~GetMaterialNeed(); }
 
-private func PowerNeed() { return 200; }
+public func PowerNeed() { return 80; }
+
+public func GetConsumerPriority() { return 50; }
 
 private func Produce(id product)
 {
@@ -529,9 +531,12 @@ protected func FxProcessProductionStart(object target, proplist effect, int temp
 	// Callback to the producer.
 	this->~OnProductionStart(effect.Product);
 	
-	// consume power
-	if(PowerNeed() > 0)
-		MakePowerConsumer(PowerNeed());
+	// Consume power by registering as a consumer for the needed amount.
+	// But first hold the production until the power system gives it ok.
+	// Always register the power request even if power need is zero. The
+	// power network handles this correctly and a producer may decide to
+	// change its power need during production.
+	RegisterPowerRequest(this->PowerNeed());
 	
 	return 1;
 }
@@ -539,7 +544,7 @@ protected func FxProcessProductionStart(object target, proplist effect, int temp
 public func OnNotEnoughPower()
 {
 	var effect = GetEffect("ProcessProduction", this);
-	if(effect)
+	if (effect)
 	{
 		effect.Active = false;
 		this->~OnProductionHold(effect.Product, effect.Duration);
@@ -552,7 +557,7 @@ public func OnNotEnoughPower()
 public func OnEnoughPower()
 {
 	var effect = GetEffect("ProcessProduction", this);
-	if(effect)
+	if (effect)
 	{
 		effect.Active = true;
 		this->~OnProductionContinued(effect.Product, effect.Duration);
@@ -584,7 +589,7 @@ protected func FxProcessProductionStop(object target, proplist effect, int reaso
 	if(temp) return;
 	
 	// no need to consume power anymore
-	UnmakePowerConsumer();
+	UnregisterPowerRequest();
 		
 	if (reason != 0)
 		return 1;
@@ -593,7 +598,7 @@ protected func FxProcessProductionStop(object target, proplist effect, int reaso
 	//Log("Production finished on %i after %d frames", effect.Product, effect.Duration);
 	this->~OnProductionFinish(effect.Product);
 	// Create product. 	
-	var product = CreateObject(effect.Product);
+	var product = CreateObjectAbove(effect.Product);
 	OnProductEjection(product);
 	
 	return 1;
@@ -602,8 +607,11 @@ protected func FxProcessProductionStop(object target, proplist effect, int reaso
 // Standard behaviour for product ejection.
 public func OnProductEjection(object product)
 {
-	// Vehicles in front fo buildings.
-	if (product->GetCategory() & C4D_Vehicle)
+	// Safety for the product removing itself on construction.
+	if (!product)
+		return;	
+	// Vehicles in front of buildings, and objects with special needs as well.
+	if (product->GetCategory() & C4D_Vehicle || product->~OnCompletionEjectProduct())
 	{
 		var x = GetX();
 		var y = GetY() + GetDefHeight()/2 - product->GetDefHeight()/2;

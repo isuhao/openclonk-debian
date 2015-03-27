@@ -25,7 +25,7 @@ public func IsInteractable() { return true; }
 
 private func MaxContentsCount()
 {
-	return 25;
+	return 50;
 }
 
 
@@ -80,4 +80,5 @@ protected func Definition(def)
 }
 
 local Name = "$Name$";
+local ContainBlast = true;
 local HitPoints = 50;

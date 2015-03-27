@@ -1,6 +1,6 @@
 [DefCore]
 id=WoodenCabin
-Version=5,2,0,1
+Version=6,0
 Category=C4D_Structure
 Width=94
 Height=40
@@ -15,5 +15,4 @@ Entrance=-12,0,13,20
 Exclusive=1
 Construction=1
 Rotate=1
-ContainBlast=1
 RotatedEntrance=1

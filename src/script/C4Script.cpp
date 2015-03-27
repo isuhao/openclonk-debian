@@ -156,7 +156,7 @@ C4Value C4AulDefFunc::Exec(C4PropList * p, C4Value pPars[], bool fPassErrors)
 
 #define MAKE_AND_RETURN_ARRAY(values) do { \
 	C4ValueArray *matrix = new C4ValueArray(sizeof(values) / sizeof(*values)); \
-	for (long i = 0; i < sizeof(values) / sizeof(*values); ++i) \
+	for (size_t i = 0; i < sizeof(values) / sizeof(*values); ++i) \
 		(*matrix)[i] = C4VInt(values[i]); \
 	return matrix; \
 } while (0)
@@ -273,7 +273,7 @@ static C4Value FnTrans_Mul(C4PropList * _this, C4Value *pars)
 
 	// unlike in the other Trans_*-functions, we have to put the array into a C4Value manually here
 	C4ValueArray *matrix = new C4ValueArray(sizeof(values) / sizeof(*values));
-	for (long i = 0; i < sizeof(values) / sizeof(*values); ++i)
+	for (size_t i = 0; i < sizeof(values) / sizeof(*values); ++i)
 		(*matrix)[i] = C4VInt(values[i]);
 	return C4VArray(matrix);
 }
@@ -477,7 +477,7 @@ static long FnDistance(C4PropList * _this, long iX1, long iY1, long iX2, long iY
 
 static long FnBoundBy(C4PropList * _this, long iVal, long iRange1, long iRange2)
 {
-	return BoundBy(iVal,iRange1,iRange2);
+	return Clamp(iVal,iRange1,iRange2);
 }
 
 static bool FnInside(C4PropList * _this, long iVal, long iRange1, long iRange2)
@@ -746,7 +746,6 @@ C4ScriptConstDef C4ScriptConstMap[]=
 
 	{ "C4X_Ver1",        C4V_Int, C4XVER1},
 	{ "C4X_Ver2",        C4V_Int, C4XVER2},
-	{ "C4X_Ver3",        C4V_Int, C4XVER3},
 
 	{ NULL, C4V_Nil, 0}
 };

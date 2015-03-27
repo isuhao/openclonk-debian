@@ -1,6 +1,6 @@
 [DefCore]
 id=Windmill
-Version=5,2,0,1
+Version=6,0
 Category=C4D_Structure
 Width=50
 Height=96
@@ -13,5 +13,4 @@ Mass=2500
 Components=Rock=6;Wood=2;
 Exclusive=1
 Construction=1
-ContainBlast=1
 IncompleteActivity=1

@@ -1,6 +1,6 @@
 # OpenClonk, http://www.openclonk.org
 #
-# Copyright (c) 2009-2014, The OpenClonk Team and contributors
+# Copyright (c) 2009-2015, The OpenClonk Team and contributors
 #
 # Distributed under the terms of the ISC license; see accompanying file
 # "COPYING" for details.
@@ -11,9 +11,16 @@
 # To redistribute this file separately, substitute the full license texts
 # for the above references.
 
-cmake_minimum_required (VERSION 2.8.4)
+cmake_minimum_required (VERSION 2.8.7)
 project (openclonk CXX C)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# CMP0054: Only interpret if() arguments as variables or keywords when unquoted
+# (since CMake 3.1)
+if(POLICY CMP0054)
+	cmake_policy(SET CMP0054 NEW)
+endif()
+
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(Version.txt)
 
@@ -56,9 +63,14 @@ option(WITH_AUTOMATIC_UPDATE "Automatic updates are downloaded from the project 
 # dynamic linking.
 option(USE_STATIC_BOOST "Link Boost libraries statically" ON)
 
+# Allow distributions to use the system tinyxml instead of our bundled copy.
+option(USE_SYSTEM_TINYXML "Use system tinyxml library" OFF)
+
 # Remove obsolete options
 unset(OC_BUILD_MULTIPROCESSOR CACHE)
 unset(USE_APPLE_CLANG CACHE)
+
+unset(HAVE_NATUPNP_H CACHE)
 
 ############################################################################
 # Check for compiler quirks and features
@@ -70,19 +82,15 @@ include(RequireCXXSourceCompiles)
 CHECK_CXX_COMPILER_FLAG("-std=gnu++0x" USE_GCC_STD_0X)
 if(USE_GCC_STD_0X)
 	list(APPEND OC_CXX_FLAGS "-std=gnu++0x")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x")
 endif()
-
-# Convert the OC_CXX_FLAGS list to a CMAKE_CXX_FLAGS string
-foreach(FLAG ${OC_CXX_FLAGS})
-	set(OC_REQUIRED_FLAGS "${OC_REQUIRED_FLAGS} ${FLAG}")
-endforeach()
-
-set(CMAKE_CXX_FLAGS ${OC_REQUIRED_FLAGS})
 
 REQUIRE_CXX_SOURCE_COMPILES("#include <memory>\nint main() { std::unique_ptr<int> a; std::shared_ptr<int> b; }" HAVE_C11_SMART_PTRS)
 CHECK_CXX_SOURCE_COMPILES("void f(struct D&&); int main() { return 0; }" HAVE_RVALUE_REF)
 CHECK_CXX_SOURCE_COMPILES("int main() { void *d = nullptr; }" HAVE_NULLPTR)
 CHECK_CXX_SOURCE_COMPILES("int main() { static_assert(true, \"\"); }" HAVE_STATIC_ASSERT)
+CHECK_CXX_SOURCE_COMPILES("#include <memory>\nint main() { auto a = std::make_unique<int>(0); }" HAVE_MAKE_UNIQUE)
+CHECK_CXX_SOURCE_COMPILES("template<class... T> class C; int main() { return 0; }" HAVE_VARIADIC_TEMPLATES)
 
 # g++'s libstdc++ doesn't properly support <regex> until 4.9.
 # They ship a header that declares functions, but they don't ship an
@@ -116,6 +124,10 @@ endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX)
 	list(APPEND OC_CXX_FLAGS "-Wall -Wextra -Wredundant-decls -Wendif-labels -Wpointer-arith -Wcast-qual -Wcast-align -Wwrite-strings -Winit-self -Wsign-promo -Wno-reorder -Wno-unused-parameter -Wnon-virtual-dtor -Woverloaded-virtual")
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	list(APPEND OC_CXX_FLAGS "-Wall -Wextra -Wextra-tokens -Wpointer-arith -Wno-cast-align -Wno-reorder -Wno-unused-parameter -Wnon-virtual-dtor -Woverloaded-virtual")
 endif()
 
 if(WIN32 AND MINGW)
@@ -213,6 +225,8 @@ set(OC_CLONK_SOURCES
 	src/graphics/C4FontLoader.h
 	src/graphics/C4GraphicsResource.cpp
 	src/graphics/C4GraphicsResource.h
+	src/graphics/C4Shader.cpp
+	src/graphics/C4Shader.h
 	src/graphics/C4Surface.cpp
 	src/graphics/C4Surface.h
 	src/graphics/C4SurfaceLoaders.cpp
@@ -286,6 +300,21 @@ set(OC_CLONK_SOURCES
 	src/gui/C4StartupScenSelDlg.h
 	src/gui/C4UpperBoard.cpp
 	src/gui/C4UpperBoard.h
+	src/landscape/fow/C4FoW.cpp
+	src/landscape/fow/C4FoW.h
+	src/landscape/fow/C4FoWAmbient.cpp
+	src/landscape/fow/C4FoWAmbient.h
+	src/landscape/fow/C4FoWBeam.cpp
+	src/landscape/fow/C4FoWBeam.h
+	src/landscape/fow/C4FoWLight.cpp
+	src/landscape/fow/C4FoWLight.h
+	src/landscape/fow/C4FoWLightSection.cpp
+	src/landscape/fow/C4FoWLightSection.h
+	src/landscape/fow/C4FoWRegion.cpp
+	src/landscape/fow/C4FoWRegion.h
+	src/landscape/fow/C4FoWDrawStrategy.cpp
+	src/landscape/fow/C4FoWDrawStrategy.h
+	src/landscape/fow/C4FoWBeamTriangle.h
 	src/landscape/C4Landscape.cpp
 	src/landscape/C4Landscape.h
 	src/landscape/C4LandscapeRenderClassic.cpp
@@ -492,6 +521,7 @@ set(MAPE_SOURCES
 	src/mape/cpp-handles/c4def-handle.cpp
 	src/mape/cpp-handles/group-handle.h
 	src/mape/cpp-handles/group-handle.cpp
+	src/mape/cpp-handles/landscape-handle.cpp
 	src/mape/cpp-handles/log-handle.h
 	src/mape/cpp-handles/log-handle.cpp
 	src/mape/cpp-handles/mapgen-handle.h
@@ -716,6 +746,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/src/graphics
 	${CMAKE_CURRENT_SOURCE_DIR}/src/gui
 	${CMAKE_CURRENT_SOURCE_DIR}/src/landscape
+	${CMAKE_CURRENT_SOURCE_DIR}/src/landscape/fow
 	${CMAKE_CURRENT_SOURCE_DIR}/src/lib
 	${CMAKE_CURRENT_SOURCE_DIR}/src/network
 	${CMAKE_CURRENT_SOURCE_DIR}/src/object
@@ -723,6 +754,10 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/src/player
 	${CMAKE_CURRENT_SOURCE_DIR}/src/res
 	${CMAKE_CURRENT_SOURCE_DIR}/src/script
+)
+
+# Mark thirdparty as system headers so we don't get warnings from them
+include_directories(SYSTEM
 	${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
 )
 
@@ -737,6 +772,7 @@ CHECK_INCLUDE_FILE_CXX(locale.h HAVE_LOCALE_H)
 CHECK_INCLUDE_FILE_CXX(share.h HAVE_SHARE_H)
 CHECK_INCLUDE_FILE_CXX(signal.h HAVE_SIGNAL_H)
 CHECK_INCLUDE_FILE_CXX(stdint.h HAVE_STDINT_H)
+CHECK_INCLUDE_FILE_CXX(inttypes.h HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILE_CXX(sys/stat.h HAVE_SYS_STAT_H)
 CHECK_INCLUDE_FILE_CXX(sys/types.h HAVE_SYS_TYPES_H)
 CHECK_INCLUDE_FILE_CXX(unistd.h HAVE_UNISTD_H)
@@ -752,11 +788,6 @@ if(USE_CONSOLE)
 	CHECK_INCLUDE_FILE_CXX(readline.h HAVE_READLINE_H)
 	CHECK_INCLUDE_FILE_CXX(readline/readline.h HAVE_READLINE_READLINE_H)
 endif()
-CHECK_INCLUDE_FILE_CXX(natupnp.h HAVE_NATUPNP_H)
-if(WIN32 AND NOT HAVE_NATUPNP_H)
-	include_directories(thirdparty/natupnp)
-	set(HAVE_NATUPNP_H TRUE CACHE BOOL "natupnp.h available" FORCE)
-endif()
 CHECK_INCLUDE_FILES_CXX("X11/Xlib.h;X11/extensions/Xrandr.h" HAVE_X11_EXTENSIONS_XRANDR_H)
 CHECK_INCLUDE_FILES_CXX("X11/Xlib.h;X11/keysym.h" HAVE_X11_KEYSYM_H)
 
@@ -767,8 +798,9 @@ CHECK_INCLUDE_FILES_CXX("X11/Xlib.h;X11/keysym.h" HAVE_X11_KEYSYM_H)
 if(MSVC)
 	get_filename_component(WINSDK_ROOT "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft SDKs\\Windows;CurrentInstallFolder]" ABSOLUTE CACHE)
 	mark_as_advanced(WINSDK_ROOT)
+	list(APPEND CMAKE_INCLUDE_PATH "${WINSDK_ROOT}/Include")
 	include_directories(SYSTEM ${WINSDK_ROOT}/Include)
-	if(${FIND_LIBRARY_USE_LIB64_PATHS})
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 		list(APPEND CMAKE_LIBRARY_PATH ${WINSDK_ROOT}/Lib/x64)
 	else()
 		list(APPEND CMAKE_LIBRARY_PATH ${WINSDK_ROOT}/Lib)
@@ -777,12 +809,16 @@ endif()
 
 if(NOT USE_CONSOLE)
 	SET(JPEG_NAMES ${JPEG_NAMES} libjpeg jpeg-static)
-	include(FindJPEG)
+	find_package(JPEG REQUIRED)
 endif()
-include(FindPNG)
-include(FindZLIB)
+find_package(PNG REQUIRED)
+find_package(ZLIB REQUIRED)
 include_directories(${JPEG_INCLUDE_DIR} ${PNG_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
 
+set(Boost_ADDITIONAL_VERSIONS
+	# FindBoost.cmake goes up to 1.56.0
+	"1.57.0" "1.57"
+	)
 find_package("Boost" 1.40.0 REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIR})
 
@@ -794,13 +830,8 @@ else()
 endif()
 
 if(NOT USE_CONSOLE)
-	if(APPLE)
-		include(LegacyFindFreetype)
-		include_directories(${FREETYPE_INCLUDE_DIRS})
-	else()
-		find_package(Freetype REQUIRED)
-		include_directories(${FREETYPE_INCLUDE_DIRS})
-	endif()
+	find_package(Freetype REQUIRED)
+	include_directories(${FREETYPE_INCLUDE_DIRS})
 endif()
 
 # FINDLIB works the same as find_library, but also marks the resulting var as
@@ -822,22 +853,19 @@ if(HAVE_EXECINFO_H)
 	endif()
 endif()
 
-if(HAVE_NATUPNP_H)
+find_package(Upnp)
+if(NOT UPNP_FOUND)
+	list(APPEND OC_SYSTEM_SOURCES
+		src/network/C4Network2UPnPDummy.cpp
+	)
+elseif(UPNP_STYLE STREQUAL "Win32")
 	list(APPEND OC_SYSTEM_SOURCES
 		src/network/C4Network2UPnPWin32.cpp
 	)
-else()
-	FIND_PACKAGE(Upnp)
-	SET(HAVE_UPNP ${UPNP_FOUND})
-	if(UPNP_FOUND)
-		list(APPEND OC_SYSTEM_SOURCES
-			src/network/C4Network2UPnPLinux.cpp
-		)
-	else()
-		list(APPEND OC_SYSTEM_SOURCES
-			src/network/C4Network2UPnPDummy.cpp
-		)
-	endif()
+elseif(UPNP_STYLE STREQUAL "libupnp")
+	list(APPEND OC_SYSTEM_SOURCES
+		src/network/C4Network2UPnPLinux.cpp
+	)
 endif()
 
 if(USE_CONSOLE)
@@ -849,7 +877,7 @@ endif()
 # Set GTK link directory. This needs to be done before add_executable,
 # otherwise the path is not used for linking clonk
 if(USE_GTK)
-	include(FindPkgConfig)
+	find_package(PkgConfig)
 	if (USE_GTK3)
 		pkg_check_modules(GTK3 REQUIRED "glib-2.0 >= 2.32" "gtk+-3.0 >= 3.4")
 		include_directories(${GTK3_INCLUDE_DIRS})
@@ -862,7 +890,7 @@ if(USE_GTK)
 endif()
 
 # Try to find GTK for mape
-include(FindPkgConfig)
+find_package(PkgConfig)
 if (PKG_CONFIG_FOUND)
 	if (USE_GTK3)
 		pkg_check_modules(MAPE_GTK glib-2.0>=2.32 gthread-2.0 gtk+-3.0>=3.4 gtksourceview-3.0)
@@ -878,6 +906,14 @@ endif()
 
 # Select an audio library
 find_package("Audio")
+
+# SDL
+if(USE_SDL_MAINLOOP OR (Audio_TK STREQUAL "SDL_Mixer"))
+	find_package(SDL)
+	SET(HAVE_SDL ${SDL_FOUND})
+	include_directories(${SDL_INCLUDE_DIR})
+	target_link_libraries(openclonk ${SDL_LIBRARY})
+endif()
 
 ############################################################################
 # Precompiled header support, part 1 (pre-target)
@@ -997,6 +1033,7 @@ src/platform/StdSchedulerPoll.cpp
 src/platform/StdScheduler.h
 src/platform/C4TimeMilliseconds.cpp 
 src/platform/C4TimeMilliseconds.h	
+src/platform/make_unique.h
 src/zlib/gzio.c
 src/zlib/gzio.h
 src/zlib/zutil.h
@@ -1112,7 +1149,18 @@ if(UNIX AND NOT APPLE)
 	endif()
 endif()
 set_property(TARGET openclonk APPEND PROPERTY COMPILE_DEFINITIONS GLEW_STATIC)
-#set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG _DEBUG)
+if(NOT "${CMAKE_VERSION}" VERSION_LESS "2.8.10")
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS $<$<CONFIG:Debug>:_DEBUG>)
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
+else()
+	# CMake started supporting generator expressions in 2.8.10. Earlier
+	# versions pass most of this through unmodified, which confuses make.
+	# Once we stop supporting old versions of CMake, this case can be removed.
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG _DEBUG)
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELEASE NDEBUG)
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_RELWITHDEBINFO NDEBUG)
+	set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_MINSIZEREL NDEBUG)
+endif()
 
 # This expands some variables in Info.plist as a side-effect. XCode might then 
 # expand a second time, using the same syntax. Try not to get confused by this!
@@ -1139,12 +1187,6 @@ if(MSVC)
 	# so we add it to the resource file ourselves and tell
 	# MSVC not to create its own.
 	set_property(TARGET openclonk APPEND PROPERTY LINK_FLAGS "/MANIFEST:NO")
-endif()
-
-# Suppress the console window for mape even though only a main() and not
-# a WinMain() entry point is provided.
-if(MINGW)
-	set_target_properties(mape PROPERTIES LINK_FLAGS -mwindows)
 endif()
 
 ############################################################################
@@ -1209,18 +1251,15 @@ endforeach()
 ############################################################################
 
 if (APPLE)
-	
 	# for good measure - seems to be part of default OSX installation
 	# linking with static freetype library requires it
-	target_link_libraries(openclonk "/usr/lib/libbz2.dylib")
+	find_package("BZip2" REQUIRED)
+	target_link_libraries(openclonk ${BZIP2_LIBRARIES})
 
 	set(HAVE_RVALUE_REF ON)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++0x -g -Wall -fobjc-arc")
 
 	if(CMAKE_GENERATOR STREQUAL Xcode)
-		add_custom_command(TARGET openclonk
-			POST_BUILD COMMAND "/usr/bin/ruby" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_bundle_libs"
-		)
 		set(CMAKE_XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
 		set(CMAKE_XCODE_ATTRIBUTE_GCC_PREFIX_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/src/C4Include.h")
 		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PRECOMPILE_PREFIX_HEADER YES)
@@ -1240,6 +1279,12 @@ if (APPLE)
 		set_target_properties(c4group PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
 		set_target_properties(openclonk PROPERTIES XCODE_ATTRIBUTE_GCC_PFE_FILE_C_DIALECTS "c++0x objective-c++0x")
 	endif()
+
+	add_custom_command(TARGET openclonk
+		POST_BUILD COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_bundle_libs"
+		"$<TARGET_FILE:openclonk>"
+	)
+
 endif()
 
 ############################################################################
@@ -1247,7 +1292,7 @@ endif()
 ############################################################################
 CHECK_INCLUDE_FILE_CXX(getopt.h HAVE_GETOPT_H)
 if(NOT HAVE_GETOPT_H)
-	include_directories(thirdparty/getopt)
+	include_directories(SYSTEM thirdparty/getopt)
 	add_subdirectory(thirdparty/getopt)
 	target_link_libraries(openclonk getopt)
 elseif(MINGW)
@@ -1260,18 +1305,15 @@ endif()
 
 CHECK_INCLUDE_FILE_CXX(getopt.h HAVE_GETOPT_H)
 
-find_package(ICONV)
-if(ICONV_FOUND)
-	set(HAVE_ICONV true)
-	target_link_libraries(openclonk ${ICONV_LIBRARIES})
-	if(ICONV_IS_CONST)
-		set(ICONV_CONST "const")
-	endif()
-endif()
-
 # TinyXML
-add_subdirectory(thirdparty/tinyxml)
-target_link_libraries(openclonk tinyxml)
+if(WITH_SYSTEM_TINYXML)
+	pkg_search_module(TINYXML REQUIRED tinyxml)
+	target_link_libraries(openclonk ${TINYXML_LIBRARIES})
+else()
+	add_subdirectory(thirdparty/tinyxml)
+	include_directories(SYSTEM thirdparty/tinyxml)
+	target_link_libraries(openclonk tinyxml)
+endif()
 
 if(WIN32)
 	find_package(DbgHelp)
@@ -1283,7 +1325,7 @@ if(WIN32)
 endif()
 
 if(NOT USE_CONSOLE)
-	include(FindOpenGL)
+	find_package(OpenGL)
 	FINDLIB(GLEW_LIBRARIES NAMES GLEW glew32 glew32s)
 	FIND_PATH(GLEW_INCLUDE_DIR NAMES GL/glew.h)
 	target_link_libraries(openclonk
@@ -1291,15 +1333,22 @@ if(NOT USE_CONSOLE)
 		${OPENGL_LIBRARIES}
 	)
 	include_directories(${GLEW_INCLUDE_DIR})
+	# On some platforms, GLEW declares the userParam parameter of
+	# GLDEBUGPROCARB as const void *, and on other platforms, it's void *.
+	# Test which one works here.
+	set(CMAKE_REQUIRED_INCLUDES "${GLEW_INCLUDE_DIR}")
+	CHECK_CXX_SOURCE_COMPILES("#include <GL/glew.h>\nvoid GLAPIENTRY OpenGLDebugProc(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const char* message, const void* userParam) {}\nint main() { GLDEBUGPROCARB proc = &OpenGLDebugProc; }" GLDEBUGPROCARB_USERPARAM_IS_CONST)
 endif()
 if(USE_GTK)
-	SET(WITH_DEVELOPER_MODE ${GTK_FOUND})
-	SET(WITH_GLIB ${GTK_FOUND})
 	if(USE_GTK3)
+		SET(WITH_DEVELOPER_MODE ${GTK3_FOUND})
+		SET(WITH_GLIB ${GTK3_FOUND})
 		target_link_libraries(openclonk
 			${GTK3_LIBRARIES}
 		)
 	else()
+		SET(WITH_DEVELOPER_MODE ${GTK_FOUND})
+		SET(WITH_GLIB ${GTK_FOUND})
 		target_link_libraries(openclonk
 			${GTK_LIBRARIES}
 		)
@@ -1317,7 +1366,7 @@ if(USE_X11)
 	)
 endif()
 if(USE_COCOA)
-	TARGET_LINK_LIBRARIES(openclonk "-framework Cocoa -framework AppKit -framework Quartz -framework OpenAL -framework AudioToolBox")
+	TARGET_LINK_LIBRARIES(openclonk "-framework Cocoa -framework AppKit -framework Quartz -framework OpenAL -framework AudioToolbox")
 endif()
 if (WIN32)
 	# CMake is too incompetent to check whether these libraries can be linked to
@@ -1338,11 +1387,16 @@ if (WIN32)
 	target_link_libraries(c4script ws2_32 winmm)
 	if(MAPE_GTK_FOUND)
 		target_link_libraries(mape winmm)
+		# Suppress the console window for mape even though only a main() and not
+		# a WinMain() entry point is provided.
+		if(MINGW)
+			set_target_properties(mape PROPERTIES LINK_FLAGS -mwindows)
+		endif()
 	endif()
 endif()
 
-if(HAVE_UPNP)
-	include_directories(${UPNP_INCLUDE_DIR})
+if(UPNP_FOUND)
+	include_directories(SYSTEM ${UPNP_INCLUDE_DIR})
 	target_link_libraries(openclonk ${UPNP_LIBRARIES})
 endif()
 
@@ -1380,6 +1434,15 @@ if(USE_GCC_PCH)
 	add_precompiled_header(libc4script src/C4Include.h)
 	add_precompiled_header(openclonk src/C4Include.h)
 endif()
+
+# When cross-compiling, import c4group from a native build
+IF(CMAKE_CROSSCOMPILING)
+	SET(IMPORT_NATIVE_TOOLS "IMPORT_NATIVE_TOOLS-NOTFOUND" CACHE FILEPATH "Export file from a native build")
+	INCLUDE(${IMPORT_NATIVE_TOOLS})
+	SET(native_c4group native-c4group)
+ELSE()
+   SET(native_c4group c4group)
+ENDIF()
 
 ############################################################################
 # installation
@@ -1451,27 +1514,27 @@ foreach(group ${OC_C4GROUPS})
 	if (APPLE)
 		if (CMAKE_GENERATOR STREQUAL Xcode)
 			add_custom_command(TARGET openclonk
-				POST_BUILD COMMAND "/bin/sh" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
-				"$<TARGET_FILE:c4group>"
+				POST_BUILD COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
+				"$<TARGET_FILE:${native_c4group}>"
 				"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}"
 				# leave out third parameter here so the script can figure out Xcode-ish paths as usual
-				DEPENDS c4group
+				DEPENDS "${native_c4group}"
 			)
 		else()
 			add_custom_command(TARGET openclonk
-				POST_BUILD COMMAND "/bin/sh" "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
-				"$<TARGET_FILE:c4group>"
+				POST_BUILD COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tools/osx_pack_gamedata.sh"
+				"$<TARGET_FILE:${native_c4group}>"
 				"${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}"
 				"${CMAKE_CURRENT_BINARY_DIR}/openclonk.app/Contents/Resources"
-				DEPENDS c4group
+				DEPENDS "${native_c4group}"
 			)
 		endif()
 	else()
 		add_custom_command(
 			OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${group}
-			COMMAND c4group ARGS "${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}" -t "${CMAKE_CURRENT_BINARY_DIR}/${group}"
+			COMMAND "${native_c4group}" ARGS "${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}" -t "${CMAKE_CURRENT_BINARY_DIR}/${group}"
 			MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/planet/${group}
-			DEPENDS c4group
+			DEPENDS "${native_c4group}"
 			VERBATIM
 		)
 		install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${group} DESTINATION share/games/openclonk)
@@ -1484,6 +1547,8 @@ if (NOT APPLE)
 	
 	# Install new files
 	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/openclonk.desktop DESTINATION share/applications)
+	# Update the MIME cache -- this makes the clonk:// protocol handler actually work
+	install(CODE "execute_process(COMMAND update-desktop-database)")
 
 	# Install binaries
 	install(TARGETS openclonk DESTINATION games)
@@ -1496,6 +1561,11 @@ else()
 		RUNTIME DESTINATION .
 	)
 endif()
+
+# Export native tools for later use in cross-compile builds
+IF(NOT CMAKE_CROSSCOMPILING) 
+  EXPORT(TARGETS c4group FILE ${CMAKE_BINARY_DIR}/NativeToolsExport.cmake NAMESPACE native- )
+ENDIF() 
 
 ############################################################################
 # setup_openclonk.exe
@@ -1526,12 +1596,11 @@ add_custom_target(setup
 set(CPACK_PACKAGE_NAME "openclonk")
 set(CPACK_PACKAGE_VENDOR "${C4PROJECT_URL}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OpenClonk - A game mix out of tactic, strategy and Jump & Run")
-set(CPACK_PACKAGE_VERSION "${C4XVER1}.${C4XVER2}.${C4XVER3}")
+set(CPACK_PACKAGE_VERSION "${C4XVER1}.${C4XVER2}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${C4XVER1}")
 set(CPACK_PACKAGE_VERSION_MINOR "${C4XVER2}")
-set(CPACK_PACKAGE_VERSION_PATCH "${C4XVER3}")
-set(CPACK_PACKAGE_FILE_NAME "openclonk-${C4XVER1}.${C4XVER2}.${C4XVER3}")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "openclonk-src-${C4XVER1}.${C4XVER2}.${C4XVER3}")
+set(CPACK_PACKAGE_FILE_NAME "openclonk-${C4XVER1}.${C4XVER2}")
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "openclonk-src-${C4XVER1}.${C4XVER2}")
 set(CPACK_SOURCE_GENERATOR "TGZ;ZIP")
 # Somebody who uses Debian/Ubuntu should set this
 #set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libgcc1, libx11, libXrandr, libXpm, libGLEW, libGL, libpng, libSDL-1.2, libSDL_mixer-1.2, gtk2, libjpeg, zlib")

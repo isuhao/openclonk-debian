@@ -1,6 +1,6 @@
 [DefCore]
 id=SteamEngine
-Version=5,2,0,1
+Version=6,0
 Category=C4D_Structure
 Width=66
 Height=48
@@ -14,5 +14,4 @@ Components=Rock=6;Metal=3
 Collection=-33,7,12,12
 Exclusive=1
 Construction=1
-ContainBlast=1
 IncompleteActivity=1

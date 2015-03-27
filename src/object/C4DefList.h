@@ -21,6 +21,8 @@
 #define INC_C4DefList
 
 #include <C4FontLoader.h>
+#include <StdMesh.h>
+#include <StdMeshLoader.h>
 
 class C4DefList: public CStdFont::CustomImages
 {
@@ -52,7 +54,7 @@ public:
 	int32_t GetDefCount();
 	int32_t GetIndex(C4ID id);
 	int32_t RemoveTemporary();
-	int32_t CheckEngineVersion(int32_t ver1, int32_t ver2, int32_t ver3);
+	int32_t CheckEngineVersion(int32_t ver1, int32_t ver2);
 	int32_t CheckRequireDef();
 	void Draw(C4ID id, C4Facet &cgo, bool fSelected, int32_t iColor);
 	void Remove(C4Def *def);
@@ -63,10 +65,14 @@ public:
 	void ResetIncludeDependencies(); // resets all pointers into foreign definitions caused by include chains
 	void CallEveryDefinition();
 	void Synchronize();
+	void AppendAndIncludeSkeletons();
+	StdMeshSkeletonLoader& GetSkeletonLoader();
 
 	// callback from font renderer: get ID image
 	virtual bool DrawFontImage(const char* szImageTag, C4Facet& rTarget, C4DrawTransform* pTransform);
 	virtual float GetFontImageAspect(const char* szImageTag);
+private:
+	std::unique_ptr<StdMeshSkeletonLoader> SkeletonLoader;
 };
 
 extern C4DefList Definitions;

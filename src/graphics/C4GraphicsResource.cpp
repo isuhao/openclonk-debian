@@ -24,9 +24,7 @@
 #include <C4FontLoader.h>
 #include <C4Log.h>
 #include <C4Game.h>
-#include <C4GraphicsSystem.h>
-#include <C4Def.h>
-
+#include <C4Components.h>
 #include <C4DrawGL.h>
 
 /* C4GraphicsResource */
@@ -185,6 +183,14 @@ bool C4GraphicsResource::Init()
 	if (!RegisterMainGroups())
 	{
 		LogFatal(LoadResStr("IDS_ERR_GFX_REGISTERMAIN"));
+		return false;
+	}
+
+	// Pre-load all shader files
+	Files.PreCacheEntries(C4CFN_ShaderFiles);
+	if (!pGL->InitShaders(&Files))
+	{
+		LogFatal(LoadResStr("IDS_ERR_GFX_INITSHADERS"));
 		return false;
 	}
 

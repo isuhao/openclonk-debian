@@ -14,21 +14,12 @@
  */
 
 // A loader for the OGRE .mesh binary file format
+#include <StdMesh.h>
 
 #ifndef INC_StdMeshLoader
 #define INC_StdMeshLoader
 #include <stdexcept>
 
-// Interface to load skeleton files. Given a filename occuring in the
-// mesh file, this should load the skeleton file from wherever the mesh file
-// was loaded from, for example from a C4Group. Return default-construted
-// StdStrBuf with NULL data in case of error.
-class StdMeshSkeletonLoader
-{
-public:
-	virtual StdStrBuf LoadSkeleton(const char* filename) = 0;
-	virtual ~StdMeshSkeletonLoader() {}
-};
 
 class StdMeshLoader
 {
@@ -38,11 +29,67 @@ public:
 
 	// filename is only used to show it in error messages. The model is
 	// loaded from src. Throws LoaderException.
-	static StdMesh *LoadMeshBinary(const char *src, size_t size, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename = 0);
-	static StdMesh *LoadMeshXml(const char *src, size_t size, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename = 0);
+	static StdMesh *LoadMeshBinary(const char *sourcefile, size_t size, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename = 0);
+	static StdMesh *LoadMeshXml(const char *sourcefile, size_t size, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename = 0);
+};
+
+// Interface to load skeleton files. Given a filename occuring in the
+// mesh file, this should load the skeleton file from wherever the mesh file
+// was loaded from, for example from a C4Group. Return default-construted
+// StdStrBuf with NULL data in case of error.
+class StdMeshSkeletonLoader
+{
+public:
+	virtual ~StdMeshSkeletonLoader() {}
+
+	void StoreSkeleton(const char* groupname, const char* filename, std::shared_ptr<StdMeshSkeleton> skeleton);
+	void RemoveSkeleton(const StdCopyStrBuf& filepath);
+	void RemoveSkeleton(const char* groupname, const char* filename);
+	void RemoveSkeletonsInGroup(const char* groupname);
+
+	virtual StdMeshSkeleton* GetSkeletonByDefinition(const char* definition) const = 0;
+	std::shared_ptr<StdMeshSkeleton> GetSkeletonByName(const StdStrBuf& name) const;
+	void LoadSkeletonXml(const char* groupname, const char* filename, const char *sourcefile, size_t size);
+	void LoadSkeletonBinary(const char* groupname, const char* filename, const char *sourcefile, size_t size);
+
+	void ResolveIncompleteSkeletons();
+
+	static void MakeFullSkeletonPath(StdCopyStrBuf &out, const char* groupname, const char* filename)
+	{
+		out = StdCopyStrBuf(groupname);
+		out.AppendBackslash();
+		out.Append(filename);
+		out.ToLowerCase();
+	}
+
+	void Clear()
+	{
+		Skeletons.clear();
+		AppendtoSkeletons.clear();
+		IncludeSkeletons.clear();
+	}
+
+	// Allows to iterate over loaded skeletons:
+	typedef std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>> SkeletonMap;
+	typedef SkeletonMap::const_iterator skeleton_iterator;
+
+	skeleton_iterator skeletons_begin() const { return Skeletons.begin(); }
+	skeleton_iterator skeletons_end() const { return Skeletons.end(); }
 
 private:
-	static void LoadSkeletonBinary(StdMesh *mesh, const char *src, size_t size);
+	void AddSkeleton(const StdCopyStrBuf& filepath, std::shared_ptr<StdMeshSkeleton> skeleton);
+	void DoResetSkeletons();
+	void DoAppendSkeletons();
+	void DoIncludeSkeletons();
+
+	SkeletonMap Skeletons;
+
+	// was a map <pointer to skeleton, id> first, but that lead to problems with reloading:
+	// the old skeleton was still in the map, because the new skeleton was a different object of course
+	// so instead of finding the old skeleton it seemed simpler to just save a key that can be overloaded
+
+	std::map<StdCopyStrBuf, StdCopyStrBuf> AppendtoSkeletons; // key is the filepath, value is the id to append to
+	std::map<StdCopyStrBuf, StdCopyStrBuf> IncludeSkeletons;  // key is the filepath, value is the definition to include
 };
 
 #define DEFINE_EXCEPTION(_cls, _text) class _cls : public StdMeshLoader::LoaderException { public: _cls(const char *msg = _text) : LoaderException(msg) {} }

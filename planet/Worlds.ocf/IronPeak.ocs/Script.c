@@ -106,6 +106,8 @@ private func InitEnvironment(int difficulty)
 	
 	// Set time of day to evening and create some clouds and celestials.
 	Cloud->Place(20);
+	Cloud->SetPrecipitation("Snow", 20 + 5 * difficulty);
+
 	CreateObject(Environment_Celestial);
 	var time = CreateObject(Environment_Time);
 	time->SetTime(60 * 22);
@@ -146,7 +148,7 @@ private func InitAnimals()
 private func InitMaterial(int amount)
 {
 	// An abandoned lorry somewhere close to the highest point of the peak.
-	var lorry = CreateObject(Lorry, LandscapeWidth() / 2, FindHeight(LandscapeWidth() / 2));
+	var lorry = CreateObjectAbove(Lorry, LandscapeWidth() / 2, FindHeight(LandscapeWidth() / 2));
 	lorry->CreateContents(Pickaxe, 2);
 	lorry->CreateContents(Shovel, 2);
 	lorry->CreateContents(Bread, 2 * amount);

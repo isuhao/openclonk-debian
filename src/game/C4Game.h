@@ -25,6 +25,7 @@
 #include <C4Extra.h>
 #include "C4Scoreboard.h"
 #include <C4PlayerControl.h>
+#include <C4TransferZone.h>
 
 class C4Game
 {
@@ -118,11 +119,9 @@ public:
 	int32_t StartTime;
 	int32_t InitProgress; int32_t LastInitProgress; int32_t LastInitProgressShowTime;
 	int32_t RandomSeed;
-	int32_t Rules;
 	bool GameGo;
 	bool FullSpeed;
 	int32_t FrameSkip; bool DoSkipFrame;
-	uint32_t FoWColor;        // FoW-color; may contain transparency
 	bool fResortAnyObject; // if set, object list will be checked for unsorted objects next frame
 	bool IsRunning;        // (NoSave) if set, the game is running; if not, just the startup message board is painted
 	bool PointersDenumerated; // (NoSave) set after object pointers have been denumerated
@@ -179,10 +178,10 @@ public:
 	// Object functions
 	void ClearPointers(C4Object *cobj);
 	C4Object *CreateObject(C4PropList * type, C4Object *pCreator, int32_t owner=NO_OWNER,
-	                       int32_t x=50, int32_t y=50, int32_t r=0,
+	                       int32_t x=50, int32_t y=50, int32_t r=0, bool grow_from_center=false,
 	                       C4Real xdir=Fix0, C4Real ydir=Fix0, C4Real rdir=Fix0, int32_t iController=NO_OWNER);
 	C4Object *CreateObject(C4ID type, C4Object *pCreator, int32_t owner=NO_OWNER,
-	                       int32_t x=50, int32_t y=50, int32_t r=0,
+	                       int32_t x=50, int32_t y=50, int32_t r=0, bool grow_from_center=false,
 	                       C4Real xdir=Fix0, C4Real ydir=Fix0, C4Real rdir=Fix0, int32_t iController=NO_OWNER);
 	C4Object *CreateObjectConstruction(C4PropList * type,
 	                                   C4Object *pCreator,
@@ -236,7 +235,6 @@ protected:
 	void InitRules();
 	void InitValueOverloads();
 	void InitEnvironment();
-	void UpdateRules();
 	void CloseScenario();
 	void DeleteObjects(bool fDeleteInactive);
 	void ExecObjects();
@@ -277,7 +275,7 @@ protected:
 	                     int32_t owner, C4ObjectInfo *info,
 	                     int32_t tx, int32_t ty, int32_t tr,
 	                     C4Real xdir, C4Real ydir, C4Real rdir,
-	                     int32_t con, int32_t iController);
+						 int32_t con, int32_t iController, bool grow_from_center);
 	void ClearObjectPtrs(C4Object *tptr);
 	void ObjectRemovalCheck();
 
@@ -288,10 +286,6 @@ public:
 	bool ToggleChart(); // chart dlg on/off
 	void SetMusicLevel(int32_t iToLvl); // change game music volume; multiplied by config volume for real volume
 };
-
-
-const int32_t
-	C4RULE_ConstructionNeedsMaterial = 1;
 
 extern C4Game         Game;
 

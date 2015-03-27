@@ -181,9 +181,9 @@ void C4Network2ClientListBox::ClientListItem::Update()
 		int iWait = ::Control.Network.ClientPerfStat(iClientID);
 		pPing->SetText(FormatString("%d ms", iWait).getData());
 		pPing->SetColor(C4RGB(
-		                  BoundBy(255-Abs(iWait)*5, 0, 255),
-		                  BoundBy(255-iWait*5, 0, 255),
-		                  BoundBy(255+iWait*5, 0, 255)));
+		                  Clamp(255-Abs(iWait)*5, 0, 255),
+		                  Clamp(255-iWait*5, 0, 255),
+		                  Clamp(255+iWait*5, 0, 255)));
 	}
 	// update activation status
 	const C4Client *pClient = GetClient(); if (!pClient) return;
@@ -420,6 +420,11 @@ C4Network2ClientListBox::C4Network2ClientListBox(C4Rect &rcBounds, bool fStartup
 	Update();
 }
 
+C4Network2ClientListBox::~C4Network2ClientListBox()
+{
+	Application.Remove(this);
+}
+
 void C4Network2ClientListBox::Update()
 {
 	// sync with client list
@@ -522,6 +527,11 @@ C4Network2ClientListDlg::C4Network2ClientListDlg()
 	Application.Add(this);
 	// initial update
 	Update();
+}
+
+C4Network2ClientListDlg::~C4Network2ClientListDlg()
+{
+	if (this==pInstance) pInstance=NULL; Application.Remove(this);
 }
 
 void C4Network2ClientListDlg::Update()
@@ -682,8 +692,9 @@ void C4GameOptionButtons::OnBtnLeague(C4GUI::Control *btn)
 
 void C4GameOptionButtons::OnBtnRecord(C4GUI::Control *btn)
 {
-	bool fCheck = Config.General.DefRec = Game.Record = !Game.Record;
-	btnRecord->SetIcon(fCheck ? C4GUI::Ico_Ex_RecordOn : C4GUI::Ico_Ex_RecordOff);
+	Game.Record = !Game.Record;
+	Config.General.DefRec = Game.Record;
+	btnRecord->SetIcon(Game.Record ? C4GUI::Ico_Ex_RecordOn : C4GUI::Ico_Ex_RecordOff);
 }
 
 void C4GameOptionButtons::OnBtnPassword(C4GUI::Control *btn)

@@ -20,7 +20,7 @@ public func IsProduct(id product_id)
 }
 
 private func ProductionTime(id toProduce) { return 100; }
-private func PowerNeed() { return 100; }
+public func PowerNeed() { return 40; }
 
 public func NeedRawMaterial(id rawmat_id)
 {
@@ -61,7 +61,7 @@ protected func FxWorkingTimer()
 
 private func Smoking()
 {
-	Smoke(-10, -40, 6);
+	Smoke(-10, -28, 6);
 }
 
 local ActMap = {
@@ -80,5 +80,6 @@ local ActMap = {
 
 local Name = "$Name$";
 local Description ="$Description$";
+local ContainBlast = true;
 local BlastIncinerate = 100;
 local HitPoints = 70;

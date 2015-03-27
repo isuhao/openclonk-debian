@@ -14,7 +14,7 @@ func Place(int amount, proplist rectangle, proplist settings)
 		var spot = FindLocation(Loc_Material("Water"), Loc_Wall(CNAT_Bottom), loc_area);
 		if (!spot) continue;
 		
-		var f = CreateObject(this, spot.x, spot.y, NO_OWNER);
+		var f = CreateObjectAbove(this, spot.x, spot.y, NO_OWNER);
 		--amount;
 	}
 	return true;
@@ -23,6 +23,8 @@ func Place(int amount, proplist rectangle, proplist settings)
 private func Initialize()
 {
 	SetAction("Sway");
+	SetPhase(this.Action.Length); // ensure that not all seaweed are synced on scenario load
+	return true;
 }
 
 private func Check()
@@ -33,7 +35,6 @@ private func Check()
 func SaveScenarioObject(props)
 {
 	if (!inherited(props, ...)) return false;
-	if (GetPhase()) props->AddCall("Phase", this, "SetPhase", GetPhase()); // ensure that not all seaweed are synced on scenario load
 	return true;
 }
 

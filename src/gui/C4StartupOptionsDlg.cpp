@@ -18,6 +18,7 @@
 #include <C4Include.h>
 #include <C4StartupOptionsDlg.h>
 
+#include <C4Application.h>
 #include <C4StartupMainDlg.h>
 #include <C4Language.h>
 #include <C4GamePadCon.h>
@@ -42,7 +43,7 @@ void C4StartupOptionsDlg::SmallButton::DrawElement(C4TargetFacet &cgo)
 	// draw frame
 	uint32_t dwClrHigh = C4StartupBtnBorderColor1, dwClrLow = C4StartupBtnBorderColor2;
 	if (fDown) Swap<uint32_t>(dwClrHigh, dwClrLow);
-	int32_t iIndent = BoundBy<int32_t>((rcBounds.Hgt-iTextHgt)/3, 2, 5);
+	int32_t iIndent = Clamp<int32_t>((rcBounds.Hgt-iTextHgt)/3, 2, 5);
 	float iDrawQuadTop[8] = { x0,y0, x1,y0, x1-iIndent,y0+iIndent, x0,y0+iIndent };
 	float iDrawQuadLeft[8] = { x0,y0, x0+iIndent,y0, x0+iIndent,y1-iIndent, x0,y1 };
 	float iDrawQuadRight[8] = { x1,y0, x1,y1, x1-iIndent,y1, x1-iIndent,y0+iIndent };
@@ -387,7 +388,7 @@ C4StartupOptionsDlg::ControlConfigArea::ControlConfigArea(const C4Rect &rcArea, 
 	C4Facet fctCtrlDefPic = ::GraphicsResource.fctKeyboard; // 
 	int32_t iCtrlSetWdt = caArea.GetWidth() - caArea.GetHMargin()*2;
 	int32_t iCtrlSetHMargin = 5, iCtrlSetVMargin = 5;
-	int32_t iCtrlSetBtnWdt = BoundBy<int32_t>((iCtrlSetWdt - iMaxControlSets*iCtrlSetHMargin*2) / iMaxControlSets, 5, fctCtrlDefPic.Wdt);
+	int32_t iCtrlSetBtnWdt = Clamp<int32_t>((iCtrlSetWdt - iMaxControlSets*iCtrlSetHMargin*2) / iMaxControlSets, 5, fctCtrlDefPic.Wdt);
 	int32_t iCtrlSetBtnHgt = fctCtrlDefPic.GetHeightByWidth(iCtrlSetBtnWdt);
 	iCtrlSetHMargin = (iCtrlSetWdt - iCtrlSetBtnWdt*iMaxControlSets) / (iMaxControlSets*2);
 	C4GUI::ComponentAligner caKeyboardSetSel(caArea.GetFromTop(2*iCtrlSetVMargin+iCtrlSetBtnHgt), iCtrlSetHMargin, iCtrlSetVMargin);
@@ -863,14 +864,6 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	Application.pWindow->EnumerateMultiSamples(multisamples);
 	pGfxMSCombo->SetReadOnly(multisamples.empty());
 	pGroupOptions->AddElement(pGfxMSCombo);
-	// Shaders
-	pShaders = new C4GUI::CheckBox(caGroupOptions.GetGridCell(0,2,iOpt++,iNumGfxOptions,-1,iCheckHgt,true), "Shaders", false);
-	pShaders->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
-	pShaders->SetToolTip("Shaders");
-	C4GUI::BaseCallbackHandler *pGfxGroubleCheckCB = new C4GUI::CallbackHandler<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnGfxShaderCheck);
-	pShaders->SetOnChecked(pGfxGroubleCheckCB);
-	pGroupOptions->AddElement(pShaders);
-	LoadGfxShader();
 	// fire particles
 	pCheck = new BoolConfig(caGroupOptions.GetGridCell(0,1,iOpt++,iNumGfxOptions,-1,iCheckHgt,true), LoadResStr("IDS_MSG_FIREPARTICLES"), NULL, &Config.Graphics.FireParticles);
 	pCheck->SetToolTip(LoadResStr("IDS_MSG_FIREPARTICLES_DESC"));
@@ -959,8 +952,12 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pSheetControls->AddElement(pControlConfigArea = new ControlConfigArea(pSheetControls->GetClientRect(), caMain.GetWidth()/20, caMain.GetHeight()/40, false, this));
 
 	// --- page network
-	C4GUI::ComponentAligner caSheetNetwork(pSheetNetwork->GetClientRect(), caMain.GetWidth()/20, caMain.GetHeight()/20, true);
 	int iPortCfgWdt=200, iPortCfgHgt=48; NetworkPortConfig::GetControlSize(&iPortCfgWdt, &iPortCfgHgt);
+	int iServerCfgWdt = 120, iServerCfgHgt = 20, iServerCfgWdtMid = 0;
+	StdStrBuf sServerText; sServerText.Copy(LoadResStr("IDS_CTL_USEOTHERSERVER"));
+	NetworkServerAddressConfig::GetControlSize(&iServerCfgWdt, &iServerCfgHgt, &iServerCfgWdtMid, sServerText.getData());
+	int32_t net_component_hgt = iPortCfgHgt * 4 + iServerCfgHgt + 3 * pUseFont->GetLineHeight();
+	C4GUI::ComponentAligner caSheetNetwork(pSheetNetwork->GetClientRect(), caMain.GetWidth() / 20, Max<int32_t>(0, (caMain.GetHeight() - net_component_hgt)/10), true);
 	pPortCfgTCP = new NetworkPortConfig(caSheetNetwork.GetGridCell(0,2,0,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_TCP"), &(Config.Network.PortTCP), C4NetStdPortTCP);
 	pPortCfgUDP = new NetworkPortConfig(caSheetNetwork.GetGridCell(1,2,0,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_UDP"), &(Config.Network.PortUDP), C4NetStdPortUDP);
 	pPortCfgRef = new NetworkPortConfig(caSheetNetwork.GetGridCell(0,2,1,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_REFERENCE"), &(Config.Network.PortRefServer), C4NetStdPortRefServer);
@@ -975,9 +972,6 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pSheetNetwork->AddElement(pPortCfgDsc);
 	int iNetHgt0=pPortCfgDsc->GetBounds().GetBottom();
 	caSheetNetwork.ExpandTop(-iNetHgt0);
-	int iServerCfgWdt=120, iServerCfgHgt=20, iServerCfgWdtMid=0;
-	StdStrBuf sServerText; sServerText.Copy(LoadResStr("IDS_CTL_USEOTHERSERVER"));
-	NetworkServerAddressConfig::GetControlSize(&iServerCfgWdt, &iServerCfgHgt, &iServerCfgWdtMid, sServerText.getData());
 	pLeagueServerCfg = new NetworkServerAddressConfig(caSheetNetwork.GetFromTop(iServerCfgHgt), sServerText.getData(), &(Config.Network.UseAlternateServer), Config.Network.AlternateServerAddress, iServerCfgWdtMid);
 	pLeagueServerCfg->SetToolTip(LoadResStr("IDS_NET_MASTERSRV_DESC"));
 	pSheetNetwork->AddElement(pLeagueServerCfg);
@@ -987,6 +981,10 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pCheck->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
 	pSheetNetwork->AddElement(pCheck);
 #endif
+	pCheck = new BoolConfig(caSheetNetwork.GetFromTop(pUseFont->GetLineHeight()), LoadResStr("IDS_CTL_PACKETLOGGING"), NULL, &Config.Network.PacketLogging, false);
+	pCheck->SetToolTip(LoadResStr("IDS_DESC_PACKETLOGGING"));
+	pCheck->SetFont(pUseFont, C4StartupFontClr, C4StartupFontClrDisabled);
+	pSheetNetwork->AddElement(pCheck);
 	const char *szNameCfgText = LoadResStr("IDS_NET_USERNAME");
 	int iNameCfgWdt=200, iNameCfgHgt=48; C4StartupOptionsDlg::EditConfig::GetControlSize(&iNameCfgWdt, &iNameCfgHgt, szNameCfgText, false);
 	iNameCfgWdt += 5;
@@ -1238,7 +1236,6 @@ bool C4StartupOptionsDlg::SaveConfig(bool fForce, bool fKeepOpen)
 		}
 	}
 	// store some config values
-	SaveGfxShader();
 	pPortCfgTCP->SavePort();
 	pPortCfgUDP->SavePort();
 	pPortCfgRef->SavePort();
@@ -1405,22 +1402,6 @@ void C4StartupOptionsDlg::RecreateDialog(bool fFade)
 	C4StartupOptionsDlg *pNewDlg = static_cast<C4StartupOptionsDlg *>(C4Startup::Get()->SwitchDialog(C4Startup::SDID_Options, fFade));
 	pNewDlg->pOptionsTabular->SelectSheet(iPage, false);
 	pNewDlg->fCanGoBack = false;
-}
-
-void C4StartupOptionsDlg::LoadGfxShader()
-{
-	pShaders->SetChecked(!!Config.Graphics.EnableShaders);
-}
-
-void C4StartupOptionsDlg::SaveGfxShader()
-{
-	// get it from controls
-	Config.Graphics.EnableShaders=pShaders->GetChecked();
-
-	if (pDraw->IsOpenGL())
-	{
-		pDraw->RestoreDeviceObjects();
-	}
 }
 
 void C4StartupOptionsDlg::OnFEMusicCheck(C4GUI::Element *pCheckBox)

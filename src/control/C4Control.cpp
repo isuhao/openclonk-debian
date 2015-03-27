@@ -159,7 +159,7 @@ void C4ControlSet::Execute() const
 		if (iByClient != C4ClientIDHost) break;
 		// adjust control rate
 		::Control.ControlRate += iData;
-		::Control.ControlRate = BoundBy<int32_t>(::Control.ControlRate, 1, C4MaxControlRate);
+		::Control.ControlRate = Clamp<int32_t>(::Control.ControlRate, 1, C4MaxControlRate);
 		Game.Parameters.ControlRate = ::Control.ControlRate;
 		// write back adjusted control rate to network settings
 		if (::Control.isCtrlHost() && !::Control.isReplay() && ::Control.isNetwork())
@@ -353,8 +353,8 @@ C4ControlPlayerSelect::C4ControlPlayerSelect(int32_t iPlr, const C4ObjectList &O
 {
 	pObjNrs = new int32_t[iObjCnt];
 	int32_t i = 0;
-	for (C4ObjectLink *pLnk = Objs.First; pLnk; pLnk = pLnk->Next)
-		pObjNrs[i++] = pLnk->Obj->Number;
+	for (C4Object *obj : Objs)
+		pObjNrs[i++] = obj->Number;
 	assert(i == iObjCnt);
 }
 
@@ -767,8 +767,8 @@ int32_t C4ControlSyncCheck::GetAllCrewPosX()
 {
 	int32_t cpx=0;
 	for (C4Player *pPlr=::Players.First; pPlr; pPlr=pPlr->Next)
-		for (C4ObjectLink *clnk=pPlr->Crew.First; clnk; clnk=clnk->Next)
-			cpx += fixtoi(clnk->Obj->fix_x, 100);
+		for (C4Object *member : pPlr->Crew)
+			cpx += fixtoi(member->fix_x, 100);
 	return cpx;
 }
 
@@ -1204,6 +1204,20 @@ C4ControlEMMoveObject::~C4ControlEMMoveObject()
 	delete [] pObjects; pObjects = NULL;
 }
 
+void C4ControlEMMoveObject::MoveObject(C4Object *moved_object) const
+{
+	// move given object by this->tx/ty and do callbacks
+	if (!moved_object || !moved_object->Status) return;
+	int32_t old_x = moved_object->GetX(), old_y = moved_object->GetY();
+	C4Real tx = this->tx;
+	if (moved_object->Def->NoHorizontalMove) tx = Fix0;
+	moved_object->ForcePosition(moved_object->fix_x + tx, moved_object->fix_y + ty);
+	moved_object->xdir = moved_object->ydir = 0;
+	moved_object->Mobile = false;
+	C4AulParSet pars(C4VInt(old_x), C4VInt(old_y));
+	moved_object->Call(PSF_EditCursorMoved, &pars);
+}
+
 void C4ControlEMMoveObject::Execute() const
 {
 	bool fLocalCall = LocalControl();
@@ -1215,11 +1229,19 @@ void C4ControlEMMoveObject::Execute() const
 		// move all given objects
 		C4Object *pObj;
 		for (int i=0; i<iObjectNum; ++i)
-			if ((pObj = ::Objects.SafeObjectPointer(pObjects[i]))) if (pObj->Status)
+			if ((pObj = ::Objects.SafeObjectPointer(pObjects[i])))
+				if (pObj->Status)
 				{
-					pObj->ForcePosition(pObj->fix_x+tx,pObj->fix_y+ty);
-					pObj->xdir=pObj->ydir=0;
-					pObj->Mobile = false;
+					MoveObject(pObj);
+					// attached objects: Also move attachment target
+					while (pObj->GetProcedure() == DFA_ATTACH)
+					{
+						pObj = pObj->Action.Target;
+						if (!pObj) break; // leftover action cancelled next frame
+						for (int j = 0; j < iObjectNum; ++j) if (pObjects[j] == pObj->Number) { pObj = NULL; break; } // ensure we aren't moving twice
+						if (!pObj) break;
+						MoveObject(pObj);
+					}
 				}
 	}
 	break;
@@ -1237,19 +1259,29 @@ void C4ControlEMMoveObject::Execute() const
 	case EMMO_Duplicate:
 	{
 		if (!pObjects) break;
-		// local call? adjust selection then
-		if (fLocalCall) Console.EditCursor.GetSelection().Clear();
 		// perform duplication
-		C4Object *pObj;
+		C4Object *pOldObj, *pObj;
 		for (int i=0; i<iObjectNum; ++i)
-			if ((pObj = ::Objects.SafeObjectPointer(pObjects[i])))
+			if ((pOldObj = ::Objects.SafeObjectPointer(pObjects[i])))
 			{
-				pObj = Game.CreateObject(pObj->GetPrototype(), pObj, pObj->Owner, pObj->GetX(), pObj->GetY());
-				if (pObj && fLocalCall) Console.EditCursor.GetSelection().Add(pObj, C4ObjectList::stNone);
+				pObj = Game.CreateObject(pOldObj->GetPrototype(), pOldObj, pOldObj->Owner, pOldObj->GetX(), pOldObj->GetY());
+				if (pObj && pObj->Status)
+				{
+					// local call? adjust selection then
+					// do callbacks for all clients for sync reasons
+					if (fLocalCall) Console.EditCursor.GetSelection().Add(pObj, C4ObjectList::stNone);
+					C4AulParSet pars(C4VObj(pObj));
+					if (pOldObj->Status) pOldObj->Call(PSF_EditCursorDeselection, &pars);
+					if (pObj->Status) pObj->Call(PSF_EditCursorSelection);
+				}
 			}
 		// update status
 		if (fLocalCall)
 		{
+			if (fLocalCall)
+				for (int i = 0; i<iObjectNum; ++i)
+					if ((pOldObj = ::Objects.SafeObjectPointer(pObjects[i])))
+						Console.EditCursor.GetSelection().Remove(pOldObj);
 			Console.EditCursor.SetHold(true);
 			Console.EditCursor.OnSelectionChanged();
 		}
@@ -1290,12 +1322,22 @@ void C4ControlEMMoveObject::Execute() const
 	}
 	break;
 	case EMMO_Select:
-	case EMMO_Deselect:
 	{
 		// callback to script
 		C4Object *target = ::Objects.SafeObjectPointer(iTargetObj);
 		if (!target) return;
-		target->Call(eAction == EMMO_Select ? PSF_EditCursorSelection : PSF_EditCursorDeselection);
+		target->Call(PSF_EditCursorSelection);
+	}
+	break;
+	case EMMO_Deselect:
+	{
+		// callback to script
+		C4Object *target = ::Objects.SafeObjectPointer(iTargetObj), *next_selection = NULL;
+		if (!target) return;
+		// next selection may be passed to EditCursorSelection
+		if (iObjectNum) next_selection = ::Objects.SafeObjectPointer(pObjects[0]);
+		C4AulParSet pars(C4VObj(next_selection));
+		target->Call(PSF_EditCursorDeselection, &pars);
 	}
 	break;
 	case EMMO_Create:

@@ -19,14 +19,11 @@
 
 #include <C4Include.h>
 #include <C4Surface.h>
-#include <C4GroupSet.h>
 
+#include <C4GroupSet.h>
 #include <C4Group.h>
 #include <C4Log.h>
-
-#include <Bitmap256.h>
 #include <StdPNG.h>
-#include <C4Draw.h>
 
 bool C4Surface::LoadAny(C4Group &hGroup, const char *szName, bool fOwnPal, bool fNoErrIfNotFound)
 {
@@ -168,7 +165,7 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 	if (!Create(png.iWdt, png.iHgt)) return false;
 	// lock for writing data
 	if (!Lock()) return false;
-	if (!ppTex)
+	if (textures.empty())
 	{
 		Unlock();
 		return false;
@@ -178,7 +175,7 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 		{
 			assert (tX>=0 && tY>=0 && tX<iTexX && tY<iTexY);
 			// Get Texture and lock it
-			C4TexRef *pTexRef = *(ppTex+tY*iTexX+tX);
+			C4TexRef *pTexRef = &textures[tY*iTexX + tX];
 			if (!pTexRef->Lock()) continue;
 			// At the edges, not the whole texture is used
 			int maxY = Min(iTexSize, Hgt - tY * iTexSize), maxX = Min(iTexSize, Wdt - tX * iTexSize);
@@ -227,21 +224,6 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 	// return if successful
 	return fSuccess;
 }
-
-/*bool C4Surface::Save(C4Group &hGroup, const char *szFilename)
-  {
-  // Using temporary file at C4Group temp path
-  char szTemp[_MAX_PATH+1];
-  SCopy(C4Group_GetTempPath(),szTemp);
-  SAppend(GetFilename(szFilename),szTemp);
-  MakeTempFilename(szTemp);
-  // Save to temporary file
-  if (!C4Surface::Save(szTemp)) return false;
-  // Move temp file to group
-  if (!hGroup.Move(szTemp,GetFilename(szFilename))) return false;
-  // Success
-  return true;
-  }*/
 
 bool C4Surface::SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha, bool fApplyGamma, bool fSaveOverlayOnly)
 {
