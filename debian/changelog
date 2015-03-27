@@ -1,3 +1,9 @@
+openclonk (6.0-1) UNRELEASED; urgency=medium
+
+  * Imported Upstream version 6.0
+
+ -- Philipp Kern <pkern@debian.org>  Fri, 27 Mar 2015 11:06:17 +0100
+
 openclonk (5.5.1-2) unstable; urgency=medium
 
   * Use the system tinyxml.
