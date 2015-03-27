@@ -1,0 +1,46 @@
+From bf81d045946526c7d2e81afd331067303853e90a Mon Sep 17 00:00:00 2001
+From: Philipp Kern <pkern@debian.org>
+Date: Fri, 27 Mar 2015 11:20:46 +0100
+Subject: [PATCH] Check for SDL after defining the executable.
+
+---
+ CMakeLists.txt | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e8d8e9a..7402281 100755
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -907,14 +907,6 @@ endif()
+ # Select an audio library
+ find_package("Audio")
+ 
+-# SDL
+-if(USE_SDL_MAINLOOP OR (Audio_TK STREQUAL "SDL_Mixer"))
+-	find_package(SDL)
+-	SET(HAVE_SDL ${SDL_FOUND})
+-	include_directories(${SDL_INCLUDE_DIR})
+-	target_link_libraries(openclonk ${SDL_LIBRARY})
+-endif()
+-
+ ############################################################################
+ # Precompiled header support, part 1 (pre-target)
+ ############################################################################
+@@ -1099,6 +1091,14 @@ if(Audio_FOUND)
+ 	include_directories(${Audio_INCLUDE_DIRS})
+ endif()
+ 
++# SDL
++if(USE_SDL_MAINLOOP OR (Audio_TK STREQUAL "SDL_Mixer"))
++	find_package(SDL)
++	SET(HAVE_SDL ${SDL_FOUND})
++	include_directories(${SDL_INCLUDE_DIR})
++	target_link_libraries(openclonk ${SDL_LIBRARY})
++endif()
++
+ if(MAPE_GTK_FOUND)
+ 	target_link_libraries(mape
+ 		libc4script
+-- 
+2.1.4
+
