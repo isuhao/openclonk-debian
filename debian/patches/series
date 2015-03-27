@@ -1,1 +1,2 @@
 0001-Check-for-SDL-after-defining-the-executable.patch
+0001-Do-not-interpret-a-buffer-as-a-format-string.patch
