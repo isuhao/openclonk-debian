@@ -22,7 +22,7 @@ endif()
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-include(Version.txt)
+include(Version)
 
 set(CMAKE_ADDITIONAL_DEPS_PATH "${CMAKE_CURRENT_BINARY_DIR}/deps" CACHE PATH "Additional directory to search for libraries and headers")
 list(APPEND CMAKE_PREFIX_PATH ${CMAKE_ADDITIONAL_DEPS_PATH})
@@ -491,6 +491,7 @@ set(OC_CLONK_SOURCES
 	src/script/C4AulDebug.cpp
 	src/script/C4AulDebug.h
 	thirdparty/timsort/sort.h
+	${CMAKE_CURRENT_BINARY_DIR}/C4Version.h
 )
 
 set(MAPE_BASE_SOURCES
@@ -912,7 +913,6 @@ if(USE_SDL_MAINLOOP OR (Audio_TK STREQUAL "SDL_Mixer"))
 	find_package(SDL)
 	SET(HAVE_SDL ${SDL_FOUND})
 	include_directories(${SDL_INCLUDE_DIR})
-	target_link_libraries(openclonk ${SDL_LIBRARY})
 endif()
 
 ############################################################################
@@ -996,6 +996,7 @@ endif()
 
 add_executable(c4group
 	src/c4group/C4GroupMain.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/C4Version.h
 )
 
 add_executable(netpuncher EXCLUDE_FROM_ALL
@@ -1094,6 +1095,10 @@ target_link_libraries(openclonk
 	libmisc
 )
 
+if (SDL_FOUND)
+	target_link_libraries(openclonk ${SDL_LIBRARY})
+endif()
+
 if(Audio_FOUND)
 	target_link_libraries(openclonk ${Audio_LIBRARIES})
 	include_directories(${Audio_INCLUDE_DIRS})
@@ -1164,6 +1169,15 @@ endif()
 
 # This expands some variables in Info.plist as a side-effect. XCode might then 
 # expand a second time, using the same syntax. Try not to get confused by this!
+if (APPLE AND NOT CMAKE_GENERATOR STREQUAL "Xcode")
+	# If cross-compiling for OS X, EXECUTABLE_NAME needs to be set so it's
+	# expanded inside the Info.plist file. Otherwise you cannot rename the app
+	# bundle later.
+	# XXX: Make sure to fix this once we have more than one app bundle. No, I
+	# have no idea how.
+	set(EXECUTABLE_NAME openclonk)
+endif()
+
 set_target_properties(openclonk PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/src/res/Info.plist")
 
 if(MSVC)
@@ -1306,9 +1320,9 @@ endif()
 CHECK_INCLUDE_FILE_CXX(getopt.h HAVE_GETOPT_H)
 
 # TinyXML
-if(WITH_SYSTEM_TINYXML)
-	pkg_search_module(TINYXML REQUIRED tinyxml)
-	target_link_libraries(openclonk ${TINYXML_LIBRARIES})
+if(USE_SYSTEM_TINYXML)
+	find_package(TinyXML REQUIRED)
+	target_link_libraries(openclonk ${TinyXML_LIBRARIES})
 else()
 	add_subdirectory(thirdparty/tinyxml)
 	include_directories(SYSTEM thirdparty/tinyxml)
