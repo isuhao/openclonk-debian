@@ -4,7 +4,7 @@
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 %:
-	dh $@ --buildsystem=cmake -Bbuild
+	dh $@ --buildsystem=cmake -Bbuild --parallel
 
 override_dh_auto_configure:
 	dh_auto_configure -- -DWITH_AUTOMATIC_UPDATE=0 -DUSE_STATIC_BOOST=OFF -DUSE_SYSTEM_TINYXML=ON
