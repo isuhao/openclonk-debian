@@ -1,3 +1,9 @@
+openclonk (6.1-2) unstable; urgency=medium
+
+  * Rebuild against libpng-dev. (Closes: #810195)
+
+ -- Philipp Kern <pkern@debian.org>  Thu, 07 Jan 2016 10:02:41 +0100
+
 openclonk (6.1-1) unstable; urgency=medium
 
   * Imported Upstream version 6.1
