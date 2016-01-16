@@ -176,6 +176,19 @@ namespace
 		{ "alpha_blend", { StdMeshMaterialPass::SB_SrcAlpha, StdMeshMaterialPass::SB_OneMinusSrcAlpha } },
 		{ NULL, { static_cast<StdMeshMaterialPass::SceneBlendType>(0), static_cast<StdMeshMaterialPass::SceneBlendType>(0) } }
 	};
+
+	const Enumerator<StdMeshMaterialPass::DepthFunctionType> DepthFunctionEnumerators[] =
+	{
+		{ "always_fail", StdMeshMaterialPass::DF_AlwaysFail },
+		{ "always_pass", StdMeshMaterialPass::DF_AlwaysPass },
+		{ "less", StdMeshMaterialPass::DF_Less },
+		{ "less_equal", StdMeshMaterialPass::DF_LessEqual },
+		{ "equal", StdMeshMaterialPass::DF_Equal },
+		{ "not_equal", StdMeshMaterialPass::DF_NotEqual },
+		{ "greater_equal", StdMeshMaterialPass::DF_GreaterEqual },
+		{ "greater", StdMeshMaterialPass::DF_Greater },
+		{ NULL, static_cast<StdMeshMaterialPass::DepthFunctionType>(0) }
+	};
 }
 
 StdMeshMaterialError::StdMeshMaterialError(const StdStrBuf& message, const char* file, unsigned int line)
@@ -632,7 +645,7 @@ StdMeshMaterialShaderParameter::StdMeshMaterialShaderParameter(const StdMeshMate
 	CopyDeep(other);
 }
 
-StdMeshMaterialShaderParameter::StdMeshMaterialShaderParameter(StdMeshMaterialShaderParameter RREF other)
+StdMeshMaterialShaderParameter::StdMeshMaterialShaderParameter(StdMeshMaterialShaderParameter &&other)
 {
 	Move(std::move(other));
 }
@@ -654,7 +667,7 @@ StdMeshMaterialShaderParameter& StdMeshMaterialShaderParameter::operator=(const 
 	return *this;
 }
 
-StdMeshMaterialShaderParameter& StdMeshMaterialShaderParameter::operator=(StdMeshMaterialShaderParameter RREF other)
+StdMeshMaterialShaderParameter& StdMeshMaterialShaderParameter::operator=(StdMeshMaterialShaderParameter &&other)
 {
 	if(this == &other) return *this;
 
@@ -680,6 +693,7 @@ void StdMeshMaterialShaderParameter::CopyShallow(const StdMeshMaterialShaderPara
 	case AUTO:
 		a = other.a;
 		break;
+	case AUTO_TEXTURE_MATRIX:
 	case INT:
 		i = other.i;
 		break;
@@ -713,7 +727,7 @@ void StdMeshMaterialShaderParameter::CopyDeep(const StdMeshMaterialShaderParamet
 	}
 }
 
-void StdMeshMaterialShaderParameter::Move(StdMeshMaterialShaderParameter RREF other)
+void StdMeshMaterialShaderParameter::Move(StdMeshMaterialShaderParameter &&other)
 {
 	CopyShallow(other);
 	other.type = FLOAT;
@@ -841,16 +855,20 @@ bool StdMeshMaterialProgram::AddParameterNames(const StdMeshMaterialShaderParame
 bool StdMeshMaterialProgram::CompileShader(StdMeshMaterialLoader& loader, C4Shader& shader, int ssc)
 {
 	// Add standard slices
-	shader.AddFragmentSlice(-1, "#define MESH");
 	loader.AddShaderSlices(shader, ssc);
 	// Add our slices
-	shader.AddVertexSlice(-1, "varying vec2 texcoord;");
-	shader.AddFragmentSlice(-1, "varying vec2 texcoord;");
 	shader.AddVertexSlices(VertexShader->GetFilename(), VertexShader->GetCode(), VertexShader->GetFilename());
 	shader.AddFragmentSlices(FragmentShader->GetFilename(), FragmentShader->GetCode(), FragmentShader->GetFilename());
 	// Construct the list of uniforms
-	std::vector<const char*> uniformNames(C4SSU_Count + ParameterNames.size() + 1);
+	std::vector<const char*> uniformNames;
+	std::vector<const char*> attributeNames;
+#ifndef USE_CONSOLE
+	uniformNames.resize(C4SSU_Count + ParameterNames.size() + 1);
+	uniformNames[C4SSU_ProjectionMatrix] = "projectionMatrix";
+	uniformNames[C4SSU_ModelViewMatrix] = "modelviewMatrix";
+	uniformNames[C4SSU_NormalMatrix] = "normalMatrix";
 	uniformNames[C4SSU_ClrMod] = "clrMod";
+	uniformNames[C4SSU_Gamma] = "gamma";
 	uniformNames[C4SSU_BaseTex] = "baseTex"; // unused
 	uniformNames[C4SSU_OverlayTex] = "overlayTex"; // unused
 	uniformNames[C4SSU_OverlayClr] = "oc_PlayerColor";
@@ -861,28 +879,45 @@ bool StdMeshMaterialProgram::CompileShader(StdMeshMaterialLoader& loader, C4Shad
 	uniformNames[C4SSU_AmbientTransform] = "ambientTransform";
 	uniformNames[C4SSU_AmbientBrightness] = "ambientBrightness";
 	uniformNames[C4SSU_Bones] = "bones";
+	uniformNames[C4SSU_CullMode] = "cullMode";
 	for (unsigned int i = 0; i < ParameterNames.size(); ++i)
 		uniformNames[C4SSU_Count + i] = ParameterNames[i].getData();
 	uniformNames[C4SSU_Count + ParameterNames.size()] = NULL;
+	attributeNames.resize(C4SSA_Count + 1);
+	attributeNames[C4SSA_Position] = "oc_Position";
+	attributeNames[C4SSA_Normal] = "oc_Normal";
+	attributeNames[C4SSA_TexCoord] = "oc_TexCoord";
+	attributeNames[C4SSA_Color] = "oc_Color"; // unused
+	attributeNames[C4SSA_BoneIndices0] = "oc_BoneIndices0";
+	attributeNames[C4SSA_BoneIndices1] = "oc_BoneIndices1";
+	attributeNames[C4SSA_BoneWeights0] = "oc_BoneWeights0";
+	attributeNames[C4SSA_BoneWeights1] = "oc_BoneWeights1";
+	attributeNames[C4SSA_Count] = NULL;
+#endif
 	// Compile the shader
 	StdCopyStrBuf name(Name);
+#ifndef USE_CONSOLE
 	if (ssc != 0) name.Append(":");
 	if (ssc & C4SSC_LIGHT) name.Append("Light");
 	if (ssc & C4SSC_MOD2) name.Append("Mod2");
-	return shader.Init(name.getData(), &uniformNames[0]);
+#endif
+	return shader.Init(name.getData(), &uniformNames[0], &attributeNames[0]);
 }
 
 bool StdMeshMaterialProgram::Compile(StdMeshMaterialLoader& loader)
 {
+#ifndef USE_CONSOLE
 	if (!CompileShader(loader, Shader, 0)) return false;
 	if (!CompileShader(loader, ShaderMod2, C4SSC_MOD2)) return false;
 	if (!CompileShader(loader, ShaderLight, C4SSC_LIGHT)) return false;
 	if (!CompileShader(loader, ShaderLightMod2, C4SSC_LIGHT | C4SSC_MOD2)) return false;
+#endif
 	return true;
 }
 
 const C4Shader* StdMeshMaterialProgram::GetShader(int ssc) const
 {
+#ifndef USE_CONSOLE
 	const C4Shader* shaders[4] = {
 		&Shader,
 		&ShaderMod2,
@@ -896,13 +931,20 @@ const C4Shader* StdMeshMaterialProgram::GetShader(int ssc) const
 
 	assert(index < 4);
 	return shaders[index];
+#else
+	return NULL;
+#endif
 }
 
 int StdMeshMaterialProgram::GetParameterIndex(const char* name) const
 {
+#ifndef USE_CONSOLE
 	std::vector<StdCopyStrBuf>::const_iterator iter = std::find(ParameterNames.begin(), ParameterNames.end(), name);
 	if(iter == ParameterNames.end()) return -1;
 	return C4SSU_Count + std::distance(ParameterNames.begin(), iter);
+#else
+	return -1;
+#endif
 }
 
 double StdMeshMaterialTextureUnit::Transformation::GetWaveXForm(double t) const
@@ -1204,6 +1246,7 @@ StdMeshMaterialPass::StdMeshMaterialPass():
 	Emissive[0] = Emissive[1] = Emissive[2] = 0.0f; Emissive[3] = 0.0f;
 	Shininess = 0.0f;
 	SceneBlendFactors[0] = SB_One; SceneBlendFactors[1] = SB_Zero;
+	AlphaRejectionFunction = DF_AlwaysPass; AlphaRejectionValue = 0.0f;
 	AlphaToCoverage = false;
 	VertexShader.Shader = FragmentShader.Shader = GeometryShader.Shader = NULL;
 }
@@ -1312,6 +1355,12 @@ void StdMeshMaterialPass::Load(StdMeshMaterialParserCtx& ctx)
 			StdStrBuf op;
 			ctx.AdvanceRequired(op, TOKEN_IDTF);
 			ctx.WarningNotSupported(token_name.getData());
+		}
+		else if (token_name == "alpha_rejection")
+		{
+			AlphaRejectionFunction = ctx.AdvanceEnum(DepthFunctionEnumerators);
+			if (AlphaRejectionFunction != DF_AlwaysFail && AlphaRejectionFunction != DF_AlwaysPass)
+				AlphaRejectionValue = ctx.AdvanceFloat() / 255.0f;
 		}
 		else if (token_name == "alpha_to_coverage")
 		{
@@ -1515,12 +1564,14 @@ void StdMeshMatManager::Parse(const char* mat_script, const char* filename, StdM
 
 			Materials[material_name] = mat;
 
+#ifndef USE_CONSOLE
 			// To Gfxspecific setup of the material; choose working techniques
 			if (!pDraw->PrepareMaterial(*this, loader, Materials[material_name]))
 			{
 				Materials.erase(material_name);
 				ctx.Error(StdCopyStrBuf("No working technique for material '") + material_name + "'");
 			}
+#endif
 		}
 		else if (token_name == "vertex_program")
 		{

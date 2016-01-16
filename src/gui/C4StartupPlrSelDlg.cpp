@@ -54,7 +54,7 @@ StdStrBuf TimeString(int iSeconds)
 StdStrBuf DateString(int iTime)
 {
 	if (!iTime) return StdStrBuf("", true);
-	time_t tTime = iTime; //time(&tTime);
+	time_t tTime = iTime;
 	struct tm *pLocalTime;
 	pLocalTime=localtime(&tTime);
 	return FormatString(  "%02d.%02d.%d %02d:%02d",
@@ -182,7 +182,7 @@ void C4StartupPlrSelDlg::PlayerListItem::Load(const StdStrBuf &rsFilename)
 		throw LoadError(FormatString("Error loading player file from %s: Core data invalid or missing (Group: %s)!", rsFilename.getData(), PlrGroup.GetError()));
 	// load icon
 	C4FacetSurface fctIcon;
-	if (PlrGroup.FindEntry(C4CFN_BigIcon) && fctIcon.Load(PlrGroup, C4CFN_BigIcon))
+	if (PlrGroup.FindEntry(C4CFN_BigIcon) && fctIcon.Load(PlrGroup, C4CFN_BigIcon, C4FCT_Full, C4FCT_Full, false, 0))
 		fHasCustomIcon = true;
 	else
 	{
@@ -248,7 +248,6 @@ void C4StartupPlrSelDlg::PlayerListItem::SetSelectionInfo(C4GUI::TextWindow *pSe
 {
 	// write info text for player
 	pSelectionInfo->ClearText(false);
-	//pSelectionInfo->AddTextLine(FormatString("%s %s", Core.RankName, Core.PrefName).getData(), &C4Startup::Get()->Graphics.BookFontCapt, ClrPlayerItem, false, false);
 	pSelectionInfo->AddTextLine(FormatString("%s", Core.PrefName).getData(), &C4Startup::Get()->Graphics.BookFontCapt, ClrPlayerItem, false, false);
 	pSelectionInfo->AddTextLine(FormatString(LoadResStr("IDS_DESC_PLAYER"), (int)Core.TotalScore, (int)Core.Rounds, (int)Core.RoundsWon, (int)Core.RoundsLost, TimeString(Core.TotalPlayingTime).getData(), Core.Comment).getData(), &C4Startup::Get()->Graphics.BookFont, ClrPlayerItem, false, false);
 	if (Core.LastRound.Title[0])
@@ -360,7 +359,7 @@ void C4StartupPlrSelDlg::CrewListItem::OnDeathMessageSet(const StdStrBuf &rsNewM
 	// save
 	RewriteCore();
 	// acoustic feedback
-	C4GUI::GUISound("Connect");
+	C4GUI::GUISound("UI::Confirmed");
 }
 
 void C4StartupPlrSelDlg::CrewListItem::RewriteCore()
@@ -483,7 +482,7 @@ C4StartupPlrSelDlg::C4StartupPlrSelDlg() : C4StartupDlg("W"), eMode(PSDM_Player)
 	int iButtonXSpacing = (GetClientRect().Wdt > 700) ? GetClientRect().Wdt/58 : 2;
 	int iButtonCount = 6;
 	C4GUI::ComponentAligner caMain(GetClientRect(), 0,0, true);
-	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(Max(caMain.GetHeight()/15, iButtonHeight)),0,0);
+	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(std::max(caMain.GetHeight()/15, iButtonHeight)),0,0);
 	rcBottomButtons = caButtonArea.GetCentered(caMain.GetWidth(), iButtonHeight);
 	iBottomButtonWidth = (caButtonArea.GetWidth() - iButtonXSpacing * (iButtonCount-1)) / iButtonCount;
 	C4Rect rcMain = caMain.GetAll();
@@ -731,6 +730,10 @@ void C4StartupPlrSelDlg::OnItemCheckChange(C4GUI::Element *pCheckBox)
 	switch (eMode)
 	{
 	case PSDM_Player:
+		// Deselect all other players
+		for (ListItem* pEl = static_cast<ListItem*>(pPlrListBox->GetFirst()); pEl != NULL; pEl = pEl->GetNext())
+			if (pCheckBox && pEl != pCheckBox->GetParent())
+				pEl->SetActivated(false);
 		// update Config.General.Participants
 		UpdateActivatedPlayers();
 		break;
@@ -770,7 +773,7 @@ void C4StartupPlrSelDlg::OnActivateBtn(C4GUI::Control *btn)
 	if (!pSel) return;
 	pSel->SetActivated(!pSel->IsActivated());
 	// update stuff
-	OnItemCheckChange(NULL);
+	OnItemCheckChange(pSel->GetCheckBox());
 }
 
 void C4StartupPlrSelDlg::DoBack()
@@ -796,7 +799,7 @@ void C4StartupPlrSelDlg::OnNewBtn(C4GUI::Control *btn)
 	if (eMode != PSDM_Player) return;
 	C4GUI::Dialog *pDlg;
 	GetScreen()->ShowRemoveDlg(pDlg=new C4StartupPlrPropertiesDlg(NULL, this));
-	pDlg->SetPos(Min<int32_t>(GetBounds().Wdt/10, GetBounds().Wdt - pDlg->GetBounds().Wdt), Min<int32_t>(GetBounds().Hgt/4, GetBounds().Hgt - pDlg->GetBounds().Hgt));
+	pDlg->SetPos(std::min<int32_t>(GetBounds().Wdt/10, GetBounds().Wdt - pDlg->GetBounds().Wdt), std::min<int32_t>(GetBounds().Hgt/4, GetBounds().Hgt - pDlg->GetBounds().Hgt));
 }
 
 bool C4StartupPlrSelDlg::CheckPlayerName(const StdStrBuf &Playername, StdStrBuf &Filename, const StdStrBuf *pPrevFilename, bool fWarnEmpty)
@@ -847,7 +850,7 @@ void C4StartupPlrSelDlg::OnCrewBtn(C4GUI::Control *btn)
 void C4StartupPlrSelDlg::SetPlayerMode()
 {
 	// change view to listing players
-	C4GUI::GUISound("DoorClose");
+	C4GUI::GUISound("UI::Close");
 	StdStrBuf LastPlrFilename;
 	LastPlrFilename.Copy(static_cast<const StdStrBuf &>(CurrPlayer.Grp.GetFullName()));
 	CurrPlayer.Grp.Close();
@@ -876,7 +879,7 @@ void C4StartupPlrSelDlg::SetCrewMode(PlayerListItem *pSel)
 		                         strCrew.getData(), C4GUI::Ico_Player);
 		return;
 	}
-	C4GUI::GUISound("DoorOpen");
+	C4GUI::GUISound("UI::Open");
 	eMode = PSDM_Crew;
 	UpdatePlayerList();
 	UpdateSelection();
@@ -935,7 +938,7 @@ void C4StartupPlrSelDlg::SelectItem(const StdStrBuf &Filename, bool fActivate)
 			{
 				pPlrItem->SetActivated(true);
 				// player activation updates
-				OnItemCheckChange(NULL);
+				OnItemCheckChange(pPlrItem->GetCheckBox());
 			}
 			// max one
 			return;
@@ -955,7 +958,7 @@ void C4StartupPlrSelDlg::OnPropertyBtn(C4GUI::Control *btn)
 		if (!pSel) return;
 		C4GUI::Dialog *pDlg;
 		GetScreen()->ShowRemoveDlg(pDlg=new C4StartupPlrPropertiesDlg(pSel, this));
-		pDlg->SetPos(Min<int32_t>(GetBounds().Wdt/10, GetBounds().Wdt - pDlg->GetBounds().Wdt),
+		pDlg->SetPos(std::min<int32_t>(GetBounds().Wdt/10, GetBounds().Wdt - pDlg->GetBounds().Wdt),
 		             (GetBounds().Hgt - pDlg->GetBounds().Hgt) / 2);
 	}
 	break;
@@ -1019,7 +1022,7 @@ void C4StartupPlrSelDlg::ResortCrew()
 		if (i == SortData.end())
 			SortData.push_back(C4StartupPlrSelDlg_CrewSortDataEntry(pCrewItem->GetCore().Experience, pCrewItem->GetCore().id));
 		else
-			(*i).iMaxExp = Max<int32_t>((*i).iMaxExp, pCrewItem->GetCore().Experience);
+			(*i).iMaxExp = std::max<int32_t>((*i).iMaxExp, pCrewItem->GetCore().Experience);
 	}
 	pPlrListBox->SortElements(&CrewSortFunc, &SortData);
 }
@@ -1291,7 +1294,7 @@ void C4StartupPlrColorPickerDlg::Picker::MouseInput(C4GUI::CMouse &rMouse, int32
 		if (HandleMouseDown(iX, iY))
 		{
 			rMouse.pDragElement = this;
-			C4GUI::GUISound("Command");
+			C4GUI::GUISound("UI::Select");
 		}
 		else
 		{
@@ -1332,8 +1335,6 @@ C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerL
 	// use black fonts here
 	CStdFont *pUseFont = &C4Startup::Get()->Graphics.BookFont;
 	CStdFont *pSmallFont = &C4Startup::Get()->Graphics.BookSmallFont;
-	// Title
-	//SetTitle(FormatString("%s %s", C4P.RankName, C4P.Name));
 	// get positions
 	UpdateSize();
 	C4GUI::ComponentAligner caMain(GetClientRect(), 0, 1, true);
@@ -1380,7 +1381,7 @@ C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerL
 	szTip = LoadResStr("IDS_DLGTIP_PLAYERCOLORS");
 	AddElement(pBtn = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::ArrowButton>(C4GUI::ArrowButton::Left, caColorArea.GetFromLeft(C4GUI::ArrowButton::GetDefaultWidth()), &C4StartupPlrPropertiesDlg::OnClrChangeLeft));
 	pBtn->SetToolTip(szTip);
-	C4Facet &rfctClrPreviewPic = ::GraphicsResource.fctFlagClr; //C4Startup::Get()->Graphics.fctCrewClr; //::GraphicsResource.fctCrewClr;
+	C4Facet &rfctClrPreviewPic = ::GraphicsResource.fctFlagClr;
 	pClrPreview = new C4GUI::CallbackButton<C4StartupPlrPropertiesDlg, C4GUI::IconButton>(C4GUI::Ico_None, caColorArea.GetFromLeft(rfctClrPreviewPic.GetWidthByHeight(caColorArea.GetHeight())), 'C', &C4StartupPlrPropertiesDlg::OnClrChangeCustom);
 	pClrPreview->SetFacet(rfctClrPreviewPic);
 	AddElement(pClrPreview);
@@ -1435,10 +1436,10 @@ C4StartupPlrPropertiesDlg::C4StartupPlrPropertiesDlg(C4StartupPlrSelDlg::PlayerL
 	// place buttons
 	// OK
 	C4GUI::Button *pBtnOK = new C4GUI::OKIconButton(C4Rect(147-GetMarginLeft(), 295+35-GetMarginTop(), 54, 33), C4GUI::Ico_None);
-	AddElement(pBtnOK); //pBtnOK->SetToolTip(LoadResStr("IDS_DLGTIP_OK"));
+	AddElement(pBtnOK);
 	// Cancel
 	C4GUI::Button *pBtnAbort = new C4GUI::CancelIconButton(C4Rect(317-GetMarginLeft(), 16-GetMarginTop(), 21, 21), C4GUI::Ico_None);
-	AddElement(pBtnAbort); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+	AddElement(pBtnAbort);
 	// when called from player selection screen: input dlg always closed in the end
 	// otherwise, modal proc will delete
 	if (pMainDlg) SetDelOnClose();
@@ -1651,7 +1652,7 @@ void C4StartupPlrPropertiesDlg::SetNewPicture(const char *szFromFilename)
 		bool fSucc = false;
 		if (SrcGrp.Open(sParentPath.getData()))
 		{
-			if (sfcNewPic.Load(SrcGrp, GetFilename(szFromFilename)))
+			if (sfcNewPic.Load(SrcGrp, GetFilename(szFromFilename), false, false, 0))
 			{
 				fSucc = true;
 				if (!SetNewPicture(sfcNewPic, &fctNewBigIcon, C4MaxBigIconSize, true)) fSucc = false;
@@ -1693,7 +1694,7 @@ void C4StartupPlrPropertiesDlg::UpdateBigIcon()
 		{
 			if (PlrGroup.FindEntry(C4CFN_BigIcon))
 			{
-				if (fctOldBigIcon.Load(PlrGroup, C4CFN_BigIcon))
+				if (fctOldBigIcon.Load(PlrGroup, C4CFN_BigIcon, C4FCT_Full, C4FCT_Full, false, 0))
 				{
 					pPictureBtn->SetFacet(fctOldBigIcon);
 					fHasIcon = true;

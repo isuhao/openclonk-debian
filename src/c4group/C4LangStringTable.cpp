@@ -23,7 +23,7 @@
 #include "C4LangStringTable.h"
 #include "C4InputValidation.h"
 
-C4LangStringTable::C4LangStringTable() {}
+C4LangStringTable::C4LangStringTable() : ref_count(1) {}
 
 bool C4LangStringTable::HasTranslation(const std::string &text) const
 {
@@ -112,9 +112,6 @@ void C4LangStringTable::ReplaceStrings(const StdStrBuf &rBuf, StdStrBuf &rTarget
 		SCopyUntil(pPos, szStringName, '$', C4MaxName); pPos += SLen(szStringName) + 1;
 		if (*(pPos-1) != '$') continue;
 		// valid?
-		//for(const char *pPos2 = szStringName; *pPos2; pPos2++)
-		//  if(!IsIdentifier(*pPos2))
-		//    break;
 		const char *pPos2 = szStringName;
 		while (*pPos2)
 			if (!IsIdentifier(*(pPos2++)))

@@ -57,11 +57,15 @@ C4String::C4String()
 C4String::~C4String()
 {
 	// unreg
+#ifdef _DEBUG
 	static bool remove = false;
-	assert(!remove);
+	assert(!remove); (void)remove;
 	remove = true;
+#endif
 	Strings.Set.Remove(this);
+#ifdef _DEBUG
 	remove = false;
+#endif
 }
 
 void C4String::operator=(const char * s)
@@ -99,6 +103,8 @@ C4StringTable::C4StringTable()
 	P[P_Delay] = "Delay";
 	P[P_X] = "X";
 	P[P_Y] = "Y";
+	P[P_x] = "x";
+	P[P_y] = "y";
 	P[P_Wdt] = "Wdt";
 	P[P_Hgt] = "Hgt";
 	P[P_OffX] = "OffX";
@@ -142,6 +148,7 @@ C4StringTable::C4StringTable()
 	P[P_Blasted] = "Blasted";
 	P[P_IncineratingObj] = "IncineratingObj";
 	P[P_Plane] = "Plane";
+	P[P_BorderBound] = "BorderBound";
 	P[P_SolidMaskPlane] = "SolidMaskPlane";
 	P[P_Tooltip] = "Tooltip";
 	P[P_Placement] = "Placement";
@@ -151,6 +158,21 @@ C4StringTable::C4StringTable()
 	P[P_Global] = "Global";
 	P[P_Scenario] = "Scenario";
 	P[P_JumpSpeed] = "JumpSpeed";
+	P[P_BackgroundColor] = "BackgroundColor";
+	P[P_Decoration] = "Decoration";
+	P[P_Symbol] = "Symbol";
+	P[P_Target] = "Target";
+	P[P_Std] = "Std";
+	P[P_Text] = "Text";
+	P[P_GraphicsName] = "GraphicsName";
+	P[P_OnClick] = "OnClick";
+	P[P_OnMouseIn] = "OnMouseIn";
+	P[P_OnMouseOut] = "OnMouseOut";
+	P[P_OnClose] = "OnClose";
+	P[P_ID] = "ID";
+	P[P_Style] = "Style";
+	P[P_Player] = "Player";
+	P[P_Margin] = "Margin";
 	P[P_Algo] = "Algo";
 	P[P_Layer] = "Layer";
 	P[P_Seed] = "Seed";
@@ -181,12 +203,51 @@ C4StringTable::C4StringTable()
 	P[P_Phase] = "Phase";
 	P[P_Stretch] = "Stretch";
 	P[P_CollisionVertex] = "CollisionVertex";
+	P[P_CollisionDensity] = "CollisionDensity";
 	P[P_OnCollision] = "OnCollision";
 	P[P_Distance] = "Distance";
 	P[P_Smoke] = "Smoke";
 	P[P_Source] = "Source";
 	P[P_Color] = "Color";
 	P[P_EditCursorCommands] = "EditCursorCommands";
+	P[P_IsPointContained] = "IsPointContained";
+	P[P_GetRandomPoint] = "GetRandomPoint";
+	P[P_Type] = "Type";
+	P[P_Reverb_Density] = "Reverb_Density";
+	P[P_Reverb_Diffusion] = "Reverb_Diffusion";
+	P[P_Reverb_Gain] = "Reverb_Gain";
+	P[P_Reverb_GainHF] = "Reverb_GainHF";
+	P[P_Reverb_Decay_Time] = "Reverb_Decay_Time";
+	P[P_Reverb_Decay_HFRatio] = "Reverb_Decay_HFRatio";
+	P[P_Reverb_Reflections_Gain] = "Reverb_Reflections_Gain";
+	P[P_Reverb_Reflections_Delay] = "Reverb_Reflections_Delay";
+	P[P_Reverb_Late_Reverb_Gain] = "Reverb_Late_Reverb_Gain";
+	P[P_Reverb_Late_Reverb_Delay] = "Reverb_Late_Reverb_Delay";
+	P[P_Reverb_Air_Absorption_GainHF] = "Reverb_Air_Absorption_GainHF";
+	P[P_Reverb_Room_Rolloff_Factor] = "Reverb_Room_Rolloff_Factor";
+	P[P_Reverb_Decay_HFLimit] = "Reverb_Decay_HFLimit";
+	P[P_Echo_Delay] = "Echo_Delay";
+	P[P_Echo_LRDelay] = "Echo_LRDelay";
+	P[P_Echo_Damping] = "Echo_Damping";
+	P[P_Echo_Feedback] = "Echo_Feedback";
+	P[P_Echo_Spread] = "Echo_Spread";
+	P[P_Equalizer_Low_Gain] = "Equalizer_Low_Gain";
+	P[P_Equalizer_Low_Cutoff] = "Equalizer_Low_Cutoff";
+	P[P_Equalizer_Mid1_Gain] = "Equalizer_Mid1_Gain";
+	P[P_Equalizer_Mid1_Center] = "Equalizer_Mid1_Center";
+	P[P_Equalizer_Mid1_Width] = "Equalizer_Mid1_Width";
+	P[P_Equalizer_Mid2_Gain] = "Equalizer_Mid2_Gain";
+	P[P_Equalizer_Mid2_Center] = "Equalizer_Mid2_Center";
+	P[P_Equalizer_Mid2_Width] = "Equalizer_Mid2_Width";
+	P[P_Equalizer_High_Gain] = "Equalizer_High_Gain";
+	P[P_Equalizer_High_Cutoff] = "Equalizer_High_Cutoff";
+	P[P_LightOffset] = "LightOffset";
+	P[P_PlayList] = "PlayList";
+	P[P_MusicBreakMin] = "MusicBreakMin";
+	P[P_MusicBreakMax] = "MusicBreakMax";
+	P[P_MusicBreakChance] = "MusicBreakChance";
+	P[P_MusicMaxPositionMemory] = "MusicMaxPositionMemory";
+	P[P_InflameLandscape] = "InflameLandscape";
 	P[DFA_WALK] = "WALK";
 	P[DFA_FLIGHT] = "FLIGHT";
 	P[DFA_KNEEL] = "KNEEL";

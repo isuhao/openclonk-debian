@@ -22,14 +22,15 @@
 
 #include <C4MessageBoard.h>
 #include <C4UpperBoard.h>
-#include <C4Video.h>
+
+#include <memory>
 
 class C4GraphicsSystem
 {
 public:
 	C4GraphicsSystem();
 	~C4GraphicsSystem();
-	C4MessageBoard MessageBoard;
+	std::unique_ptr<C4MessageBoard> MessageBoard;
 	C4UpperBoard UpperBoard;
 	int32_t iRedrawBackground;
 	bool ShowHelp;
@@ -39,9 +40,9 @@ public:
 	bool ShowEntrance;
 	bool ShowPathfinder;
 	bool ShowNetstatus;
-	bool ShowSolidMask;
+	int Show8BitSurface; // 0 normal, 1 foreground mats, 2 background mats
 	bool ShowLights;
-	C4Video Video;
+	bool ShowMenuInfo;
 	C4LoaderScreen *pLoaderScreen;
 	void Default();
 	void Clear();
@@ -66,10 +67,9 @@ protected:
 	void DrawFlashMessage();
 	void DrawHoldMessages();
 	void ClearFullscreenBackground();
-	int32_t SeekLoaderScreens(C4Group &rFromGrp, const char *szWildcard, int32_t iLoaderCount, char *szDstName, C4Group **ppDestGrp);
 
 public:
-	bool ToggleShowSolidMask();
+	bool ToggleShow8BitSurface();
 	bool ToggleShowNetStatus();
 	bool ToggleShowVertices();
 	bool ToggleShowAction();

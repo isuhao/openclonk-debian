@@ -23,20 +23,28 @@
 #include <C4Rect.h>
 #include <C4Group.h>
 
-
 void C4TargetFacet::Set(C4Surface * nsfc, float nx, float ny, float nwdt, float nhgt, float ntx, float nty, float Zoom)
+{
+	Set(nsfc, nx, ny, nwdt, nhgt, ntx, nty, Zoom, ntx, nty);
+}
+
+void C4TargetFacet::Set(C4Surface * nsfc, float nx, float ny, float nwdt, float nhgt, float ntx, float nty, float Zoom, float prx, float pry)
 {
 	C4Facet::Set(nsfc, nx, ny, nwdt, nhgt);
 	TargetX = ntx; TargetY = nty; this->Zoom = Zoom;
+	ParRefX = prx; ParRefY = pry;
 }
 
 void C4TargetFacet::Set(C4Surface * nsfc, const C4Rect & r, float ntx, float nty, float Zoom)
 {
 	Set(nsfc, r.x, r.y, r.Wdt, r.Hgt, ntx, nty, Zoom);
 }
+
 void C4TargetFacet::SetRect(C4TargetRect &rSrc)
 {
-	X=rSrc.x; Y=rSrc.y; Wdt=rSrc.Wdt; Hgt=rSrc.Hgt; TargetX=rSrc.tx; TargetY=rSrc.ty;
+	X=rSrc.x; Y=rSrc.y; Wdt=rSrc.Wdt; Hgt=rSrc.Hgt;
+	TargetX=rSrc.tx; TargetY=rSrc.ty;
+	ParRefX=rSrc.tx; TargetY=rSrc.ty;
 }
 
 // ------------------------
@@ -47,7 +55,7 @@ bool C4FacetSurface::Create(int iWdt, int iHgt, int iWdt2, int iHgt2)
 	Clear();
 	// Create surface
 	Face.Default();
-	if (!Face.Create(iWdt,iHgt)) return false;
+	if (!Face.Create(iWdt,iHgt,false,0,0)) return false;
 	// Set facet
 	if (iWdt2==C4FCT_Full) iWdt2=Face.Wdt; if (iWdt2==C4FCT_Height) iWdt2=Face.Hgt; if (iWdt2==C4FCT_Width) iWdt2=Face.Wdt;
 	if (iHgt2==C4FCT_Full) iHgt2=Face.Hgt; if (iHgt2==C4FCT_Height) iHgt2=Face.Hgt; if (iHgt2==C4FCT_Width) iHgt2=Face.Wdt;
@@ -66,54 +74,7 @@ bool C4FacetSurface::CreateClrByOwner(C4Surface *pBySurface)
 	return true;
 }
 
-bool C4FacetSurface::EnsureSize(int iMinWdt, int iMinHgt)
-{
-	// safety
-	if (!Surface) return false;
-	// check size
-	int iWdt=Face.Wdt,iHgt=Face.Hgt;
-	if (iWdt>=iMinWdt && iHgt>=iMinHgt) return true;
-	// create temp surface
-	C4Surface *sfcDup=new C4Surface(iWdt,iHgt);
-	if (!sfcDup) return false;
-	if (!pDraw->BlitSurface(&Face,sfcDup,0,0,false))
-		{ delete sfcDup; return false; }
-	// calc needed size
-	int iDstWdt=Surface->Wdt,iDstHgt=iHgt;
-	while (iDstWdt<iMinWdt) iDstWdt+=iWdt;
-	while (iDstHgt<iMinHgt) iDstHgt+=iHgt;
-	// recreate this one
-	if (!Face.Create(iDstWdt, iDstHgt)) { delete sfcDup; Clear(); return false; }
-	// blit tiled into it
-	bool fSuccess=pDraw->BlitSurfaceTile(sfcDup, &Face, 0, 0, iDstWdt, iDstHgt, 0, 0, false);
-	// del temp surface
-	delete sfcDup;
-	// done
-	return fSuccess;
-}
-
-/*bool C4FacetSurface::Save(C4Group &hGroup, const char *szName)
-  {
-  // Empty
-  if (!Wdt || !Hgt) return false;
-  // Full surface
-  if ((Wdt==Face.Wdt) && (Hgt==Face.Hgt))
-    {
-    if (!Face.Save(hGroup,szName)) return false;
-    }
-  // Surface section
-  else
-    {
-    C4Surface sfcFacet;
-    if (!sfcFacet.Create(Wdt,Hgt)) return false;
-    Draw(&sfcFacet,0,0);
-    if (!sfcFacet.Save(hGroup,szName)) return false;
-    }
-  // Success
-  return true;
-  }*/
-
-bool C4FacetSurface::Load(C4Group &hGroup, const char *szName, int iWdt, int iHgt, bool fOwnPal, bool fNoErrIfNotFound)
+bool C4FacetSurface::Load(C4Group &hGroup, const char *szName, int iWdt, int iHgt, bool fNoErrIfNotFound, int iFlags)
 {
 	Clear();
 	// Entry name
@@ -132,7 +93,7 @@ bool C4FacetSurface::Load(C4Group &hGroup, const char *szName, int iWdt, int iHg
 		}
 	}
 	// Load surface
-	if (!Face.Load(hGroup,szFilename,fOwnPal,fNoErrIfNotFound)) return false;
+	if (!Face.Load(hGroup,szFilename,false,fNoErrIfNotFound, iFlags)) return false;
 	// Set facet
 	if (iWdt==C4FCT_Full) iWdt=Face.Wdt; if (iWdt==C4FCT_Height) iWdt=Face.Hgt; if (iWdt==C4FCT_Width) iWdt=Face.Wdt;
 	if (iHgt==C4FCT_Full) iHgt=Face.Hgt; if (iHgt==C4FCT_Height) iHgt=Face.Hgt; if (iHgt==C4FCT_Width) iHgt=Face.Wdt;

@@ -34,7 +34,7 @@ public func Start(string name, int progress, ...)
 	}
 	started = true;
 	// Sound effect.
-	Sound("Ding", true);
+	Sound("UI::Ding", true);
 	// Call start function of this scene.
 	var fn_start = Format("%s_Start", seq_name);
 	if (!Call(fn_start, ...))
@@ -71,6 +71,7 @@ public func JoinPlayer(int plr)
 		crew->MakeInvincible();
 		crew->SetCommand("None");
 		crew->SetComDir(COMD_Stop);
+		crew.Sequence_stored_breath = crew->GetBreath();
 	}
 	// Per-player sequence callback.
 	var fn_join = Format("~%s_JoinPlayer", seq_name);
@@ -93,6 +94,10 @@ public func Stop(bool no_remove)
 			{
 				crew->SetCrewEnabled(true);
 				crew->ClearInvincible();
+				// just in case clonk was underwater
+				var breath_diff = crew.Sequence_stored_breath - crew->GetBreath();
+				crew.Sequence_stored_breath = nil;
+				if (breath_diff) crew->DoBreath(breath_diff + 100); // give some bonus breath for the distraction
 				//if (crew.Sequence_was_cursor) SetCursor(plr, crew);
 			}
 			// Ensure proper cursor.
@@ -103,7 +108,7 @@ public func Stop(bool no_remove)
 			// Per-player sequence callback.
 			RemovePlayer(plr);
 		}
-		Sound("Ding", true);
+		Sound("UI::Ding", true);
 		started = false;
 		// Call stop function of this scene.
 		var fn_init = Format("~%s_Stop", seq_name);

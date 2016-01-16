@@ -201,9 +201,6 @@ bool StdCompilerINIWrite::Name(const char *szName)
 
 void StdCompilerINIWrite::NameEnd(bool fBreak)
 {
-	// Nothing written? Do not put name.
-	//if(fPutName) PutName(false);
-
 	// Append newline
 	if (!fPutName && !fInSection)
 		Buf.Append("\r\n");
@@ -581,7 +578,7 @@ void StdCompilerINIRead::Word(int16_t &rShort)
 }
 void StdCompilerINIRead::Word(uint16_t &rShort)
 {
-	const unsigned int MIN = 0, MAX = (1 << 15) - 1;
+	const unsigned int MIN = 0, MAX = (1 << 16) - 1;
 	unsigned int iNum = ReadUNum();
 	if (iNum > MAX)
 		Warn("number out of range (%u to %u): %u ", MIN, MAX, iNum);

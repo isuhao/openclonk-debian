@@ -22,7 +22,7 @@ protected func Initialize()
 	//Enviroment.
 	//SetSkyAdjust(RGBa(250,250,255,128),RGB(200,200,220));
 	SetSkyParallax(1, 20,20, 0,0, nil, nil);
-	Sound("BirdsLoop",true,100,nil,+1);
+	Sound("Environment::BirdsLoop",true,100,nil,+1);
 		
 	CreateObjectAbove(Column,650,379);
 	CreateObjectAbove(Column,350,409);
@@ -38,8 +38,7 @@ protected func Initialize()
 	CreateObjectAbove(Chest, 355, 390, NO_OWNER)->MakeInvincible();
 	
 	AddEffect("IntFillChests", nil, 100, 2 * 36, nil);
-	// Smooth brick edges.
-	AddEffect("ChanneledWind", nil, 100, 1, nil);
+	AddEffect("ChanneledWind", nil, 1, 1, nil);
 	AddEffect("Balloons", nil, 100, 100, nil);
 	
 	// Moving bricks.
@@ -49,7 +48,8 @@ protected func Initialize()
 	brick = CreateObjectAbove(MovingBrick,550,250);
 	brick->MoveVertical(240, 296);
 
-	CreateObjectAbove(BrickEdge, 380, 416)->PermaEdge();
+	// Smooth brick edges.
+	DrawMaterialTriangle("Brick-brick", 380, 412, 0);
 	
 	PlaceGras();
 	
@@ -117,20 +117,25 @@ global func FxBlessTheKingTimer(object target, effect, int timer)
 	return 1;
 }
 
+public func ApplyChanneledWindEffects(x, y, w, h, bottom)
+{
+	for(var obj in FindObjects(Find_InRect(x, y, w, h)))
+	{
+		obj->SetYDir(Max(obj->GetYDir()-5,-50));
+		var x_dir = -1;
+		if (obj->GetXDir() > 0)
+			x_dir = +1;
+		else if (obj->GetXDir() == 0)
+			x_dir = RandomX(-2, 2);
+		obj->SetXDir(obj->GetXDir() + x_dir);
+	}
+	CreateParticle("Air", x+Random(w),bottom,RandomX(-1,1),-30, PV_Random(10, 30), ThunderousSkies_air_particles);
+}
+
 global func FxChanneledWindTimer()
 {
-	for(var obj in FindObjects(Find_InRect(230,300,40,90)))
-	{
-		obj->SetYDir(Max(obj->GetYDir()-5,-50));
-		obj->SetXDir(obj->GetXDir()+RandomX(-1,1));
-	}
-	for(var obj in FindObjects(Find_InRect(700,250,60,100)))
-	{
-		obj->SetYDir(Max(obj->GetYDir()-5,-50));
-		obj->SetXDir(obj->GetXDir()+RandomX(-1,1));
-	}
-	CreateParticle("Air", 230+Random(40),398,RandomX(-1,1),-30, PV_Random(10, 30), ThunderousSkies_air_particles);
-	CreateParticle("Air", 700+Random(60),348,RandomX(-1,1),-30, PV_Random(10, 30), ThunderousSkies_air_particles);
+	Scenario->ApplyChanneledWindEffects(230, 300, 40, 90, 398);
+	Scenario->ApplyChanneledWindEffects(700, 250, 60, 100, 348);
 }
 
 global func FxBalloonsTimer()

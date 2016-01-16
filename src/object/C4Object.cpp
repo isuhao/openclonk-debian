@@ -140,7 +140,7 @@ static void DrawVertex(C4Facet &cgo, float tx, float ty, int32_t col, int32_t co
 void C4Action::SetBridgeData(int32_t iBridgeTime, bool fMoveClonk, bool fWall, int32_t iBridgeMaterial)
 {
 	// validity
-	iBridgeMaterial = Min<int32_t>(iBridgeMaterial, ::MaterialMap.Num-1);
+	iBridgeMaterial = std::min(iBridgeMaterial, ::MaterialMap.Num-1);
 	if (iBridgeMaterial < 0) iBridgeMaterial = 0xff;
 	iBridgeTime = Clamp<int32_t>(iBridgeTime, 0, 0xffff);
 	// mask in this->Data
@@ -173,7 +173,6 @@ void C4Object::Default()
 	Controller=NO_OWNER;
 	LastEnergyLossCausePlayer=NO_OWNER;
 	Category=0;
-	NoCollectDelay=0;
 	Con=0;
 	Mass=OwnMass=0;
 	Damage=0;
@@ -184,6 +183,7 @@ void C4Object::Default()
 	Color=0;
 	lightRange=0;
 	lightFadeoutRange=0;
+	lightColor=0xffffffff;
 	fix_x=fix_y=fix_r=0;
 	xdir=ydir=rdir=0;
 	Mobile=0;
@@ -192,7 +192,8 @@ void C4Object::Default()
 	OnFire=0;
 	InLiquid=0;
 	EntranceStatus=0;
-	Audible=0;
+	Audible=AudiblePan=0;
+	AudiblePlayer = NO_OWNER;
 	t_contact=0;
 	OCF=0;
 	Action.Default();
@@ -273,7 +274,7 @@ bool C4Object::Init(C4PropList *pDef, C4Object *pCreator,
 		Mobile=1;
 
 	// Mass
-	Mass=Max<int32_t>(Def->Mass*Con/FullCon,1);
+	Mass=std::max<int32_t>(Def->Mass*Con/FullCon,1);
 
 	// Life, energy, breath
 	if (Category & C4D_Living) Alive=1;
@@ -301,7 +302,7 @@ bool C4Object::Init(C4PropList *pDef, C4Object *pCreator,
 	UpdateFace(true);
 
 	// Initial audibility
-	Audible=::Viewports.GetAudibility(GetX(), GetY(), &AudiblePan);
+	Audible=::Viewports.GetAudibility(GetX(), GetY(), &AudiblePan, 0, &AudiblePlayer);
 
 	// Initial OCF
 	SetOCF();
@@ -392,6 +393,7 @@ void C4Object::AssignRemoval(bool fExitContents)
 		else
 		{
 			Contents.Remove(cobj);
+			cobj->Contained = NULL;
 			cobj->AssignRemoval();
 		}
 	}
@@ -687,7 +689,7 @@ void C4Object::DrawActionFace(C4TargetFacet &cgo, float offX, float offY) const
 		}
 		tx = Def->Shape.GetX() + Action.FacetX + offX;
 		twdt = swdt;
-		float offset_from_top = shgt * Max<float>(float(FullCon - Con), 0) / FullCon;
+		float offset_from_top = shgt * std::max(FullCon - Con, 0) / FullCon;
 		fy += offset_from_top;
 		fhgt -= offset_from_top;
 	}
@@ -696,10 +698,6 @@ void C4Object::DrawActionFace(C4TargetFacet &cgo, float offX, float offY) const
 	if ((!Def->Rotateable || (fix_r == Fix0)) && !pDrawTransform)
 	{
 		DrawFaceImpl(cgo, true, fx, fy, fwdt, fhgt, tx, ty, twdt, thgt, NULL);
-		/*pDraw->Blit(Action.Facet.Surface,
-		  fx, fy, fwdt, fhgt,
-		  cgo.Surface, tx, ty, twdt, thgt,
-		  true, NULL);*/
 	}
 	// Rotated or transformed
 	else
@@ -726,7 +724,7 @@ void C4Object::DrawActionFace(C4TargetFacet &cgo, float offX, float offY) const
 
 void C4Object::UpdateMass()
 {
-	Mass=Max<int32_t>((Def->Mass+OwnMass)*Con/FullCon,1);
+	Mass=std::max<int32_t>((Def->Mass+OwnMass)*Con/FullCon,1);
 	if (!Def->NoComponentMass) Mass+=Contents.Mass;
 	if (Contained)
 	{
@@ -741,7 +739,7 @@ void C4Object::ComponentConCutoff()
 	int32_t cnt;
 	for (cnt=0; Component.GetID(cnt); cnt++)
 		Component.SetCount(cnt,
-		                   Min<int32_t>(Component.GetCount(cnt),Def->Component.GetCount(cnt)*Con/FullCon));
+		                   std::min(Component.GetCount(cnt),Def->Component.GetCount(cnt)*Con/FullCon));
 }
 
 void C4Object::ComponentConGain()
@@ -750,7 +748,7 @@ void C4Object::ComponentConGain()
 	int32_t cnt;
 	for (cnt=0; Component.GetID(cnt); cnt++)
 		Component.SetCount(cnt,
-		                   Max<int32_t>(Component.GetCount(cnt),Def->Component.GetCount(cnt)*Con/FullCon));
+		                   std::max(Component.GetCount(cnt),Def->Component.GetCount(cnt)*Con/FullCon));
 }
 
 void C4Object::UpdateInMat()
@@ -826,7 +824,6 @@ void C4Object::SetOCF()
 	if ((OCF & OCF_FullCon) || Def->IncompleteActivity)
 		if ((Def->Collection.Wdt>0) && (Def->Collection.Hgt>0))
 			if (!pActionDef || (!pActionDef->GetPropertyInt(P_ObjectDisabled)))
-				if (NoCollectDelay==0)
 					OCF|=OCF_Collection;
 	// OCF_Alive
 	if (Alive) OCF|=OCF_Alive;
@@ -885,11 +882,17 @@ void C4Object::UpdateOCF()
 		{ LogF("Warning: contained in deleted object %p (%s)!", static_cast<void*>(Contained), Contained->GetName()); }
 #endif
 	// Keep the bits that only have to be updated with SetOCF (def, category, con, alive, onfire)
-	OCF=OCF & (OCF_Normal | OCF_Exclusive | OCF_Grab | OCF_FullCon | OCF_Rotate | OCF_OnFire
-		| OCF_Inflammable | OCF_Alive | OCF_CrewMember | OCF_AttractLightning);
+	OCF=OCF & (OCF_Normal | OCF_Exclusive | OCF_FullCon | OCF_Rotate | OCF_OnFire
+		| OCF_Alive | OCF_CrewMember | OCF_AttractLightning);
+	// OCF_inflammable: can catch fire and is not currently burning.
+	if (!OnFire && GetPropertyInt(P_ContactIncinerate) > 0)
+		OCF |= OCF_Inflammable;
 	// OCF_Carryable: Can be picked up
 	if (GetPropertyInt(P_Collectible))
 		OCF|=OCF_Carryable;
+	// OCF_Grab: Can be grabbed.
+	if (GetPropertyInt(P_Touchable))
+		OCF |= OCF_Grab;
 	// OCF_Construct: Can be built outside
 	if (Def->Constructable && (Con<FullCon)
 	    && (fix_r == Fix0) && !OnFire)
@@ -907,7 +910,6 @@ void C4Object::UpdateOCF()
 	if ((OCF & OCF_FullCon) || Def->IncompleteActivity)
 		if ((Def->Collection.Wdt>0) && (Def->Collection.Hgt>0))
 			if (!pActionDef || (!pActionDef->GetPropertyInt(P_ObjectDisabled)))
-				if (NoCollectDelay==0)
 					OCF|=OCF_Collection;
 	// OCF_NotContained
 	if (!Contained)
@@ -1014,7 +1016,7 @@ bool C4Object::ExecLife()
 				{
 					// message
 					GameMsgObject(FormatString(LoadResStr("IDS_OBJ_BIRTHDAY"),GetName (), Info->TotalPlayingTime / 3600 / 5).getData(),this);
-					StartSoundEffect("Trumpet",false,100,this);
+					StartSoundEffect("UI::Trumpet",false,100,this);
 				}
 
 				Info->Age = iNewAge;
@@ -1150,7 +1152,7 @@ void C4Object::AssignDeath(bool fForced)
 	if(pPlr)
 		if(!pPlr->Crew.ObjectCount())
 			::GameScript.GRBroadcast(PSF_RelaunchPlayer,
-			                         &C4AulParSet(C4VInt(Owner),C4VInt(iDeathCausingPlayer)));
+			                         &C4AulParSet(C4VInt(Owner),C4VInt(iDeathCausingPlayer),Status ? C4VObj(this) : C4VNull));
 	if (pInfo)
 		pInfo->HasDied = false;
 }
@@ -1213,7 +1215,7 @@ void C4Object::DoDamage(int32_t iChange, int32_t iCausedBy, int32_t iCause)
 		if (!iChange) return;
 	}
 	// Change value
-	Damage = Max<int32_t>( Damage+iChange, 0 );
+	Damage = std::max<int32_t>( Damage+iChange, 0 );
 	// Engine script call
 	Call(PSF_Damage,&C4AulParSet(C4VInt(iChange), C4VInt(iCause), C4VInt(iCausedBy)));
 }
@@ -1265,7 +1267,7 @@ void C4Object::DoCon(int32_t iChange, bool grow_from_center)
 
 	// Change con
 	if (Def->Oversize)
-		Con=Max<int32_t>(Con+iChange,0);
+		Con=std::max<int32_t>(Con+iChange,0);
 	else
 		Con=Clamp<int32_t>(Con+iChange,0,FullCon);
 
@@ -1376,7 +1378,7 @@ bool C4Object::Enter(C4Object *pTarget, bool fCalls, bool fCopyMotion, bool *pfR
 	// 4. Call collection for container
 	// 5. Call entrance for object.
 
-	// No target or target is self
+	// No valid target or target is self
 	if (!pTarget || (pTarget==this)) return false;
 	// check if entrance is allowed
 	if (!! Call(PSF_RejectEntrance, &C4AulParSet(C4VObj(pTarget)))) return false;
@@ -1397,7 +1399,12 @@ bool C4Object::Enter(C4Object *pTarget, bool fCalls, bool fCopyMotion, bool *pfR
 	if (Contained) if (!Exit(GetX(),GetY())) return false;
 	if (Contained || !Status || !pTarget->Status) return false;
 	// Failsafe updates
-	CloseMenu(true);
+	if (Menu)
+	{
+		CloseMenu(true);
+		// CloseMenu might do bad stuff
+		if (Contained || !Status || !pTarget->Status) return false;
+	}
 	SetOCF();
 	// Set container
 	Contained=pTarget;
@@ -1584,7 +1591,6 @@ bool C4Object::ActivateMenu(int32_t iMenu, int32_t iMenuSelect,
 	C4FacetSurface fctSymbol;
 	C4IDList ListItems;
 	// Close any other menu
-	//CloseMenu(true);
 	if (Menu && Menu->IsActive()) if (!Menu->TryClose(true, false)) return false;
 	// Create menu
 	if (!Menu) Menu = new C4ObjectMenu; else Menu->ClearItems();
@@ -1612,7 +1618,6 @@ bool C4Object::ActivateMenu(int32_t iMenu, int32_t iMenuSelect,
 		if (!pTarget) if (!(pTarget=Contained)) break;
 		// Create symbol
 		fctSymbol.Create(C4SymbolSize,C4SymbolSize);
-		//pTarget->Def->Draw(fctSymbol,false,pTarget->Color,pTarget);
 		DrawMenuSymbol(C4MN_Buy, fctSymbol, pTarget->Owner);
 		// Init menu
 		Menu->Init(fctSymbol,LoadResStr("IDS_PLR_NOBUY"),this,C4MN_Extra_Value,0,iMenu);
@@ -1626,7 +1631,6 @@ bool C4Object::ActivateMenu(int32_t iMenu, int32_t iMenuSelect,
 		if (!pTarget) if (!(pTarget=Contained)) break;
 		// Create symbol & init
 		fctSymbol.Create(C4SymbolSize,C4SymbolSize);
-		//pTarget->Def->Draw(fctSymbol,false,pTarget->Color,pTarget);
 		DrawMenuSymbol(C4MN_Sell, fctSymbol, pTarget->Owner);
 		Menu->Init(fctSymbol,FormatString(LoadResStr("IDS_OBJ_EMPTY"),pTarget->GetName()).getData(),this,C4MN_Extra_Value,0,iMenu);
 		Menu->SetPermanent(true);
@@ -1833,7 +1837,7 @@ bool C4Object::Promote(int32_t torank, bool exception, bool fForceRankName)
 	// call to object
 	Call(PSF_Promotion);
 
-	StartSoundEffect("Trumpet",0,100,this);
+	StartSoundEffect("UI::Trumpet",0,100,this);
 	return true;
 }
 
@@ -1843,7 +1847,15 @@ void C4Object::ClearPointers(C4Object *pObj)
 	if(pMeshInstance) pMeshInstance->ClearPointers(pObj);
 	// effects
 	if (pEffects) pEffects->ClearPointers(pObj);
-	// contents/contained: not necessary, because it's done in AssignRemoval and StatusDeactivate
+	// contents/contained: although normally not necessery because it's done in AssignRemoval and StatusDeactivate,
+	// it is also required during game destruction (because ClearPointers might do script callbacks)
+	// Perform silent exit to avoid additional callbacks
+	if (Contained == pObj)
+	{
+		Contained->Contents.Remove(this);
+		Contained = NULL;
+	}
+	Contents.Remove(pObj);
 	// Action targets
 	if (Action.Target==pObj) Action.Target=NULL;
 	if (Action.Target2==pObj) Action.Target2=NULL;
@@ -1891,7 +1903,7 @@ void C4Object::Draw(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDrawMode, f
 	if (!IsVisible(iByPlayer, !!eDrawMode)) return;
 
 	// Line
-	if (Def->Line) { DrawLine(cgo); return; }
+	if (Def->Line) { DrawLine(cgo, iByPlayer); return; }
 
 	// background particles (bounds not checked)
 	if (BackParticles) BackParticles->Draw(cgo, this);
@@ -1911,12 +1923,13 @@ void C4Object::Draw(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDrawMode, f
 			fYStretchObject=true;
 
 	// Set audibility
-	if (!eDrawMode) SetAudibilityAt(cgo, GetX(), GetY());
+	if (!eDrawMode) SetAudibilityAt(cgo, GetX(), GetY(), iByPlayer);
 
 	// Output boundary
 	if (!fYStretchObject && !eDrawMode && !(Category & C4D_Parallax))
 	{
-		if (pActionDef && fix_r == Fix0 && !pActionDef->GetPropertyInt(P_FacetBase) && Con<=FullCon)
+		// For actions with a custom facet set, check against that action facet. Otherwise (or with oversize objects), just check against shape.
+		if (pActionDef && fix_r == Fix0 && !pActionDef->GetPropertyInt(P_FacetBase) && Con <= FullCon && Action.Facet.Wdt)
 		{
 			// active
 			if ( !Inside<float>(offX+Shape.GetX()+Action.FacetX,cgo.X-Action.Facet.Wdt,cgo.X+cgo.Wdt)
@@ -1968,7 +1981,6 @@ void C4Object::Draw(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDrawMode, f
 				ccx=pCom->Tx._getInt(); ccy=pCom->Ty;
 				// Message
 				iMoveTos++; szCommand[0]=0;
-				//sprintf(szCommand,"%s %d/%d",CommandName(pCom->Command),pCom->Tx,pCom->Ty,iAngle);
 				break;
 			case C4CMD_Put:
 				sprintf(szCommand,"%s %s to %s",CommandName(pCom->Command),pCom->Target2 ? pCom->Target2->GetName() : pCom->Data ? pCom->Data.GetDataString().getData() : "Content",pCom->Target ? pCom->Target->GetName() : "");
@@ -2024,7 +2036,7 @@ void C4Object::Draw(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDrawMode, f
 	// Debug Display ///////////////////////////////////////////////////////////////////////////////
 
 	// Don't draw (show solidmask)
-	if (::GraphicsSystem.ShowSolidMask)
+	if (::GraphicsSystem.Show8BitSurface != 0)
 		if (SolidMask.Wdt)
 		{
 			// DrawSolidMask(cgo); - no need to draw it, because the 8bit-surface will be shown
@@ -2154,7 +2166,7 @@ void C4Object::DrawTopFace(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDraw
 	    || !Inside<float>(offY, cgo.Y - Shape.Hgt, cgo.Y + cgo.Hgt))
 		return;
 	// Don't draw (show solidmask)
-	if (::GraphicsSystem.ShowSolidMask && SolidMask.Wdt) return;
+	if (::GraphicsSystem.Show8BitSurface != 0 && SolidMask.Wdt) return;
 	// Contained
 	if (Contained) if (eDrawMode!=ODM_Overlay) return;
 	// Construction sign
@@ -2208,15 +2220,15 @@ void C4Object::DrawTopFace(C4TargetFacet &cgo, int32_t iByPlayer, DrawMode eDraw
 #endif
 }
 
-void C4Object::DrawLine(C4TargetFacet &cgo)
+void C4Object::DrawLine(C4TargetFacet &cgo, int32_t at_player)
 {
 	// Nothing to draw if the object has less than two vertices
 	if (Shape.VtxNum < 2)
 		return;
 #ifndef USE_CONSOLE
 	// Audibility
-	SetAudibilityAt(cgo, Shape.VtxX[0],Shape.VtxY[0]);
-	SetAudibilityAt(cgo, Shape.VtxX[Shape.VtxNum-1],Shape.VtxY[Shape.VtxNum-1]);
+	SetAudibilityAt(cgo, Shape.VtxX[0], Shape.VtxY[0], at_player);
+	SetAudibilityAt(cgo, Shape.VtxX[Shape.VtxNum - 1], Shape.VtxY[Shape.VtxNum - 1], at_player);
 	// additive mode?
 	PrepareDrawing();
 	// Draw line segments
@@ -2227,7 +2239,6 @@ void C4Object::DrawLine(C4TargetFacet &cgo)
 	if (colors)
 	{
 		color0 = colors->GetItem(0).getInt();
-		//color1 = colors->GetItem(1).getInt();
 	}
 
 	std::vector<C4BltVertex> vertices;
@@ -2243,7 +2254,7 @@ void C4Object::DrawLine(C4TargetFacet &cgo)
 		vertices[2*vtx+1].fty = Shape.VtxY[vtx+1] + cgo.Y - cgo.TargetY;
 	}
 
-	pDraw->PerformMultiLines(cgo.Surface, &vertices[0], vertices.size(), 1.0f);
+	pDraw->PerformMultiLines(cgo.Surface, &vertices[0], vertices.size(), 1.0f, NULL);
 
 	// reset blit mode
 	FinishedDrawing();
@@ -2276,7 +2287,6 @@ void C4Object::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 	pComp->Value(mkNamingAdapt( Plane,                            "Plane",              0                 ));
 
 	pComp->Value(mkNamingAdapt( iLastAttachMovementFrame,         "LastSolidAtchFrame", -1                ));
-	pComp->Value(mkNamingAdapt( NoCollectDelay,                   "NoCollectDelay",     0                 ));
 	pComp->Value(mkNamingAdapt( Con,                              "Size",               0                 ));
 	pComp->Value(mkNamingAdapt( OwnMass,                          "OwnMass",            0                 ));
 	pComp->Value(mkNamingAdapt( Mass,                             "Mass",               0                 ));
@@ -2308,6 +2318,7 @@ void C4Object::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 	pComp->Value(mkNamingAdapt( mkParAdapt(Contents, numbers),    "Contents"                              ));
 	pComp->Value(mkNamingAdapt( lightRange,                       "LightRange",         0                 ));
 	pComp->Value(mkNamingAdapt( lightFadeoutRange,                "LightFadeoutRange",  0                 ));
+	pComp->Value(mkNamingAdapt( lightColor,                       "lightColor",         0xffffffffu       ));
 	pComp->Value(mkNamingAdapt( ColorMod,                         "ColorMod",           0xffffffffu       ));
 	pComp->Value(mkNamingAdapt( BlitMode,                         "BlitMode",           0u                ));
 	pComp->Value(mkNamingAdapt( CrewDisabled,                     "CrewDisabled",       false             ));
@@ -2608,6 +2619,12 @@ void C4Object::SetSolidMask(int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt, 
 	if (CheckSolidMaskRect()) UpdateSolidMask(false);
 }
 
+void C4Object::SetHalfVehicleSolidMask(bool set)
+{
+	if (!pSolidMaskData) return;
+	pSolidMaskData->SetHalfVehicle(set);
+}
+
 bool C4Object::CheckSolidMaskRect()
 {
 	// Ensure SolidMask rect lies within bounds of SolidMask bitmap in definition
@@ -2618,8 +2635,8 @@ bool C4Object::CheckSolidMaskRect()
 		SolidMask.Set(0,0,0,0,0,0);
 		return false;
 	}
-	SolidMask.Set(Max<int32_t>(SolidMask.x,0), Max<int32_t>(SolidMask.y,0),
-	              Min<int32_t>(SolidMask.Wdt,sfcGraphics->Wdt-SolidMask.x), Min<int32_t>(SolidMask.Hgt, sfcGraphics->Hgt-SolidMask.y),
+	SolidMask.Set(std::max<int32_t>(SolidMask.x,0), std::max<int32_t>(SolidMask.y,0),
+	              std::min<int32_t>(SolidMask.Wdt,sfcGraphics->Wdt-SolidMask.x), std::min<int32_t>(SolidMask.Hgt, sfcGraphics->Hgt-SolidMask.y),
 	              SolidMask.tx, SolidMask.ty);
 	if (SolidMask.Hgt<=0) SolidMask.Wdt=0;
 	return SolidMask.Wdt>0;
@@ -2726,7 +2743,6 @@ bool C4Object::AddCommand(int32_t iCommand, C4Object *pTarget, C4Value iTx, int3
 		Command=pCom;
 	}
 	// Success
-	//sprintf(OSTR,"%s command %s added: %i/%i %s %s (%i)",GetName(),CommandName(iCommand),iTx,iTy,pTarget ? pTarget->GetName() : "O",pTarget2 ? pTarget2->GetName() : "O",iUpdateInterval); Log(OSTR);
 	return true;
 }
 
@@ -2734,8 +2750,6 @@ void C4Object::SetCommand(int32_t iCommand, C4Object *pTarget, C4Value iTx, int3
                           C4Object *pTarget2, bool fControl, C4Value iData,
                           int32_t iRetries, C4String *szText)
 {
-	// Decrease NoCollectDelay
-	if (NoCollectDelay>0) NoCollectDelay--;
 	// Clear stack
 	ClearCommands();
 	// Close menu
@@ -2858,13 +2872,16 @@ bool C4Object::SetAction(C4PropList * Act, C4Object *pTarget, C4Object *pTarget2
 	if (Act!=LastAction)
 	{
 		Action.Time=0;
-		// reset action data if procedure is changed
+		// reset action data and targets if procedure is changed
 		if ((Act ? Act->GetPropertyP(P_Procedure) : -1)
-		    != (LastAction ? LastAction->GetPropertyP(P_Procedure) : -1))
+			!= (LastAction ? LastAction->GetPropertyP(P_Procedure) : -1))
+		{
 			Action.Data = 0;
+			Action.Target = NULL;
+			Action.Target2 = NULL;
+		}
 	}
 	// Set new action
-
 	SetProperty(P_Action, C4VPropList(Act));
 	Action.Phase=Action.PhaseDelay=0;
 	// Set target if specified
@@ -3001,12 +3018,10 @@ int32_t C4Object::GetProcedure() const
 	return pActionDef->GetPropertyP(P_Procedure);
 }
 
-void GrabLost(C4Object *cObj)
+void GrabLost(C4Object *cObj, C4Object *prev_target)
 {
 	// Grab lost script call on target (quite hacky stuff...)
-	cObj->Action.Target->Call(PSF_GrabLost);
-	// Also, delete the target from the clonk's action (Newton)
-	cObj->Action.Target = NULL;
+	if (prev_target && prev_target->Status) prev_target->Call(PSF_GrabLost);
 	// Clear commands down to first PushTo (if any) in command stack
 	for (C4Command *pCom=cObj->Command; pCom; pCom=pCom->Next)
 		if (pCom->Next && pCom->Next->Command==C4CMD_PushTo)
@@ -3024,6 +3039,7 @@ void C4Object::NoAttachAction()
 	if (GetAction())
 	{
 		int32_t iProcedure = GetProcedure();
+		C4Object *prev_target = Action.Target;
 		// Scaling upwards: corner scale
 		if (iProcedure == DFA_SCALE && Action.ComDir != COMD_Stop && ComDirLike(Action.ComDir, COMD_Up))
 			if (ObjectActionCornerScale(this)) return;
@@ -3040,7 +3056,7 @@ void C4Object::NoAttachAction()
 				{ if (ObjectActionJump(this,itofix(-1),Fix0,false)) return; }
 		}
 		// Pushing: grab loss
-		if (iProcedure==DFA_PUSH) GrabLost(this);
+		if (iProcedure==DFA_PUSH) GrabLost(this, prev_target);
 		// Else jump
 		ObjectActionJump(this,xdir,ydir,false);
 	}
@@ -3334,7 +3350,7 @@ bool DoBridge(C4Object *clk)
 			clk->Action.Time = 0;
 			if (fWall && clk->Action.ComDir==COMD_Up)
 			{
-				// special for roof above Clonk: The nonmoving roof is started at bridgelength before the Clonkl
+				// special for roof above Clonk: The nonmoving roof is started at bridgelength before the Clonk
 				// so, when interrupted, an action time halfway through the action must be set
 				clk->Action.Time = iBridgeTime;
 				iBridgeTime += iBridgeTime;
@@ -3361,8 +3377,18 @@ static void DoGravity(C4Object *cobj)
 		if (cobj->xdir>+FloatFriction) cobj->xdir-=FloatFriction;
 		if (cobj->rdir<-FloatFriction) cobj->rdir+=FloatFriction;
 		if (cobj->rdir>+FloatFriction) cobj->rdir-=FloatFriction;
-		if (!GBackLiquid(cobj->GetX(),cobj->GetY()-1+ cobj->Def->Float*cobj->GetCon()/FullCon -1 ))
-			if (cobj->ydir<0) cobj->ydir=0;
+		// Reduce upwards speed when about to leave liquid to prevent eternal moving up and down.
+		// Check both for no liquid one and two pixels above the surface, because the object could
+		// skip one pixel as its speed can be more than 100.
+		int32_t y_float = cobj->GetY() - 1 + cobj->Def->Float * cobj->GetCon() / FullCon;
+		if (!GBackLiquid(cobj->GetX(), y_float - 1) || !GBackLiquid(cobj->GetX(), y_float - 2))
+			if (cobj->ydir < 0)
+			{
+				// Reduce the upwards speed and set to zero for small values to prevent fluctuations.
+				cobj->ydir /= 2;
+				if (Abs(cobj->ydir) < C4REAL100(10))
+					cobj->ydir = 0;
+			}
 	}
 	// Free fall gravity
 	else if (~cobj->Category & C4D_StaticBack)
@@ -3546,10 +3572,6 @@ void C4Object::ExecAction()
 		}
 		if ((Action.Dir == DIR_Left && ComDir == COMD_Left) || (Action.Dir == DIR_Right && ComDir == COMD_Right))
 		{
-			/*if (ydir > 0)
-				ComDir = COMD_Down;
-			else
-				ComDir = COMD_Up;*/
 			ComDir = COMD_Up;
 		}
 		switch (ComDir)
@@ -3624,10 +3646,10 @@ void C4Object::ExecAction()
 		switch (Action.ComDir)
 		{
 		case COMD_Left: case COMD_UpLeft: case COMD_DownLeft:
-			xdir -= Max(Min(limit + xdir, xdir > 0 ? decel : accel), itofix(0));
+			xdir -= std::max(std::min(limit + xdir, xdir > 0 ? decel : accel), itofix(0));
 			break;
 		case COMD_Right: case COMD_UpRight: case COMD_DownRight:
-			xdir += Max(Min(limit - xdir, xdir < 0 ? decel : accel), itofix(0));
+			xdir += std::max(std::min(limit - xdir, xdir < 0 ? decel : accel), itofix(0));
 			break;
 		}
 
@@ -3741,7 +3763,7 @@ void C4Object::ExecAction()
 		// Set target controller
 		Action.Target->Controller=Controller;
 		// ObjectAction got hold check
-		iPushDistance = Max(Shape.Wdt/2-8,0);
+		iPushDistance = std::max(Shape.Wdt/2-8,0);
 		iPushRange = iPushDistance + 10;
 		int32_t sax,say,sawdt,sahgt;
 		Action.Target->GetArea(sax,say,sawdt,sahgt);
@@ -3749,10 +3771,11 @@ void C4Object::ExecAction()
 		if (!Inside(GetX()-sax,-iPushRange,sawdt-1+iPushRange)
 		    || !Inside(GetY()-say,-iPushRange,sahgt-1+iPushRange))
 		{
+			C4Object *prev_target = Action.Target;
 			// Wait command (why, anyway?)
 			StopActionDelayCommand(this);
 			// Grab lost action
-			GrabLost(this);
+			GrabLost(this, prev_target);
 			// Done
 			return;
 		}
@@ -3816,17 +3839,19 @@ void C4Object::ExecAction()
 		}
 
 		// Pulling range
-		iPushDistance = Max(Shape.Wdt/2-8,0);
+		iPushDistance = std::max(Shape.Wdt/2-8,0);
 		iPushRange = iPushDistance + 20;
 		Action.Target->GetArea(sax,say,sawdt,sahgt);
 		// Object lost
 		if (!Inside(GetX()-sax,-iPushRange,sawdt-1+iPushRange)
 		    || !Inside(GetY()-say,-iPushRange,sahgt-1+iPushRange))
 		{
+			// Remember target. Will be lost on changing action.
+			C4Object *prev_target = Action.Target;
 			// Wait command (why, anyway?)
 			StopActionDelayCommand(this);
 			// Grab lost action
-			GrabLost(this);
+			GrabLost(this, prev_target);
 			// Lose target
 			Action.Target=NULL;
 			// Done
@@ -4143,18 +4168,34 @@ bool C4Object::SetLightRange(int32_t iToRange, int32_t iToFadeoutRange)
 }
 
 
+bool C4Object::SetLightColor(uint32_t iValue)
+{
+	// set new color value
+	lightColor = iValue;
+	// resort into player's FoW-repeller-list
+	UpdateLight();
+	// success
+	return true;
+}
+
+
 void C4Object::UpdateLight()
 {
 	if (Landscape.pFoW) Landscape.pFoW->Add(this);
 }
 
-void C4Object::SetAudibilityAt(C4TargetFacet &cgo, int32_t iX, int32_t iY)
+void C4Object::SetAudibilityAt(C4TargetFacet &cgo, int32_t iX, int32_t iY, int32_t player)
 {
 	// target pos (parallax)
 	float offX, offY, newzoom;
 	GetDrawPosition(cgo, iX, iY, cgo.Zoom, offX, offY, newzoom);
-	Audible = Max<int>(Audible, Clamp(100 - 100 * Distance(cgo.X + cgo.Wdt / 2, cgo.Y + cgo.Hgt / 2, offX, offY) / 700, 0, 100));
-	AudiblePan = Clamp<int>(200 * (offX - cgo.X - (cgo.Wdt / 2)) / cgo.Wdt, -100, 100);
+	int32_t audible_at_pos = Clamp(100 - 100 * Distance(cgo.X + cgo.Wdt / 2, cgo.Y + cgo.Hgt / 2, offX, offY) / 700, 0, 100);
+	if (audible_at_pos > Audible)
+	{
+		Audible = audible_at_pos;
+		AudiblePan = Clamp<int>(200 * (offX - cgo.X - (cgo.Wdt / 2)) / cgo.Wdt, -100, 100);
+		AudiblePlayer = player;
+	}
 }
 
 bool C4Object::IsVisible(int32_t iForPlr, bool fAsOverlay) const
@@ -4361,7 +4402,7 @@ void C4Object::DirectComContents(C4Object *pTarget, bool fDoCalls)
 	// default action
 	if (!(Contents.ShiftContents(pTarget))) return;
 	// Selection sound
-	if (fDoCalls) if (!Contents.GetObject()->Call("~Selection", &C4AulParSet(C4VObj(this)))) StartSoundEffect("Grab",false,100,this);
+	if (fDoCalls) if (!Contents.GetObject()->Call("~Selection", &C4AulParSet(C4VObj(this)))) StartSoundEffect("Clonk::Action::Grab",false,100,this);
 	// update menu with the new item in "put" entry
 	if (Menu && Menu->IsActive() && Menu->IsContextMenu())
 	{
@@ -4458,8 +4499,8 @@ bool C4Object::GetDrawPosition(const C4TargetFacet & cgo, float objx, float objy
 	if (resultzoom <= 0 || resultzoom > 100) // FIXME: optimize treshhold
 		return false;
 
-	float rx = ((1 - parx) * targetx) * resultzoom + objx / (parx + zoom - parx * zoom);
-	float ry = ((1 - pary) * targety) * resultzoom + objy / (pary + zoom - pary * zoom);
+	float rx = ((1 - parx) * cgo.ParRefX) * resultzoom + objx / (parx + zoom - parx * zoom);
+	float ry = ((1 - pary) * cgo.ParRefY) * resultzoom + objy / (pary + zoom - pary * zoom);
 
 	// Step 2: convert to screen coordinates
 	if(parx == 0 && fix_x < 0)
@@ -4544,8 +4585,6 @@ bool C4Object::SetGraphics(const char *szGraphicsName, C4Def *pSourceDef)
 	// get graphics
 	C4DefGraphics *pGrp = pSourceDef->Graphics.Get(szGraphicsName);
 	if (!pGrp) return false;
-	// no change? (no updates need to be done, then)
-	//if (pGraphics == pGrp) return true; // that's not exactly true because the graphics itself might have changed, for example on def reload
 	// set new graphics
 	pGraphics = pGrp;
 	// update Color, etc.
@@ -4715,7 +4754,7 @@ bool C4Object::AdjustWalkRotation(int32_t iRangeX, int32_t iRangeY, int32_t iSpe
 					{ --iSolidRight; break; }
 		// calculate destination angle
 		// 100% accurate for large values of Pi ;)
-		iDestAngle=(iSolidRight-iSolidLeft)*(35/Max<int32_t>(iRangeX, 1));
+		iDestAngle=(iSolidRight-iSolidLeft)*(35/std::max<int32_t>(iRangeX, 1));
 	}
 	else
 	{
@@ -4746,7 +4785,7 @@ void C4Object::UpdateInLiquid()
 		if (!InLiquid) // Enter liquid
 		{
 			if (OCF & OCF_HitSpeed2) if (Mass>3)
-					Splash(GetX(),GetY()+1,Min(Shape.Wdt*Shape.Hgt/10,20),this);
+					Splash(GetX(),GetY()+1,std::min(Shape.Wdt*Shape.Hgt/10,20),this);
 			InLiquid=1;
 		}
 	}
@@ -4762,8 +4801,6 @@ StdStrBuf C4Object::GetInfoString()
 	StdStrBuf sResult;
 	// no info for invalid objects
 	if (!Status) return sResult;
-	// first part always description
-	//sResult.Copy(Def->GetDesc());
 	// go through all effects and add their desc
 	for (C4Effect *pEff = pEffects; pEff; pEff = pEff->pNext)
 	{
@@ -4864,7 +4901,6 @@ StdStrBuf C4Object::GetNeededMatStr() const
 			ncnt = NeededComponents.GetCount(cnt) - Component.GetIDCount(idComponent);
 			if (ncnt > 0)
 			{
-				//if(!NeededMats) NeededMats.Append(", "); what was this for...?
 				NeededMats.AppendFormat("|%dx ", ncnt);
 				if ((pComponent = C4Id2Def(idComponent)))
 					NeededMats.Append(pComponent->GetName());
@@ -4925,7 +4961,7 @@ void C4Object::SetPropertyByS(C4String * k, const C4Value & to)
 		switch(k - &Strings.P[0])
 		{
 			case P_Plane:
-				if (!to.getInt()) throw new C4AulExecError("invalid Plane 0");
+				if (!to.getInt()) throw C4AulExecError("invalid Plane 0");
 				SetPlane(to.getInt());
 				return;
 		}

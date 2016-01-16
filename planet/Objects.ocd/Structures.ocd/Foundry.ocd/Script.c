@@ -8,16 +8,20 @@
 #include Library_Structure
 #include Library_Ownable
 #include Library_Producer
+#include Library_LampPost
 
 // does not need power
 public func PowerNeed() { return 0; }
+public func IsPowerConsumer() { return false; }
+
+public func LampPosition(id def) { return [GetCalcDir()*-11,2]; }
 
 public func Construction(object creator)
 {
 	
 	//SetProperty("MeshTransformation",Trans_Rotate(RandomX(-40,20),0,1,0));
 	SetAction("Default");
-	AddTimer("CollectionZone", 1);	
+	AddTimer("CollectionZone", 1);
 	return _inherited(creator, ...);
 }
 
@@ -31,18 +35,10 @@ private func IsProduct(id product_id)
 }
 private func ProductionTime(id toProduce) { return 290; }
 
-public func NeedRawMaterial(id rawmat_id)
-{
-	if (rawmat_id->~IsFuel() || rawmat_id == Ore || rawmat_id == Nugget)
-		return true;
-	return false;
-}
-
-
 public func OnProductionStart(id product)
 {
 	AddEffect("Smelting", this, 100, 1, this);
-	Sound("FurnaceStart");
+	Sound("Structures::Furnace::Start");
 	return;
 }
 
@@ -55,20 +51,20 @@ public func OnProductionFinish(id product)
 {
 	RemoveEffect("Smelting", this);
 	return;
-}	
+}
 
 // Timer, check for objects to collect in the designated collection zone
 func CollectionZone()
 {
 	if (GetCon() < 100) return;
 
-	for (var object in FindObjects(Find_InRect(16 - 45 * GetDir(),3,13,13), Find_OCF(OCF_Collectible), Find_NoContainer(), Find_Layer(GetObjectLayer())))
-		Collect(object);
+	for (var obj in FindObjects(Find_InRect(16 - 45 * GetDir(),3,13,13), Find_OCF(OCF_Collectible), Find_NoContainer(), Find_Layer(GetObjectLayer())))
+		Collect(obj, true);
 }
 
 func Collection()
 {
-	Sound("Clonk");
+	Sound("Objects::Clonk");
 	return;
 }
 
@@ -84,7 +80,7 @@ public func FxSmeltingTimer(object target, proplist effect, int time)
 	
 	// Furnace sound after some time.
 	if (time == 30)
-		Sound("FurnaceLoop", false, 100, nil, +1);
+		Sound("Structures::Furnace::Loop", false, 100, nil, +1);
 
 	// Pour after some time.
 	if(time == 244)
@@ -92,7 +88,7 @@ public func FxSmeltingTimer(object target, proplist effect, int time)
 
 	//Molten metal hits cast... Sizzling sound
 	if (time == 256)
-		Sound("Sizzle");
+		Sound("Liquids::Sizzle");
 
 	// Fire from the pouring exit.
 	if (Inside(time, 244, 290))
@@ -101,8 +97,8 @@ public func FxSmeltingTimer(object target, proplist effect, int time)
 	if (time == 290)
 	{
 		SetMeshMaterial("Metal", 1);
-		Sound("FurnaceLoop", false ,100, nil, -1);
-		Sound("FurnaceStop");
+		Sound("Structures::Furnace::Loop", false ,100, nil, -1);
+		Sound("Structures::Furnace::Stop");
 		return -1;
 	}
 	return 1;

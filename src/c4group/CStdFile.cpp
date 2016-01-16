@@ -201,7 +201,7 @@ bool CStdFile::Read(void *pBuffer, size_t iSize, size_t *ipFSize)
 		// Valid data in the buffer: Transfer as much as possible
 		if (BufferLoad>BufferPtr)
 		{
-			transfer=Min<size_t>(BufferLoad-BufferPtr,iSize);
+			transfer=std::min<size_t>(BufferLoad-BufferPtr,iSize);
 			memmove(bypBuffer, Buffer+BufferPtr, transfer);
 			BufferPtr+=transfer;
 			bypBuffer+=transfer;
@@ -247,13 +247,13 @@ bool CStdFile::Write(const void *pBuffer, int iSize)
 	int transfer;
 	if (!pBuffer) return false;
 	if (!ModeWrite) return false;
-	BYTE *bypBuffer= (BYTE*) pBuffer;
+	const BYTE *bypBuffer= (const BYTE*) pBuffer;
 	while (iSize>0)
 	{
 		// Space in buffer: Transfer as much as possible
 		if (BufferLoad<CStdFileBufSize)
 		{
-			transfer=Min(CStdFileBufSize-BufferLoad,iSize);
+			transfer=std::min(CStdFileBufSize-BufferLoad,iSize);
 			memcpy(Buffer+BufferLoad,bypBuffer,transfer);
 			BufferLoad+=transfer;
 			bypBuffer+=transfer;
@@ -268,10 +268,10 @@ bool CStdFile::Write(const void *pBuffer, int iSize)
 bool CStdFile::WriteString(const char *szStr)
 {
 	thread_check.Check();
-	BYTE nl[2]={0x0D,0x0A};	
+	BYTE nl[2]={0x0D,0x0A};
 	if (!szStr) return false;
 	int size=SLen(szStr);
-	if (!Write((void*)szStr,size)) return false;
+	if (!Write((const void*)szStr,size)) return false;
 	if (!Write(nl,2)) return false;
 	return true;
 }
@@ -295,7 +295,7 @@ bool CStdFile::Advance(int iOffset)
 		// Valid data in the buffer: Transfer as much as possible
 		if (BufferLoad > BufferPtr)
 		{
-			int transfer = Min(BufferLoad-BufferPtr,iOffset);
+			int transfer = std::min(BufferLoad-BufferPtr,iOffset);
 			BufferPtr += transfer;
 			iOffset -= transfer;
 		}
@@ -307,6 +307,20 @@ bool CStdFile::Advance(int iOffset)
 		}
 	}
 	return true;
+}
+
+int CStdFile::Seek(long int offset, int whence)
+{
+	// seek in file by offset and stdio-style SEEK_* constants. Only implemented for uncompressed files.
+	assert(!hgzFile);
+	return fseek(hFile, offset, whence);
+}
+
+long int CStdFile::Tell()
+{
+	// get current file pos. Only implemented for uncompressed files.
+	assert(!hgzFile);
+	return ftell(hFile);
 }
 
 int UncompressedFileSize(const char *szFilename)

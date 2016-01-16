@@ -11,9 +11,17 @@
       <rtype>int</rtype>
       <params>
         <param>
-          <type>string</type>
+          <type>any</type>
           <name>playlist</name>
-          <desc>List of pieces of music to be played. The individual file and category names are separated with semicolons (";"). Wildcards are expanded. If the parameter is left out, the standard playlist is restored.</desc>
+          <desc>If this parameter is a string: List of pieces of music to be played. The individual file and category names are separated with semicolons (";"). Wildcards are expanded. If the parameter is left out, the standard playlist is restored. The parameter may also be a proplist with any of the following members:
+            <table><rowh><col>Property</col><col>Type</col><col>Meaning</col></rowh>
+              <row><col>PlayList</col><col>string</col><col>Same as providing the playlist directly as a string.</col></row>
+              <row><col>MusicBreakMin</col><col>int</col><col>Minimum time of silence between two songs in milliseconds. Defaults to 10000.</col></row>
+              <row><col>MusicBreakMax</col><col>int</col><col>Maximum time of silence between two songs in milliseconds. Defaults to 10000. A random value between the minimum and maximum is chosen before each new song is selected.</col></row>
+              <row><col>MusicBreakChance</col><col>int</col><col>Chance in percent that silence is inserted between two songs. Defaults to 50.</col></row>
+              <row><col>MusicMaxPositionMemory</col><col>int</col><col>Time in seconds that the current position in a piece is remembered and will be used for resume if it becomes available through a call to SetPlayList. Defaults to 420. A value of zero means infinite memory.</col></row>
+            </table>
+          </desc>
           <optional />
         </param>
         <param>
@@ -34,6 +42,12 @@
           <desc>Fade time to the new piece if force_change is true and the current song is changed in response to this call. Set to zero to change music instantly.</desc>
           <optional />
         </param>
+        <param>
+          <type>int</type>
+          <name>resume_time_ms</name>
+          <desc>If greater than zero and changing the playlist causes a new piece to be selected immediately, the upcoming piece is resumed from the position where it last stopped playing if at least this amount of time is still left to be played.</desc>
+          <optional />
+        </param>
       </params>
     </syntax>
     <desc>Sets the play list of pieces of music to be played in random order, if music is activated. The actual number of pieces of music in the playlist is returned, or 0 in network mode.</desc>
@@ -43,5 +57,5 @@
     <related><funclink>Music</funclink></related>
   </func>
   <author>PeterW</author><date>2003-01</date>
-  <author>Sven2</author><date>2014-08</date>
+  <author>Sven2</author><date>2015-09</date>
 </funcs>

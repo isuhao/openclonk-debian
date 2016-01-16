@@ -17,8 +17,8 @@ protected func InitializeMap(proplist map)
 {
 	// Map size: all other settings depend on this value.
 	// The map size depends on the number of players.
-	var plr_cnt = GetStartupPlayerCount();
-	var map_size = BoundBy(120 + plr_cnt * 10, 140, 240);
+	var plr_cnt = GetStartupPlayerCount() - 2;
+	var map_size = BoundBy(140 + plr_cnt * 6, 140, 240);
 	
 	// Set the map size, which is always square.
 	map->Resize(map_size, map_size);
@@ -129,7 +129,11 @@ public func FindCaveConnections(array small_caves, int max_length)
 				}
 			if (has_overlap)
 				continue;
-			var tunnel = {Algo = MAPALGO_Polygon, X = [fx, tx], Y = [fy, ty], Wdt = RandomX(2, 3), Open = 1, Empty = 1};
+			// Determine tunnel width and make the tunnel.
+			var tunnel_wdt = 3;
+			if (!Random(10))
+				tunnel_wdt = 2;
+			var tunnel = {Algo = MAPALGO_Polygon, X = [fx, tx], Y = [fy, ty], Wdt = tunnel_wdt, Open = 1, Empty = 1};
 			PushBack(connections, tunnel);
 			small_caves[i].conn_count++;
 			small_caves[j].conn_count++;
@@ -174,14 +178,14 @@ public func IsLineOverlap(int x1, int y1, int x2, int y2, int x3, int y3, int x4
 public func DrawBackground()
 {
 	Draw("Rock");
-	DrawVariations("Rock-rock_cracked", 50, 5, 15);
+	DrawVariations("Rock", 50, 5, 15);
 	DrawVariations("Ore", 10, 8, 8);
 	DrawVariations("Firestone", 8, 12, 3);
 	DrawVariations("Earth", 3, 8, 3);
-	DrawVariations("Earth-earth_topsoil", 3, 8, 3);
-	DrawVariations("Earth-earth_midsoil", 3, 8, 3);
-	DrawVariations("Earth-earth_dry", 3, 8, 3);
-	DrawVariations("Earth-earth_rough", 3, 8, 3);
+	DrawVariations("Earth-earth", 3, 8, 3);
+	DrawVariations("Earth-earth", 3, 8, 3);
+	DrawVariations("Earth-earth_root", 3, 8, 3);
+	DrawVariations("Earth-earth_spongy", 3, 8, 3);
 	DrawVariations("Firestone", 6, 12, 3);
 	DrawVariations("Coal", 8, 8, 3);
 	DrawVariations("Gold", 5, 4, 4);
@@ -204,9 +208,9 @@ public func DrawLargeCave(proplist large_cave)
 	Draw("Tunnel", large_cave);
 	DrawMaterial("Tunnel-brickback", large_cave, 3, 30);
 	Draw("Earth", lower_half);
-	DrawMaterial("Earth-earth_topsoil", lower_half, 3, 20);
-	DrawMaterial("Earth-earth_midsoil", lower_half, 3, 20);
-	DrawMaterial("Earth-earth_dry", lower_half, 3, 20);
+	DrawMaterial("Earth-earth", lower_half, 3, 20);
+	DrawMaterial("Earth-earth", lower_half, 3, 20);
+	DrawMaterial("Earth-earth_root", lower_half, 3, 20);
 	DrawMaterial("Ore", lower_half, 3, 20);
 	DrawMaterial("Firestone", lower_half, 3, 20);
 	DrawMaterial("Coal", lower_half, 3, 20);
@@ -239,21 +243,6 @@ public func DrawConnections(connections)
 
 
 /*-- Helper Functions --*/
-
-// Draws some material inside an island.
-public func DrawMaterial(string mat, proplist onto_mask, int speck_size, int ratio)
-{
-	if (!speck_size)
-		speck_size = 4;
-	if (!ratio)
-		ratio = 15;
-	// Use random checker algorithm to draw patches of the material. 
-	var rnd_checker = {Algo = MAPALGO_RndChecker, Ratio = ratio, Wdt = speck_size, Hgt = speck_size};
-	rnd_checker = {Algo = MAPALGO_Turbulence, Iterations = 4, Op = rnd_checker};
-	var algo = {Algo = MAPALGO_And, Op = [onto_mask, rnd_checker]};
-	Draw(mat, algo);	
-	return;
-}
 
 public func DrawVariations(string mat, int ratio, int sx, int sy)
 {

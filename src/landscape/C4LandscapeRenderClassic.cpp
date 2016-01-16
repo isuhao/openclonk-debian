@@ -38,7 +38,7 @@ bool C4LandscapeRenderClassic::ReInit(int32_t iWidth, int32_t iHeight)
 	delete Surface32; Surface32 = NULL;
 	Surface32 = new C4Surface();
 	// without shaders, the FoW is only as detailed as the landscape has tiles.
-	if(!Surface32->Create(iWidth, iHeight,false,false,pDraw->IsShaderific() ? 0 : 64))
+	if (!Surface32->Create(iWidth, iHeight, false, 0, 0))
 		return false;
 	// Safe back info
 	this->iWidth = iWidth;
@@ -120,16 +120,16 @@ void C4LandscapeRenderClassic::Update(C4Rect To, C4Landscape *pSource)
 			if (iOwnDens > iCompareDens)
 			{
 				// apply light
-				LightenClrBy(dwBackClr, Min(30, 2 * (iOwnDens - iCompareDens)));
+				LightenClrBy(dwBackClr, std::min(30, 2 * (iOwnDens - iCompareDens)));
 			}
 			else if (iOwnDens < iCompareDens && iOwnDens < 30)
 			{
-				DarkenClrBy(dwBackClr, Min(30, 2 * (iCompareDens - iOwnDens)));
+				DarkenClrBy(dwBackClr, std::min(30, 2 * (iCompareDens - iOwnDens)));
 			}
 			iCompareDens = BelowDensity / 8;
 			if (iOwnDens > iCompareDens)
 			{
-				DarkenClrBy(dwBackClr, Min(30, 2 * (iOwnDens - iCompareDens)));
+				DarkenClrBy(dwBackClr, std::min(30, 2 * (iOwnDens - iCompareDens)));
 			}
 			Surface32->SetPixDw(iX, iY, dwBackClr);
 		}

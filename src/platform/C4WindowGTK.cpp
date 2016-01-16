@@ -2,7 +2,7 @@
  * OpenClonk, http://www.openclonk.org
  *
  * Copyright (c) 2005-2009, RedWolf Design GmbH, http://www.clonk.de/
- * Copyright (c) 2009-2013, The OpenClonk Team and contributors
+ * Copyright (c) 2009-2015, The OpenClonk Team and contributors
  *
  * Distributed under the terms of the ISC license; see accompanying file
  * "COPYING" for details.
@@ -50,157 +50,74 @@
 // Some helper functions for choosing a proper visual
 
 #ifndef USE_CONSOLE
-// Returns which XVisual attribute for two given attributes is greater.
-static int CompareVisualAttribute(Display* dpy, XVisualInfo* first, XVisualInfo* second, int attrib)
+
+namespace {
+static const std::map<int, int> base_attrib_map {
+	{GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT},
+	{GLX_X_RENDERABLE, True},
+	{GLX_RED_SIZE, 4},
+	{GLX_GREEN_SIZE, 4},
+	{GLX_BLUE_SIZE, 4},
+	{GLX_DEPTH_SIZE, 8}
+};
+
+// Turns an int->int map into an attribute list suitable for any GLX calls.
+std::unique_ptr<int[]> MakeGLXAttribList(const std::map<int, int> &map)
 {
-	int first_value, second_value;
-	glXGetConfig(dpy, first, attrib, &first_value);
-	glXGetConfig(dpy, second, attrib, &second_value);
-	if(first_value != second_value) return first_value > second_value ? 1 : -1;
-	return 0;
-}
-
-// Given two X visuals, check which one is superior, according to
-// the following rule: Double buffering is preferred over single
-// buffering, then highest color buffer is preferred. If both are equal
-// then the buffers are considered equal (return value 0).
-static int CompareVisual(Display* dpy, XVisualInfo* first, XVisualInfo* second)
-{
-	int result = CompareVisualAttribute(dpy, first, second, GLX_DOUBLEBUFFER);
-	if(result != 0) return result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_BUFFER_SIZE);
-	return result;
-}
-
-// Compare otherwise equivalent visuals. If the function above
-// considered two visuals to be equivalent then this function can
-// be used to decide which one to use. We prefer visuals with high depth
-// beffer size and low accumulation and stencil buffer sizes since the latter
-// two are not used in Clonk.
-static int CompareEquivalentVisual(Display* dpy, XVisualInfo* first, XVisualInfo* second)
-{
-	int result = CompareVisualAttribute(dpy, first, second, GLX_DEPTH_SIZE);
-	if(result != 0) return result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_STENCIL_SIZE);
-	if(result != 0) return -result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_ACCUM_RED_SIZE);
-	if(result != 0) return -result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_ACCUM_GREEN_SIZE);
-	if(result != 0) return -result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_ACCUM_BLUE_SIZE);
-	if(result != 0) return -result;
-
-	result = CompareVisualAttribute(dpy, first, second, GLX_ACCUM_ALPHA_SIZE);
-	return -result;
-}
-
-// This function generates a list of acceptable visuals. The most
-// superiour visual as defined by CompareVisual is chosen. If there
-// are two or more visuals which compare equal with CompareVisual then
-// we add all of them to the output list as long as their multi
-// sampling properties differ. If they do not differ then we use
-// CompareEquivalentVisual to decide which one to put into the output
-// list.
-static std::vector<XVisualInfo> EnumerateVisuals(Display* dpy)
-{
-	XVisualInfo templateInfo;
-	templateInfo.screen = DefaultScreen(dpy);
-	long vinfo_mask = VisualScreenMask;
-	int nitems;
-	XVisualInfo* infos = XGetVisualInfo(dpy, vinfo_mask, &templateInfo, &nitems);
-
-	std::vector<XVisualInfo> selected_infos;
-	for(int i = 0; i < nitems; ++i)
+	// We need two ints for every attribute, plus one as a sentinel
+	auto list = std::make_unique<int[]>(map.size() * 2 + 1);
+	int *cursor = list.get();
+	for(const auto &attrib : map)
 	{
-		// Require minimum depth and color buffer
-		if(infos[i].depth < 8 || infos[i].bits_per_rgb < 4) continue;
+		*cursor++ = attrib.first;
+		*cursor++ = attrib.second;
+	}
+	*cursor = None;
+	return list;
+}
 
-		// Require it to be an RGBA visual
-		int value;
-		glXGetConfig(dpy, &infos[i], GLX_RGBA, &value);
-		if(!value) continue;
+// This function picks an acceptable GLXFBConfig. To do this, we first
+// request a list of framebuffer configs with no less than 4 bits per color;
+// no less than 8 bits of depth buffer; if multisampling is not -1,
+// with at least the requested number of samples; and with double buffering.
+// If that returns no suitable configs, we retry with only a single buffer.
+GLXFBConfig PickGLXFBConfig(Display* dpy, int multisampling)
+{
+	std::map<int, int> attrib_map = base_attrib_map;
 
-		// Require GL rendering to be supported (probably always true...)
-		glXGetConfig(dpy, &infos[i], GLX_USE_GL, &value);
-		if(!value) continue;
-
-		// Multisampling with only 1 sample gives the same result as
-		// no multisampling at all, so simply ignore these visuals.
-		int second_value;
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLE_BUFFERS_ARB, &value);
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLES_ARB, &second_value);
-		if(value == 1 && second_value == 1) continue;
-
-		// This visual is acceptable in principle. Use it if
-		// we don't have any other.
-		if(selected_infos.empty())
-		{
-			selected_infos.push_back(infos[i]);
-		}
-		// Otherwise, check which one is superior. Note that all selected
-		// visuals have same buffering and RGBA sizes.
-		else
-		{
-			unsigned int j;
-			switch(CompareVisual(dpy, &infos[i], &selected_infos[0]))
-			{
-			case 1:
-				// The new visual is superior.
-				selected_infos.clear();
-				selected_infos.push_back(infos[i]);
-				break;
-			case -1:
-				// The old visual is superior.
-				break;
-			case 0:
-				// The visuals are equal. OK, so check whether there is an otherwise equivalent
-				// visual (read: same multisampling properties) but with different depth, stencil or
-				// auxiliary buffer sizes. If so, replace it, otherwise add the new one.
-				for(j = 0; j < selected_infos.size(); ++j)
-				{
-					if(CompareVisualAttribute(dpy, &infos[i], &selected_infos[j], GLX_SAMPLE_BUFFERS_ARB) != 0) continue;
-					if(CompareVisualAttribute(dpy, &infos[i], &selected_infos[j], GLX_SAMPLES_ARB) != 0) continue;
-
-					// The new visual has the same multi sampling properties then the current one.
-					// Use CompareEquivalentVisual() to decide
-					switch(CompareEquivalentVisual(dpy, &infos[i], &selected_infos[j]))
-					{
-					case 1:
-						// The current info is more suitable
-						selected_infos[j] = infos[i];
-						break;
-					case -1:
-						// The existing info is more suitable;
-						break;
-					case 0:
-						// No decision. Keep the existing one, but we could as well take
-						// the new one since we don't know what the difference between the two is.
-						break;
-					}
-
-					// Break the for loop. There is only one visual
-					// with the same multi sampling properties.
-					break;
-				}
-
-				// If we did not find a visual with the same multisampling in the for loop
-				// then add this visual to the result list
-				if(j == selected_infos.size())
-					selected_infos.push_back(infos[i]);
-
-				break;
-			}
-		}
+	if (multisampling >= 0)
+	{
+		attrib_map[GLX_SAMPLE_BUFFERS] = multisampling > 0 ? 1 : 0;
+		attrib_map[GLX_SAMPLES] = multisampling;
 	}
 
-	XFree(infos);
-	return selected_infos;
+	GLXFBConfig *configs = NULL;
+	int config_count;
+	// Find a double-buffered FB config
+	attrib_map[GLX_DOUBLEBUFFER] = True;
+	std::unique_ptr<int[]> attribs = MakeGLXAttribList(attrib_map);
+	configs = glXChooseFBConfig(dpy, DefaultScreen(dpy), attribs.get(), &config_count);
+	if (config_count == 0)
+	{
+		// If none exists, try to find a single-buffered one
+		if (configs != NULL)
+			XFree(configs);
+		attrib_map[GLX_DOUBLEBUFFER] = False;
+		attribs = MakeGLXAttribList(attrib_map);
+		configs = glXChooseFBConfig(dpy, DefaultScreen(dpy), attribs.get(), &config_count);
+	}
+
+	GLXFBConfig config = NULL;
+	if (config_count > 0)
+	{
+		config = configs[0];
+	}
+
+	XFree(configs);
+	return config;
 }
+}
+
 #endif // #ifndef USE_CONSOLE
 static void OnDestroyStatic(GtkWidget* widget, gpointer data)
 {
@@ -272,11 +189,7 @@ static void OnRealizeStatic(GtkWidget* widget, gpointer user_data)
 
 static gboolean OnKeyPressStatic(GtkWidget* widget, GdkEventKey* event, gpointer user_data)
 {
-#if GTK_CHECK_VERSION(2,21,8)
 	if (event->keyval == GDK_KEY_Scroll_Lock)
-#else
-	if (event->keyval == GDK_Scroll_Lock)
-#endif
 	{
 		static_cast<C4ViewportWindow*>(user_data)->cvp->TogglePlayerLock();
 		return true;
@@ -529,20 +442,13 @@ static gboolean OnScroll(GtkWidget* widget, GdkEventScroll* event, gpointer user
 	C4GUI::DialogWindow * window = static_cast<C4GUI::DialogWindow*>(user_data);
 	C4GUI::Dialog *pDlg = ::pGUI->GetDialog(window);
 	int idy;
-#if GTK_CHECK_VERSION(3,4,0)
-	gdouble dx, dy;
-	if (gdk_event_get_scroll_deltas((GdkEvent*)event, &dx, &dy))
+	switch (event->direction)
 	{
-		idy = short(round(dy));
+	case GDK_SCROLL_UP: idy = 32; break;
+	case GDK_SCROLL_DOWN: idy = -32; break;
+	default: return false;
 	}
-	else
-#endif
-	{
-		if (event->direction == GDK_SCROLL_UP)
-			idy = 32;
-		if (event->direction == GDK_SCROLL_DOWN)
-			idy = -32;
-	}
+
 	// FIXME: make the GUI api less insane here
 	if (pDlg)
 		::pGUI->MouseInput(C4MC_Button_Wheel, event->x, event->y, event->state + (idy << 16), pDlg, NULL);
@@ -636,24 +542,16 @@ C4Window::~C4Window ()
 	Clear();
 }
 
-bool C4Window::FindInfo(int samples, void** info)
+bool C4Window::FindFBConfig(int samples, GLXFBConfig *info)
 {
 #ifndef USE_CONSOLE
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
-	std::vector<XVisualInfo> infos = EnumerateVisuals(dpy);
-	for(unsigned int i = 0; i < infos.size(); ++i)
+	GLXFBConfig config = PickGLXFBConfig(dpy, samples);
+	if (info)
 	{
-		int v_buffers, v_samples;
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLE_BUFFERS_ARB, &v_buffers);
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLES_ARB, &v_samples);
-
-		if((samples == 0 && v_buffers == 0) ||
-		   (samples > 0 && v_buffers == 1 && v_samples == samples))
-		{
-			*info = new XVisualInfo(infos[i]);
-			return true;
-		}
+		*info = config;
 	}
+	return config != NULL;
 #else
 	// TODO: Do we need to handle this case?
 #endif // #ifndef USE_CONSOLE
@@ -665,15 +563,22 @@ void C4Window::EnumerateMultiSamples(std::vector<int>& samples) const
 {
 #ifndef USE_CONSOLE
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
-	std::vector<XVisualInfo> infos = EnumerateVisuals(dpy);
-	for(unsigned int i = 0; i < infos.size(); ++i)
-	{
-		int v_buffers, v_samples;
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLE_BUFFERS_ARB, &v_buffers);
-		glXGetConfig(dpy, &infos[i], GLX_SAMPLES_ARB, &v_samples);
+	std::map<int, int> attribs = base_attrib_map;
+	attribs[GLX_SAMPLE_BUFFERS_ARB] = 1;
 
-		if(v_buffers == 1) samples.push_back(v_samples);
+	int config_count = 0;
+	GLXFBConfig *configs = glXChooseFBConfig(dpy, DefaultScreen(dpy), MakeGLXAttribList(attribs).get(), &config_count);
+
+	std::set<int> multisamples;
+	for(int i = 0; i < config_count; ++i)
+	{
+		int v_samples;
+		glXGetFBConfigAttrib(dpy, configs[i], GLX_SAMPLES, &v_samples);
+		multisamples.insert(v_samples);
 	}
+
+	XFree(configs);
+	samples.assign(multisamples.cbegin(), multisamples.cend());
 #endif
 }
 
@@ -694,11 +599,11 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 {
 	Active = true;
 
-	if(!FindInfo(Config.Graphics.MultiSampling, &Info))
+	if(!FindFBConfig(Config.Graphics.MultiSampling, &Info))
 	{
 		// Disable multisampling if we don't find a visual which
 		// supports the currently configured setting.
-		if(!FindInfo(0, &Info)) return NULL;
+		if(!FindFBConfig(0, &Info)) return NULL;
 		Config.Graphics.MultiSampling = 0;
 	}
 
@@ -746,11 +651,7 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 
 		gtk_drag_dest_set(GTK_WIDGET(render_widget), GTK_DEST_DEFAULT_ALL, drag_drop_entries, 1, GDK_ACTION_COPY);
 		g_signal_connect(G_OBJECT(render_widget), "drag-data-received", G_CALLBACK(OnDragDataReceivedStatic), this);
-	#if GTK_CHECK_VERSION(3,0,0)
 		g_signal_connect(G_OBJECT(render_widget), "draw", G_CALLBACK(OnExposeStatic), this);
-	#else
-		g_signal_connect(G_OBJECT(render_widget), "expose-event", G_CALLBACK(OnExposeStatic), this);
-	#endif
 		g_signal_connect(G_OBJECT(window), "key-press-event", G_CALLBACK(OnKeyPressStatic), this);
 		g_signal_connect(G_OBJECT(window), "key-release-event", G_CALLBACK(OnKeyReleaseStatic), this);
 		g_signal_connect(G_OBJECT(window), "scroll-event", G_CALLBACK(OnScrollVW), this);
@@ -768,9 +669,7 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 		gtk_widget_set_double_buffered (GTK_WIDGET(render_widget), false);
 
 		gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(Console.window));
-#if GTK_CHECK_VERSION(3,0,0)
 		gtk_window_set_has_resize_grip(GTK_WINDOW(window), false);
-#endif
 	}
 	else if (windowKind == W_Fullscreen)
 	{
@@ -796,9 +695,7 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 		g_object_set_property (G_OBJECT (render_widget), "can-focus", &val);
 		g_object_set_property (G_OBJECT (window), "can-focus", &val);
 		g_value_unset (&val);
-#if GTK_CHECK_VERSION(3,0,0)
 		gtk_window_set_has_resize_grip(GTK_WINDOW(window), false);
-#endif
 	}
 	else if (windowKind == W_GuiWindow)
 	{
@@ -810,9 +707,7 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 		g_signal_connect(G_OBJECT(window), "scroll-event", G_CALLBACK(OnScroll), this);
 
 		gtk_window_set_transient_for(GTK_WINDOW(window), GTK_WINDOW(Console.window));
-#if GTK_CHECK_VERSION(3,0,0)
 		gtk_window_set_has_resize_grip(GTK_WINDOW(window), false);
-#endif
 	}
 	else if (windowKind == W_Console)
 	{
@@ -827,19 +722,24 @@ C4Window* C4Window::Init(WindowKind windowKind, C4AbstractApp * pApp, const char
 	g_signal_connect(G_OBJECT(window), "delete-event", G_CALLBACK(OnDelete), this);
 	handlerDestroy = g_signal_connect(G_OBJECT(window), "destroy", G_CALLBACK(OnDestroyStatic), this);
 	gtk_widget_add_events(GTK_WIDGET(window), GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_SCROLL_MASK);
-#if GTK_CHECK_VERSION(3,4,0)
-	gtk_widget_add_events(GTK_WIDGET(window), GDK_SMOOTH_SCROLL_MASK);
-#endif
+
+	// TODO: It would be nice to support GDK_SCROLL_SMOOTH_MASK and
+	// smooth scrolling for scrolling in menus, however that should not
+	// change the scroll wheel behaviour ingame for zooming or
+	// inventory change. Note that when both GDK_SCROLL_MASK and
+	// GDK_SMOOTH_SCROLL_MASK are enabled, both type of scroll events
+	// are reported, so one needs to make sure to not double-process them.
+	// It would be nice to have smooth scrolling also e.g. for zooming
+	// ingame, but it probably requires the notion of smooth scrolling
+	// other parts of the engine as well.
 
 	GdkScreen * scr = gtk_widget_get_screen(GTK_WIDGET(render_widget));
-	GdkVisual * vis = gdk_x11_screen_lookup_visual(scr, ((XVisualInfo*)Info)->visualid);
-#if GTK_CHECK_VERSION(2,91,0)
+	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
+	XVisualInfo *vis_info = glXGetVisualFromFBConfig(dpy, Info);
+	assert(vis_info);
+	GdkVisual * vis = gdk_x11_screen_lookup_visual(scr, vis_info->visualid);
+	XFree(vis_info);
 	gtk_widget_set_visual(GTK_WIDGET(render_widget),vis);
-#else
-	GdkColormap * cmap = gdk_colormap_new(vis, true);
-	gtk_widget_set_colormap(GTK_WIDGET(render_widget), cmap);
-	g_object_unref(cmap);
-#endif
 	gtk_widget_show_all(GTK_WIDGET(window));
 
 //  XVisualInfo vitmpl; int blub;
@@ -890,17 +790,20 @@ bool C4Window::ReInit(C4AbstractApp* pApp)
 #ifndef USE_CONSOLE
 	int value;
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
-	glXGetConfig(dpy, static_cast<XVisualInfo*>(Info), GLX_SAMPLES_ARB, &value);
+	glXGetFBConfigAttrib(dpy, Info, GLX_SAMPLES, &value);
 	if(value == Config.Graphics.MultiSampling) return true;
 #else
 	return true;
 #endif
 	// Check whether we have a visual with the requested number of samples
-	void* new_info;
-	if(!FindInfo(Config.Graphics.MultiSampling, &new_info)) return false;
+	GLXFBConfig new_info;
+	if(!FindFBConfig(Config.Graphics.MultiSampling, &new_info)) return false;
 
 	GdkScreen * scr = gtk_widget_get_screen(GTK_WIDGET(render_widget));
-	GdkVisual * vis = gdk_x11_screen_lookup_visual(scr, static_cast<XVisualInfo*>(new_info)->visualid);
+	XVisualInfo *vis_info = glXGetVisualFromFBConfig(dpy, new_info);
+	assert(vis_info);
+	GdkVisual * vis = gdk_x11_screen_lookup_visual(scr, vis_info->visualid);
+	XFree(vis_info);
 
 	// Un- and re-realizing the render_widget does not work, the window
 	// remains hidden afterwards. So we re-create it from scratch.
@@ -909,15 +812,8 @@ bool C4Window::ReInit(C4AbstractApp* pApp)
 	gtk_widget_set_double_buffered (GTK_WIDGET(render_widget), false);
 	g_object_set(G_OBJECT(render_widget), "can-focus", TRUE, NULL);
 	
-#if GTK_CHECK_VERSION(2,91,0)
 	gtk_widget_set_visual(GTK_WIDGET(render_widget),vis);
-#else
-	GdkColormap * cmap = gdk_colormap_new(vis, true);
-	gtk_widget_set_colormap(GTK_WIDGET(render_widget), cmap);
-	g_object_unref(cmap);
-#endif
 
-	delete static_cast<XVisualInfo*>(Info);
 	Info = new_info;
 
 	// Wait until window is mapped to get the window's XID
@@ -955,12 +851,7 @@ void C4Window::Clear()
 	window = NULL;
 	Active = false;
 
-	// We must free it here since we do not call C4Window::Clear()
-	if (Info)
-	{
-		delete static_cast<XVisualInfo*>(Info);
-		Info = 0;
-	}
+	Info = 0;
 }
 
 void C4Window::SetSize(unsigned int width, unsigned int height)

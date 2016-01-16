@@ -79,6 +79,42 @@ global func MakeColorReadable(int color)
 	return color;
 }
 
+// Returns the number of players in the specified team.
+global func GetPlayerInTeamCount(int team)
+{
+	var count = 0;
+	for (var index = 0; index < GetPlayerCount(); index++)
+		if (GetPlayerTeam(GetPlayerByIndex(index)) == team)
+			count++;
+	return count;
+}
+
+// Returns an array of player numbers of players of the specified type and in the specified team.
+// Set either player_type or team to nil to ignore that constraint.
+global func GetPlayers(int player_type, int team)
+{
+	var plr_list = [];
+	for (var index = 0; index < GetPlayerCount(player_type); index++)
+	{
+		var plr = GetPlayerByIndex(index, player_type);
+		if (team == nil || GetPlayerTeam(plr) == team)
+			PushBack(plr_list, plr);
+	}
+	return plr_list;
+}
+
+// Returns the player number corresponding to the specified player ID.
+global func GetPlayerByID(int plr_id)
+{
+	for (var index = 0; index < GetPlayerCount(); index++)
+	{
+		var plr = GetPlayerByIndex(index);
+		if (plr_id == GetPlayerID(plr))
+			return plr;
+	}
+	return NO_OWNER;
+}
+
 // Adds value to the account of iPlayer.
 global func DoWealth(int plr, int value)
 {
@@ -103,8 +139,15 @@ global func MessageWindow(string msg, int for_plr, id icon, string caption)
 	if (!caption)
 		caption = GetName();
 	// Create msg window as regular text
-	CustomMessage(Format("<c ffff00>%s</c>: %s", caption, msg), nil, for_plr, 0,150, nil, GUI_MenuDeco, icon, MSG_HCenter);
+	CustomMessage(Format("<c ffff00>%s</c>: %s", caption, msg), nil, for_plr, 0,150, nil, GetDefaultMenuDecoration(), icon, MSG_HCenter);
 	return true;
+}
+
+// Returns the default menu decoration used in most places.
+// The return value should be a definition, e.g. GUI_MenuDeco.
+global func GetDefaultMenuDecoration()
+{
+	return _inherited(...);
 }
 
 // Find a base of the given player. Use index to search through all bases.

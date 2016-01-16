@@ -81,7 +81,7 @@ protected func InitializePlayer(int plr, int x, int y, object base, int team)
 	Scoreboard->NewEntry(ScoreboardTeamID(team), GetTaggedTeamName(team));
 
 	// Broadcast to scenario.
-	GameCall("OnPlayerRelaunch", plr);
+	GameCall("OnPlayerRelaunch", plr, false);
 	return _inherited(plr, ...);
 }
 
@@ -94,7 +94,7 @@ protected func RelaunchPlayer(int plr)
 	// Join new clonk.
 	JoinPlayer(plr);
 	// Broadcast to scenario.
-	GameCall("OnPlayerRelaunch", plr);
+	GameCall("OnPlayerRelaunch", plr, true);
 	return _inherited(plr, ...);
 }
 
@@ -193,16 +193,6 @@ public func GetShortDescription(int plr)
 		return "$MsgShortReturn$";
 	
 	return "$MsgShortSteal$";
-}
-
-// Returns the number of players in a specific team.
-private func GetPlayerInTeamCount(int team)
-{
-	var cnt = 0;
-	for (var i = 0; i < GetPlayerCount(); i++)
-		if (GetPlayerTeam(GetPlayerByIndex(i)) == team)
-			cnt++;
-	return cnt;
 }
 
 local Name = "$Name$";

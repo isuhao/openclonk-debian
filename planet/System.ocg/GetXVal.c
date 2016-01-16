@@ -7,6 +7,8 @@
 		The usage might, under certain circumstances, lead to desynchronisation in
 		either network games or save games. The most dangerous functions are marked
 		with //(!).
+		
+		These functions are also very slow. Values should be cached if possible.
 --*/
 
 global func GetActMapVal(string entry, string action, id def, int num)
@@ -20,8 +22,6 @@ global func GetActMapVal(string entry, string action, id def, int num)
 
 // GetDefCoreVal
 global func GetDefCategory()    { return GetDefCoreVal("Category", "DefCore"); }
-global func GetDefWidth()       { return GetDefCoreVal("Width", "DefCore"); }
-global func GetDefHeight()      { return GetDefCoreVal("Height", "DefCore"); }
 global func GetDefOffset(nr)   { return GetDefCoreVal("Offset", "DefCore", nr); }
 global func GetDefValue()       { return GetDefCoreVal("Value", "DefCore"); }
 global func GetDefMass()        { return GetDefCoreVal("Mass", "DefCore"); }
@@ -32,12 +32,10 @@ global func GetDefFireTop()     { return GetDefCoreVal("FireTop", "DefCore"); }
 global func GetDefLine()        { return GetDefCoreVal("Line", "DefCore"); }
 global func GetDefCrewMember()  { return GetDefCoreVal("CrewMember", "DefCore"); }
 global func GetDefConstruction(){ return GetDefCoreVal("Construction", "DefCore"); }
-global func GetDefGrab()        { return GetDefCoreVal("Grab", "DefCore"); }
 global func GetDefGrabPutGet()  { return GetDefCoreVal("GrabPutGet", "DefCore"); }
 global func GetDefRotate()      { return GetDefCoreVal("Rotate", "DefCore"); }
 global func GetDefFloat()       { return GetDefCoreVal("Float", "DefCore"); }
 global func GetDefHorizontalFix() { return GetDefCoreVal("HorizontalFix", "DefCore"); }
-global func GetDefBorderBound() { return GetDefCoreVal("BorderBound", "DefCore"); }
 global func GetDefLiftTop()     { return GetDefCoreVal("LiftTop", "DefCore"); }
 global func GetDefUprightAttach() { return GetDefCoreVal("UprightAttach", "DefCore"); }
 global func GetDefStretchGrowth() { return GetDefCoreVal("StretchGrowth", "DefCore"); }

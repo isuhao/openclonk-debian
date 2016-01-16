@@ -25,7 +25,7 @@ func SetPaintCol(int idx)
 // Impact sound
 func Hit()
 {
-	Sound("GeneralHit?");
+	Sound("Hits::GeneralHit?");
 }
 
 // Item activation
@@ -90,7 +90,7 @@ local ActMap = {
 		Length = 1,
 		Delay = 1,
 		Name = "Spraying",
-		Sound = "SprayCan",
+		Sound = "SprayCan::SprayCan",
 		NextAction = "Spraying",
 	}
 };
@@ -102,4 +102,3 @@ func Definition(def) {
 local Collectible = 1;
 local Name = "$Name$";
 local UsageHelp = "$UsageHelp$";
-local Rebuy = true;

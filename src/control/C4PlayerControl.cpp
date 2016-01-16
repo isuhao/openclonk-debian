@@ -344,6 +344,21 @@ bool C4PlayerControlAssignment::ResolveRefs(C4PlayerControlAssignmentSet *pParen
 		}
 	}
 	KeyCombo = NewCombo;
+	// adjust Control and Shift into key states for non-sequence combo keys
+	// e.g. LeftControl,A should become LeftControl,Ctrl+A.
+	if (KeyCombo.size() > 1 && !fComboIsSequence)
+	{
+		int32_t shift = 0;
+		for (KeyComboVec::iterator i = KeyCombo.begin(); i != KeyCombo.end(); ++i)
+		{
+			if (i->Key.Key == K_CONTROL_L || i->Key.Key == K_CONTROL_R) shift |= KEYS_Control;
+			if (i->Key.Key == K_SHIFT_L || i->Key.Key == K_SHIFT_R) shift |= KEYS_Shift;
+			shift |= i->Key.dwShift;
+		}
+		for (KeyComboVec::iterator i = KeyCombo.begin(); i != KeyCombo.end(); ++i) i->Key.dwShift |= shift;
+	}
+	// remove control/shift duplications
+	for (KeyComboVec::iterator i = KeyCombo.begin(); i != KeyCombo.end(); ++i) i->Key.FixShiftKeys();
 	// the trigger key is always last of the chain
 	if (KeyCombo.size()) TriggerKey = KeyCombo.back().Key; else TriggerKey = C4KeyCodeEx();
 	// done
@@ -719,6 +734,21 @@ void C4PlayerControlAssignmentSets::CompileFunc(StdCompiler *pComp)
 	}
 	pComp->Value(mkNamingAdapt(clear_previous, "ClearPrevious", false));
 	pComp->Value(mkSTLContainerAdapt(Sets, StdCompiler::SEP_NONE));
+
+	// Remove all sets that have gamepad controls, since gamepad
+	// support is broken at the moment. Disable this once we have gamepad
+	// support again!
+	if (pComp->isCompiler())
+	{
+		AssignmentSetList::iterator iter = Sets.begin();
+		for (AssignmentSetList::iterator iter = Sets.begin(); iter != Sets.end(); )
+		{
+			if (iter->HasGamepad())
+				iter = Sets.erase(iter);
+			else
+				++iter;
+		}
+	}
 }
 
 bool C4PlayerControlAssignmentSets::operator ==(const C4PlayerControlAssignmentSets &cmp) const
@@ -1130,8 +1160,9 @@ bool C4PlayerControl::ExecuteControl(int32_t iControl, bool fUp, const C4KeyEven
 				fUp = true;
 				fRepeated = false;
 			}
-			else //if (iTriggerMode & C4PlayerControlAssignment::CTM_Hold) - must be true
+			else
 			{
+				assert(iTriggerMode & C4PlayerControlAssignment::CTM_Hold);
 				// control is down but trigger key is pressed again: Refresh down state
 				// (this will restart the KeyRepeat time)
 				Sync.SetControlDownState(iControl, KeyExtraData, Game.FrameCounter, false);

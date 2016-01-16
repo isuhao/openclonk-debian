@@ -796,7 +796,7 @@ void C4Network2::HandlePacket(char cStatus, const C4PacketBase *pPacket, C4Netwo
 
 #define GETPKT(type, name) \
     assert(pPacket); const type &name = \
-      /*dynamic_cast*/ static_cast<const type &>(*pPacket);
+     static_cast<const type &>(*pPacket);
 
 	switch (cStatus)
 	{
@@ -1976,11 +1976,6 @@ bool C4Network2::LeagueStart(bool *pCancel)
 		return false;
 	}
 
-	// We have an internet connection, so let's punch the master server here in order to open an udp port
-	C4NetIO::addr_t PuncherAddr;
-	if (ResolveAddress(Config.Network.PuncherAddress, &PuncherAddr, C4NetStdPortPuncher))
-		NetIO.Punch(PuncherAddr);
-
 	// Let's wait for response
 	StdStrBuf Message = FormatString(LoadResStr("IDS_NET_LEAGUE_REGGAME"), pLeagueClient->getServerName());
 	Log(Message.getData());
@@ -2872,5 +2867,3 @@ bool C4Network2::isStreaming() const
 	// Streaming must be active and there must still be anything to stream
 	return fStreaming;
 }
-
-//C4Network2 Network;

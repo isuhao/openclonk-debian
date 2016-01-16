@@ -47,12 +47,47 @@
 
 C4Player::C4Player() : C4PlayerInfoCore()
 {
-	Default();
+	Filename[0] = 0;
+	Number = C4P_Number_None;
+	ID = 0;
+	Team = 0;
+	DefaultRuntimeData();
+	Menu.Default();
+	Crew.Default();
+	CrewInfoList.Default();
+	LocalControl = false;
+	BigIcon.Default();
+	Next = NULL;
+	fFogOfWar = true;
+	LeagueEvaluated = false;
+	GameJoinTime = 0; // overwritten in Init
+	pstatControls = pstatActions = NULL;
+	ControlCount = ActionCount = 0;
+	LastControlType = PCID_None;
+	LastControlID = 0;
+	pMsgBoardQuery = NULL;
+	pGamepad = NULL;
+	NoEliminationCheck = false;
+	Evaluated = false;
+	ZoomLimitMinWdt = ZoomLimitMinHgt = ZoomLimitMaxWdt = ZoomLimitMaxHgt = ZoomWdt = ZoomHgt = 0;
+	ZoomLimitMinVal = ZoomLimitMaxVal = ZoomVal = Fix0;
+	ViewLock = true;
+	SoundModifier.Set0();
 }
 
 C4Player::~C4Player()
 {
-	Clear();
+	ClearGraphs();
+	Menu.Clear();
+	SetSoundModifier(NULL);
+	while (pMsgBoardQuery)
+	{
+		C4MessageBoardQuery *pNext = pMsgBoardQuery->pNext;
+		delete pMsgBoardQuery;
+		pMsgBoardQuery = pNext;
+	}
+	delete pGamepad; pGamepad = NULL;
+	ClearControl();
 }
 
 bool C4Player::ObjectInCrew(C4Object *tobj)
@@ -348,6 +383,9 @@ bool C4Player::Init(int32_t iNumber, int32_t iAtClient, const char *szAtClientNa
 	// init graphs
 	if (Game.pNetworkStatistics) CreateGraphs();
 
+	// init sound mod
+	SetSoundModifier(SoundModifier.getPropList());
+
 	return true;
 }
 
@@ -358,7 +396,7 @@ bool C4Player::Save()
 	if (GetType() == C4PT_Script) return false;
 	// Log
 	LogF(LoadResStr("IDS_PRC_SAVEPLR"), Config.AtRelativePath(Filename));
-	::GraphicsSystem.MessageBoard.EnsureLastMessage();
+	::GraphicsSystem.MessageBoard->EnsureLastMessage();
 	// copy player to save somewhere else
 	char szPath[_MAX_PATH + 1];
 	SCopy(Config.AtTempPath(C4CFN_TempPlayer), szPath, _MAX_PATH);
@@ -428,7 +466,7 @@ void C4Player::PlaceReadyCrew(int32_t tx1, int32_t tx2, int32_t ty, C4Object *Fi
 	for (cnt=0; (id=Game.C4S.PlrStart[PlrStartIndex].ReadyCrew.GetID(cnt,&iCount)); cnt++)
 	{
 		// Minimum one clonk if empty id
-		iCount = Max<int32_t>(iCount,1);
+		iCount = std::max<int32_t>(iCount,1);
 
 		for (int32_t cnt2=0; cnt2<iCount; cnt2++)
 		{
@@ -663,8 +701,8 @@ bool C4Player::DoWealth(int32_t iChange)
 {
 	if (LocalControl)
 	{
-		if (iChange>0) StartSoundEffect("Cash");
-		if (iChange<0) StartSoundEffect("UnCash");
+		if (iChange>0) StartSoundEffect("UI::Cash");
+		if (iChange<0) StartSoundEffect("UI::UnCash");
 	}
 	SetWealth(Wealth+iChange);
 
@@ -675,24 +713,31 @@ bool C4Player::SetWealth(int32_t iVal)
 {
 	if (iVal == Wealth) return true;
 
-	Wealth=Clamp<int32_t>(iVal,0,10000);
+	Wealth=Clamp<int32_t>(iVal,0,1000000000);
 
 	::GameScript.GRBroadcast(PSF_OnWealthChanged,&C4AulParSet(C4VInt(Number)));
 
 	return true;
 }
 
-void C4Player::SetViewMode(int32_t iMode, C4Object *pTarget)
+void C4Player::SetViewMode(int32_t iMode, C4Object *pTarget, bool immediate_position)
 {
 	// safe back
 	ViewMode=iMode; ViewTarget=pTarget;
+	// immediate position set desired?
+	if (immediate_position)
+	{
+		UpdateView();
+		C4Viewport *vp = ::Viewports.GetViewport(this->Number);
+		if (vp) vp->AdjustPosition(true);
+	}
 }
 
-void C4Player::ResetCursorView()
+void C4Player::ResetCursorView(bool immediate_position)
 {
 	// reset view to cursor if any cursor exists
 	if (!ViewCursor && !Cursor) return;
-	SetViewMode(C4PVM_Cursor);
+	SetViewMode(C4PVM_Cursor, NULL, immediate_position);
 }
 
 void C4Player::Evaluate()
@@ -708,9 +753,9 @@ void C4Player::Evaluate()
 	LastRound.Duration = Game.Time;
 	LastRound.Won = !Eliminated;
 	// Melee: personal value gain score ...check ::Objects(C4D_Goal)
-	if (Game.C4S.Game.IsMelee()) LastRound.Score = Max<int32_t>(CurrentScore-InitialScore,0);
+	if (Game.C4S.Game.IsMelee()) LastRound.Score = std::max<int32_t>(CurrentScore-InitialScore,0);
 	// Cooperative: shared score
-	else LastRound.Score = Max(::Players.AverageScoreGain(),0);
+	else LastRound.Score = std::max(::Players.AverageScoreGain(),0);
 	LastRound.Level = 0; // unknown...
 	LastRound.Bonus = SuccessBonus * LastRound.Won;
 	LastRound.FinalScore = LastRound.Score + LastRound.Bonus;
@@ -742,7 +787,7 @@ void C4Player::Surrender()
 	Surrendered=true;
 	Eliminated=true;
 	RetireDelay=C4RetireDelay;
-	StartSoundEffect("Eliminated");
+	StartSoundEffect("UI::Eliminated");
 	Log(FormatString(LoadResStr("IDS_PRC_PLRSURRENDERED"),GetName()).getData());
 }
 
@@ -761,7 +806,7 @@ bool C4Player::SetHostility(int32_t iOpponent, int32_t hostile, bool fSilent)
 	// no announce in first frame, or if specified
 	if (!Game.FrameCounter || fSilent) return true;
 	// Announce
-	StartSoundEffect("Trumpet");
+	StartSoundEffect("UI::Trumpet");
 	Log(FormatString(LoadResStr(hostile ? "IDS_PLR_HOSTILITY" : "IDS_PLR_NOHOSTILITY"),
 	                 GetName(),opponent->GetName()).getData());
 	// Success
@@ -845,55 +890,6 @@ bool C4Player::Message(const char *szMsg)
 	return true;
 }
 
-void C4Player::Clear()
-{
-	ClearGraphs();
-	Crew.Clear();
-	CrewInfoList.Clear();
-	Menu.Clear();
-	BigIcon.Clear();
-	fFogOfWar=true;
-	while (pMsgBoardQuery)
-	{
-		C4MessageBoardQuery *pNext = pMsgBoardQuery->pNext;
-		delete pMsgBoardQuery;
-		pMsgBoardQuery = pNext;
-	}
-	if (pGamepad) delete pGamepad;
-	pGamepad = NULL;
-	Status = 0;
-	ClearControl();
-}
-
-void C4Player::Default()
-{
-	Filename[0]=0;
-	Number=C4P_Number_None;
-	ID=0;
-	Team = 0;
-	DefaultRuntimeData();
-	Menu.Default();
-	Crew.Default();
-	CrewInfoList.Default();
-	LocalControl=false;
-	BigIcon.Default();
-	Next=NULL;
-	fFogOfWar=true;
-	LeagueEvaluated=false;
-	GameJoinTime=0; // overwritten in Init
-	pstatControls = pstatActions = NULL;
-	ControlCount = ActionCount = 0;
-	LastControlType = PCID_None;
-	LastControlID = 0;
-	pMsgBoardQuery = NULL;
-	pGamepad = NULL;
-	NoEliminationCheck = false;
-	Evaluated = false;
-	ZoomLimitMinWdt=ZoomLimitMinHgt=ZoomLimitMaxWdt=ZoomLimitMaxHgt=ZoomWdt=ZoomHgt=0;
-	ZoomLimitMinVal=ZoomLimitMaxVal=ZoomVal=Fix0;
-	ViewLock = true;
-}
-
 bool C4Player::Load(const char *szFilename, bool fSavegame)
 {
 	C4Group hGroup;
@@ -905,7 +901,7 @@ bool C4Player::Load(const char *szFilename, bool fSavegame)
 	if (!C4PlayerInfoCore::Load(hGroup))
 		{ hGroup.Close(); return false; }
 	// Load BigIcon
-	if (hGroup.FindEntry(C4CFN_BigIcon)) BigIcon.Load(hGroup, C4CFN_BigIcon);
+	if (hGroup.FindEntry(C4CFN_BigIcon)) BigIcon.Load(hGroup, C4CFN_BigIcon, C4FCT_Full, C4FCT_Full, false, 0);
 	// Load crew info list
 	CrewInfoList.Load(hGroup);
 	// Close group
@@ -1100,6 +1096,12 @@ void C4Player::CompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers)
 	pComp->Value(mkNamingAdapt(mkParAdapt(Crew, numbers), "Crew"            ));
 	pComp->Value(mkNamingAdapt(CrewInfoList.iNumCreated, "CrewCreated",     0));
 	pComp->Value(mkNamingPtrAdapt( pMsgBoardQuery,  "MsgBoardQueries"        ));
+	pComp->Value(mkNamingAdapt(mkParAdapt(SoundModifier, numbers), "SoundModifier", C4Value()));
+	
+	if (pComp->isCompiler())
+	{
+		SoundModifier.Denumerate(numbers);
+	}
 
 	// Keys held down
 	pComp->Value(Control);
@@ -1307,7 +1309,7 @@ void C4Player::NotifyOwnedObjects()
 						continue;
 					// Regular objects: Try to find a new, suitable owner from the same team
 					// Ignore StaticBack, because this would not be compatible with many internal objects such as team account
-					if ((~cobj->Category & C4D_StaticBack))
+					if ((cobj->Category & C4D_StaticBack) == 0)
 						cobj->SetOwner(iNewOwner);
 				}
 			}
@@ -1406,7 +1408,7 @@ int igOffX, igOffY;
 int VisibilityCheck(int iVis, int sx, int sy, int cx, int cy)
 {
 	sx -= igOffX; sy -= igOffY; cx -= igOffX; cy -= igOffY;
-	int st = Max(1, Max(Abs(sx - cx), Abs(sy - cy)));
+	int st = std::max(1, std::max(Abs(sx - cx), Abs(sy - cy)));
 	for (int i = 0; i <= st; i++)
 	{
 		int x = (sx * (st - i) + cx * i) / st, y = (sy * (st - i) + cy * i) / st;
@@ -1430,7 +1432,7 @@ void C4Player::Eliminate()
 	if (Eliminated) return;
 	Eliminated=true;
 	RetireDelay=C4RetireDelay;
-	StartSoundEffect("Eliminated");
+	StartSoundEffect("UI::Eliminated");
 	Log(FormatString(LoadResStr("IDS_PRC_PLRELIMINATED"),GetName()).getData());
 
 	// Early client deactivation check
@@ -1873,4 +1875,23 @@ bool C4Player::GainScenarioAchievement(const char *achievement_id, int32_t value
 	// Gain achievement iff it's an improvement
 	Achievements.SetValue(sAchvID.getData(), value, true);
 	return true;
+}
+
+void C4Player::SetSoundModifier(C4PropList *new_modifier)
+{
+	// set modifier to be applied to all new sounds being played in a player's viewport
+	// update prop list parameter
+	C4SoundModifier *mod;
+	if (new_modifier)
+	{
+		SoundModifier.SetPropList(new_modifier);
+		mod = ::Application.SoundSystem.Modifiers.Get(new_modifier, true);
+	}
+	else
+	{
+		SoundModifier.Set0();
+		mod = NULL;
+	}
+	// update in sound system
+	::Application.SoundSystem.Modifiers.SetGlobalModifier(mod, Number);
 }

@@ -20,6 +20,8 @@
 #include <StdMeshMath.h>
 #include <StdMeshMaterial.h>
 
+#include <string>
+
 class StdMeshBone
 {
 	friend class StdMeshSkeleton;
@@ -73,7 +75,7 @@ class StdMeshTrack
 	friend class StdMeshSkeleton;
 	friend class StdMeshSkeletonLoader;
 public:
-	StdMeshTransformation GetTransformAt(float time) const;
+	StdMeshTransformation GetTransformAt(float time, float length) const;
 
 private:
 	std::map<float, StdMeshKeyFrame> Frames;
@@ -125,6 +127,8 @@ public:
 	void PostInit();
 
 	std::vector<int> GetMatchingBones(const StdMeshSkeleton& skeleton) const;
+
+	std::vector<const StdMeshAnimation*> GetAnimations() const;
 
 private:
 	void AddMasterBone(StdMeshBone* bone);
@@ -197,11 +201,17 @@ public:
 
 	void PostInit();
 
-	const GLuint GetVBO() const { return vbo; }
+#ifndef USE_CONSOLE
+	GLuint GetVBO() const { return vbo; }
+#endif
+
+	void SetLabel(const std::string &label) { Label = label; }
 
 private:
+#ifndef USE_CONSOLE
 	GLuint vbo;
 	void UpdateVBO();
+#endif
 
 	StdMesh(const StdMesh& other); // non-copyable
 	StdMesh& operator=(const StdMesh& other); // non-assignable
@@ -210,6 +220,8 @@ private:
 
 	std::vector<StdSubMesh> SubMeshes;
 	std::shared_ptr<StdMeshSkeleton> Skeleton; // Skeleton
+
+	std::string Label;
 
 	StdMeshBox BoundingBox;
 	float BoundingRadius;
@@ -248,8 +260,8 @@ public:
 	FaceOrdering GetFaceOrdering() const { return CurrentFaceOrdering; }
 protected:
 	void SetMaterial(const StdMeshMaterial& material);
-	void SetFaceOrdering(const StdSubMesh& submesh, FaceOrdering ordering);
-	void SetFaceOrderingForClrModulation(const StdSubMesh& submesh, uint32_t clrmod);
+	void SetFaceOrdering(class StdMeshInstance& instance, const StdSubMesh& submesh, FaceOrdering ordering);
+	void SetFaceOrderingForClrModulation(class StdMeshInstance& instance, const StdSubMesh& submesh, uint32_t clrmod);
 
 	const StdSubMesh *base;
 	// Faces sorted according to current face ordering
@@ -512,7 +524,6 @@ public:
 	typedef std::vector<AttachedMesh*> AttachedMeshList;
 	typedef AttachedMeshList::const_iterator AttachedMeshIter;
 
-	//FaceOrdering GetFaceOrdering() const { return CurrentFaceOrdering; }
 	void SetFaceOrdering(FaceOrdering ordering);
 	void SetFaceOrderingForClrModulation(uint32_t clrmod);
 
@@ -542,9 +553,9 @@ public:
 	void ExecuteAnimation(float dt);
 
 	// Create a new instance and attach it to this mesh. Takes ownership of denumerator
-	AttachedMesh* AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation = StdMeshMatrix::Identity(), uint32_t flags = AM_None);
+	AttachedMesh* AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation = StdMeshMatrix::Identity(), uint32_t flags = AM_None, unsigned int attach_number = 0);
 	// Attach an instance to this instance. Takes ownership of denumerator. If own_child is true deletes instance on detach.
-	AttachedMesh* AttachMesh(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation = StdMeshMatrix::Identity(), uint32_t flags = AM_None, bool own_child = false);
+	AttachedMesh* AttachMesh(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation = StdMeshMatrix::Identity(), uint32_t flags = AM_None, bool own_child = false, unsigned int attach_number = 0);
 	// Removes attachment with given number
 	bool DetachMesh(unsigned int number);
 	// Returns attached mesh with given number
@@ -592,6 +603,11 @@ public:
 	const StdMesh& GetMesh() const { return *Mesh; }
 
 protected:
+	AttachedMesh* AttachMeshImpl(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags, bool own_child, unsigned int new_attach_number);
+
+	template<typename IteratorType, typename FuncObj>
+	static bool ScanAttachTree(IteratorType begin, IteratorType end, const FuncObj& obj);
+
 	typedef std::vector<AnimationNode*> AnimationNodeList;
 
 	AnimationNodeList::iterator GetStackIterForSlot(int slot, bool create);

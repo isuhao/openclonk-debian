@@ -345,7 +345,7 @@ void C4TeamList::AddTeam(C4Team *pNewTeam)
 	// store new team
 	ppList[iTeamCount++] = pNewTeam;
 	// adjust ID
-	iLastTeamID = Max(pNewTeam->iID, iLastTeamID);
+	iLastTeamID = std::max(pNewTeam->iID, iLastTeamID);
 }
 
 void C4TeamList::ClearTeams()
@@ -427,7 +427,7 @@ int32_t C4TeamList::GetLargestTeamID() const
 {
 	int32_t iLargest = 0;
 	C4Team **ppCheck=ppList; int32_t iCnt=iTeamCount;
-	for (; iCnt--; ++ppCheck) iLargest = Max((*ppCheck)->GetID(), iLargest);
+	for (; iCnt--; ++ppCheck) iLargest = std::max((*ppCheck)->GetID(), iLargest);
 	return iLargest;
 }
 
@@ -464,8 +464,6 @@ bool C4TeamList::RecheckPlayerInfoTeams(C4PlayerInfo &rNewJoin, bool fByHost)
 	// only if enabled
 	assert(IsMultiTeams());
 	if (!IsMultiTeams()) return false;
-	// local/single call only
-	//assert(::Control.isCtrlHost()); -- bla, control is not initialized at this point.
 	// check whether a new team is to be assigned first
 	C4Team *pCurrentTeam = GetTeamByPlayerID(rNewJoin.GetID());
 	int32_t idCurrentTeam = pCurrentTeam ? pCurrentTeam->GetID() : 0;
@@ -596,7 +594,7 @@ void C4TeamList::CompileFunc(StdCompiler *pComp)
 	if (pComp->isCompiler())
 	{
 		// adjust last team ID, which may not be set properly for player-generated team files
-		iLastTeamID = Max(GetLargestTeamID(), iLastTeamID);
+		iLastTeamID = std::max(GetLargestTeamID(), iLastTeamID);
 		// force automatic generation of teams if none are defined
 		if (!iTeamCount) fAutoGenerateTeams = true;
 	}
@@ -844,7 +842,7 @@ void C4TeamList::SetTeamColors(bool fEnabled)
 void C4TeamList::EnforceLeagueRules()
 {
 	// enforce some league settings
-	//fAllowHostilitySwitch = false; - temp hostility is OK; often used e.g. to unstick friendly Clonks
+	// allow temp hostility switching; often used e.g. to unstick friendly Clonks, but:
 	fAllowTeamSwitch = false; // switching teams in league games? Yeah, sure...
 }
 
@@ -896,4 +894,38 @@ StdStrBuf C4TeamList::GetScriptPlayerName() const
 	// none are available: Return a random name
 	sScriptPlayerNames.GetSection(SafeRandom(iNameIdx-1), &sOut, '|');
 	return sOut;
+}
+
+int32_t C4TeamList::GetStartupTeamCount(int32_t startup_player_count)
+{
+	// Count non-empty teams
+	int32_t i_team = 0; C4Team *team;
+	int32_t team_count = 0;
+	while ((team = GetTeamByIndex(i_team++)))
+	{
+		if (team->GetPlayerCount() > 0) ++team_count;
+	}
+	// No populated teams found? This can happen in non-network mode when no players are assigned
+	if (!team_count)
+	{
+		// Teams have not been selected yet, but the map script may want to have an estimate
+		// in this case, calculate prospective teams from startup player count
+		if (IsCustom() && !IsAutoGenerateTeams())
+		{
+			// Teams are pre-defined. Assume players will try to distribute broadly on these teams
+			team_count = std::min<int32_t>(startup_player_count, GetTeamCount());
+		}
+		else if (IsRandomTeam())
+		{
+			// Randomized teams: Players will be put into two teams.
+			team_count = std::min<int32_t>(startup_player_count, 2);
+		}
+		else
+		{
+			// Teams are auto-added -> fallback to player count
+			team_count = startup_player_count;
+		}
+	}
+
+	return team_count;
 }

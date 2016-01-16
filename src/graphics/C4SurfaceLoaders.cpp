@@ -25,7 +25,7 @@
 #include <C4Log.h>
 #include <StdPNG.h>
 
-bool C4Surface::LoadAny(C4Group &hGroup, const char *szName, bool fOwnPal, bool fNoErrIfNotFound)
+bool C4Surface::LoadAny(C4Group &hGroup, const char *szName, bool fOwnPal, bool fNoErrIfNotFound, int iFlags)
 {
 	// Entry name
 	char szFilename[_MAX_FNAME+1];
@@ -43,11 +43,11 @@ bool C4Surface::LoadAny(C4Group &hGroup, const char *szName, bool fOwnPal, bool 
 		}
 	}
 	// Load surface
-	return Load(hGroup,szFilename,fOwnPal,fNoErrIfNotFound);
+	return Load(hGroup,szFilename,fOwnPal,fNoErrIfNotFound,iFlags);
 }
 
 
-bool C4Surface::LoadAny(C4GroupSet &hGroupset, const char *szName, bool fOwnPal, bool fNoErrIfNotFound)
+bool C4Surface::LoadAny(C4GroupSet &hGroupset, const char *szName, bool fOwnPal, bool fNoErrIfNotFound, int iFlags)
 {
 	// Entry name
 	char szFilename[_MAX_FNAME+1];
@@ -70,10 +70,10 @@ bool C4Surface::LoadAny(C4GroupSet &hGroupset, const char *szName, bool fOwnPal,
 		pGroup = hGroupset.FindEntry(szFilename);
 	if (!pGroup) return false;
 	// Load surface
-	return Load(*pGroup,szFilename,fOwnPal,fNoErrIfNotFound);
+	return Load(*pGroup,szFilename,fOwnPal,fNoErrIfNotFound,iFlags);
 }
 
-bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrIfNotFound)
+bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrIfNotFound, int iFlags)
 {
 	int ScaleToSet = 1;
 	// Image is scaled?
@@ -123,7 +123,7 @@ bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrI
 		if (!fNoErrIfNotFound) LogF("%s: %s%c%s", LoadResStr("IDS_PRC_FILENOTFOUND"), hGroup.GetFullName().getData(), (char) DirectorySeparator, szFilename);
 		return false;
 	}
-	bool fSuccess = Read(hGroup, GetExtension(szFilename));
+	bool fSuccess = Read(hGroup, GetExtension(szFilename), iFlags);
 	// loading error? log!
 	if (!fSuccess)
 		LogF("%s: %s%c%s", LoadResStr("IDS_ERR_NOFILE"), hGroup.GetFullName().getData(), (char) DirectorySeparator, szFilename);
@@ -133,21 +133,21 @@ bool C4Surface::Load(C4Group &hGroup, const char *szFilename, bool, bool fNoErrI
 	return fSuccess;
 }
 
-bool C4Surface::Read(CStdStream &hGroup, const char * extension)
+bool C4Surface::Read(CStdStream &hGroup, const char * extension, int iFlags)
 {
 	// determine file type by file extension and load accordingly
 	if (SEqualNoCase(extension, "png"))
-		return ReadPNG(hGroup);
+		return ReadPNG(hGroup, iFlags);
 	else if (SEqualNoCase(extension, "jpeg")
 	         || SEqualNoCase(extension, "jpg"))
-		return ReadJPEG(hGroup);
+		return ReadJPEG(hGroup, iFlags);
 	else if (SEqualNoCase(extension, "bmp"))
-		return ReadBMP(hGroup);
+		return ReadBMP(hGroup, iFlags);
 	else
 		return false;
 }
 
-bool C4Surface::ReadPNG(CStdStream &hGroup)
+bool C4Surface::ReadPNG(CStdStream &hGroup, int iFlags)
 {
 	// create mem block
 	int iSize=hGroup.AccessedEntrySize();
@@ -162,7 +162,7 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 	// abort if loading wasn't successful
 	if (!fSuccess) return false;
 	// create surface(s) - do not create an 8bit-buffer!
-	if (!Create(png.iWdt, png.iHgt)) return false;
+	if (!Create(png.iWdt, png.iHgt, false, 0, iFlags)) return false;
 	// lock for writing data
 	if (!Lock()) return false;
 	if (textures.empty())
@@ -178,7 +178,7 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 			C4TexRef *pTexRef = &textures[tY*iTexX + tX];
 			if (!pTexRef->Lock()) continue;
 			// At the edges, not the whole texture is used
-			int maxY = Min(iTexSize, Hgt - tY * iTexSize), maxX = Min(iTexSize, Wdt - tX * iTexSize);
+			int maxY = std::min(iTexSize, Hgt - tY * iTexSize), maxX = std::min(iTexSize, Wdt - tX * iTexSize);
 			for (int iY = 0; iY < maxY; ++iY)
 			{
 				// The global, not texture-relative position
@@ -187,7 +187,6 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 				if (byBytesPP == 4 && png.iClrType == PNG_COLOR_TYPE_RGB_ALPHA)
 				{
 					// Optimize the easy case of a png in the same format as the display
-					//assert (png.iPixSize == 4);
 					// 32 bit
 					DWORD *pPix=(DWORD *) (((char *) pTexRef->texLock.pBits) + iY * pTexRef->texLock.Pitch);
 					memcpy (pPix, png.GetRow(rY) + tX * iTexSize, maxX * 4);
@@ -225,7 +224,7 @@ bool C4Surface::ReadPNG(CStdStream &hGroup)
 	return fSuccess;
 }
 
-bool C4Surface::SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha, bool fApplyGamma, bool fSaveOverlayOnly)
+bool C4Surface::SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha, bool fSaveOverlayOnly)
 {
 	// Using temporary file at C4Group temp path
 	char szTemp[_MAX_PATH+1];
@@ -233,7 +232,7 @@ bool C4Surface::SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha
 	SAppend(GetFilename(szFilename),szTemp);
 	MakeTempFilename(szTemp);
 	// Save to temporary file
-	if (!C4Surface::SavePNG(szTemp, fSaveAlpha, fApplyGamma, fSaveOverlayOnly)) return false;
+	if (!C4Surface::SavePNG(szTemp, fSaveAlpha, fSaveOverlayOnly, false)) return false;
 	// Move temp file to group
 	if (!hGroup.Move(szTemp,GetFilename(szFilename))) return false;
 	// Success
@@ -285,7 +284,7 @@ static boolean fill_input_buffer (j_decompress_ptr cinfo)
 	// The doc says to give fake end-of-inputs if there is no more data
 	cinfo->src->next_input_byte = &end_of_input;
 	cinfo->src->bytes_in_buffer = 1;
-	return true;
+	return (boolean)true;
 }
 static void skip_input_data (j_decompress_ptr cinfo, long num_bytes)
 {
@@ -298,7 +297,7 @@ static void skip_input_data (j_decompress_ptr cinfo, long num_bytes)
 	}
 }
 
-bool C4Surface::ReadJPEG(CStdStream &hGroup)
+bool C4Surface::ReadJPEG(CStdStream &hGroup, int iFlags)
 {
 	// create mem block
 	size_t size=hGroup.AccessedEntrySize();
@@ -336,14 +335,14 @@ bool C4Surface::ReadJPEG(CStdStream &hGroup)
 	blub.term_source = jpeg_noop;
 
 	// a missing image is an error
-	jpeg_read_header(&cinfo, true);
+	jpeg_read_header(&cinfo, (boolean)true);
 
 	// Let libjpeg convert for us
 	cinfo.out_color_space = JCS_RGB;
 	jpeg_start_decompress(&cinfo);
 
 	// create surface(s) - do not create an 8bit-buffer!
-	if (!Create(cinfo.output_width, cinfo.output_height)) return false;
+	if (!Create(cinfo.output_width, cinfo.output_height, false, 0, iFlags)) return false;
 	// JSAMPLEs per row in output buffer
 	row_stride = cinfo.output_width * cinfo.output_components;
 	// Make a one-row-high sample array that will go away at jpeg_destroy_decompress
@@ -376,9 +375,9 @@ bool C4Surface::ReadJPEG(CStdStream &hGroup)
 
 #else // ifndef USE_CONSOLE
 
-bool C4Surface::ReadJPEG(CStdStream &hGroup) {
+bool C4Surface::ReadJPEG(CStdStream &, int) {
 	// Dummy surface
-	if (!Create(1, 1)) return false;
+	if (!Create(1, 1, false, 1, 0)) return false;
 	return true;
 }
 

@@ -32,6 +32,7 @@
 #include <C4GraphicsSystem.h>
 #include <C4Log.h>
 #include <C4MessageInput.h>
+#include <C4ScriptGuiWindow.h>
 #include <C4MouseControl.h>
 #include <C4Player.h>
 #include <C4PlayerList.h>
@@ -43,10 +44,10 @@
 #include <C4FoW.h>
 
 // undocumented!
-static bool FnIncinerateLandscape(C4PropList * _this, long iX, long iY)
+static bool FnIncinerateLandscape(C4PropList * _this, long iX, long iY, long caused_by_plr)
 {
 	if (Object(_this)) { iX += Object(_this)->GetX(); iY += Object(_this)->GetY(); }
-	return !!::Landscape.Incinerate(iX, iY);
+	return !!::Landscape.Incinerate(iX, iY, caused_by_plr);
 }
 
 static C4Void FnSetGravity(C4PropList * _this, long iGravity)
@@ -249,6 +250,7 @@ static bool FnCheckConstructionSite(C4PropList * _this, C4PropList * PropList, i
 C4FindObject *CreateCriterionsFromPars(C4Value *pPars, C4FindObject **pFOs, C4SortObject **pSOs, const C4Object *context)
 {
 	int i, iCnt = 0, iSortCnt = 0;
+	bool has_layer_check = false;
 	// Read all parameters
 	for (i = 0; i < C4AUL_MAX_Par; i++)
 	{
@@ -257,7 +259,7 @@ C4FindObject *CreateCriterionsFromPars(C4Value *pPars, C4FindObject **pFOs, C4So
 		if (!Data) break;
 		// Construct
 		C4SortObject *pSO = NULL;
-		C4FindObject *pFO = C4FindObject::CreateByValue(Data, pSOs ? &pSO : NULL, context);
+		C4FindObject *pFO = C4FindObject::CreateByValue(Data, pSOs ? &pSO : NULL, context, &has_layer_check);
 		// Add FindObject
 		if (pFO)
 		{
@@ -274,6 +276,11 @@ C4FindObject *CreateCriterionsFromPars(C4Value *pPars, C4FindObject **pFOs, C4So
 	{
 		for (i = 0; i < iSortCnt; ++i) delete pSOs[i];
 		return NULL;
+	}
+	// Implicit layer check
+	if (context && !has_layer_check)
+	{
+		pFOs[iCnt++] = new C4FindObjectLayer(context->Layer);
 	}
 	// create sort criterion
 	C4SortObject *pSO = NULL;
@@ -297,11 +304,11 @@ C4FindObject *CreateCriterionsFromPars(C4Value *pPars, C4FindObject **pFOs, C4So
 static C4Value FnObjectCount(C4PropList * _this, C4Value *pPars)
 {
 	// Create FindObject-structure
-	C4FindObject *pFOs[C4AUL_MAX_Par];
+	C4FindObject *pFOs[C4AUL_MAX_Par+1]; // +1 array element to include space for implicit layer check
 	C4FindObject *pFO = CreateCriterionsFromPars(pPars, pFOs, NULL, Object(_this));
 	// Error?
 	if (!pFO)
-		throw new C4AulExecError("ObjectCount: No valid search criterions supplied");
+		throw C4AulExecError("ObjectCount: No valid search criterions supplied");
 	// Search
 	int32_t iCnt = pFO->Count(::Objects, ::Objects.Sectors);
 	// Free
@@ -313,12 +320,12 @@ static C4Value FnObjectCount(C4PropList * _this, C4Value *pPars)
 static C4Value FnFindObject(C4PropList * _this, C4Value *pPars)
 {
 	// Create FindObject-structure
-	C4FindObject *pFOs[C4AUL_MAX_Par];
+	C4FindObject *pFOs[C4AUL_MAX_Par]; // +1 array element to include space for implicit layer check
 	C4SortObject *pSOs[C4AUL_MAX_Par];
 	C4FindObject *pFO = CreateCriterionsFromPars(pPars, pFOs, pSOs, Object(_this));
 	// Error?
 	if (!pFO)
-		throw new C4AulExecError("FindObject: No valid search criterions supplied");
+		throw C4AulExecError("FindObject: No valid search criterions supplied");
 	// Search
 	C4Object *pObj = pFO->Find(::Objects, ::Objects.Sectors);
 	// Free
@@ -330,12 +337,12 @@ static C4Value FnFindObject(C4PropList * _this, C4Value *pPars)
 static C4Value FnFindObjects(C4PropList * _this, C4Value *pPars)
 {
 	// Create FindObject-structure
-	C4FindObject *pFOs[C4AUL_MAX_Par];
+	C4FindObject *pFOs[C4AUL_MAX_Par]; // +1 array element to include space for implicit layer check
 	C4SortObject *pSOs[C4AUL_MAX_Par];
 	C4FindObject *pFO = CreateCriterionsFromPars(pPars, pFOs, pSOs, Object(_this));
 	// Error?
 	if (!pFO)
-		throw new C4AulExecError("FindObjects: No valid search criterions supplied");
+		throw C4AulExecError("FindObjects: No valid search criterions supplied");
 	// Search
 	C4ValueArray *pResult = pFO->FindMany(::Objects, ::Objects.Sectors);
 	// Free
@@ -349,7 +356,7 @@ static bool FnInsertMaterial(C4PropList * _this, long mat, long x, long y, long 
 	if (Object(_this)) { x+=Object(_this)->GetX(); y+=Object(_this)->GetY(); }
 	int32_t insert_x=x, insert_y=y;
 	if (!::Landscape.InsertMaterial(mat,&insert_x,&insert_y,vx,vy)) return false;
-	// output insertion position if desired
+	// output insertion position if desired (may be out of landscape range)
 	if (insert_position && !insert_position->IsFrozen())
 	{
 		insert_position->SetProperty(P_X, C4VInt(insert_x));
@@ -387,12 +394,32 @@ static long FnGetMaterial(C4PropList * _this, long x, long y)
 	return GBackMat(x,y);
 }
 
+static long FnGetBackMaterial(C4PropList * _this, long x, long y)
+{
+	if (Object(_this)) { x+=Object(_this)->GetX(); y+=Object(_this)->GetY(); }
+	return ::Landscape.GetBackMat(x, y);
+}
+
 static C4String *FnGetTexture(C4PropList * _this, long x, long y)
 {
 	if (Object(_this)) { x+=Object(_this)->GetX(); y+=Object(_this)->GetY(); }
 
 	// Get texture
 	int32_t iTex = PixCol2Tex(GBackPix(x, y));
+	if (!iTex) return NULL;
+	// Get material-texture mapping
+	const C4TexMapEntry *pTex = ::TextureMap.GetEntry(iTex);
+	if (!pTex) return NULL;
+	// Return tex name
+	return String(pTex->GetTextureName());
+}
+
+static C4String *FnGetBackTexture(C4PropList * _this, long x, long y)
+{
+	if (Object(_this)) { x+=Object(_this)->GetX(); y+=Object(_this)->GetY(); }
+
+	// Get texture
+	int32_t iTex = PixCol2Tex(::Landscape.GetBackPix(x, y));
 	if (!iTex) return NULL;
 	// Get material-texture mapping
 	const C4TexMapEntry *pTex = ::TextureMap.GetEntry(iTex);
@@ -442,7 +469,7 @@ static bool FnGBackLiquid(C4PropList * _this, long x, long y)
 static bool FnGBackSky(C4PropList * _this, long x, long y)
 {
 	if (Object(_this)) { x+=Object(_this)->GetX(); y+=Object(_this)->GetY(); }
-	return !GBackIFT(x, y);
+	return Landscape.GetBackPix(x, y) == 0;
 }
 
 static long FnExtractMaterialAmount(C4PropList * _this, long x, long y, long mat, long amount, bool distant_first)
@@ -465,7 +492,7 @@ static C4Void FnBlastFree(C4PropList * _this, long iX, long iY, long iLevel, Nil
 	return C4Void();
 }
 
-static bool FnSoundAt(C4PropList * _this, C4String *szSound, long iX, long iY, Nillable<long> iLevel, Nillable<long> iAtPlayer, long iCustomFalloffDistance)
+static bool FnSoundAt(C4PropList * _this, C4String *szSound, long iX, long iY, Nillable<long> iLevel, Nillable<long> iAtPlayer, long iCustomFalloffDistance, long iPitch, C4PropList *modifier_props)
 {
 	// play here?
 	if (!iAtPlayer.IsNil())
@@ -483,6 +510,12 @@ static bool FnSoundAt(C4PropList * _this, C4String *szSound, long iX, long iY, N
 	// default sound level
 	if (iLevel.IsNil() || iLevel>100)
 		iLevel=100;
+	// modifier from prop list
+	C4SoundModifier *modifier;
+	if (modifier_props)
+		modifier = Application.SoundSystem.Modifiers.Get(modifier_props, true);
+	else
+		modifier = NULL;
 	// target object
 	C4Object *pObj = Object(_this);
 	if (pObj)
@@ -490,12 +523,12 @@ static bool FnSoundAt(C4PropList * _this, C4String *szSound, long iX, long iY, N
 		iX += pObj->GetX();
 		iY += pObj->GetY();
 	}
-	StartSoundEffectAt(FnStringPar(szSound),iX,iY,iLevel,iCustomFalloffDistance);
+	StartSoundEffectAt(FnStringPar(szSound), iX, iY, iLevel, iCustomFalloffDistance, iPitch, modifier);
 	// always return true (network safety!)
 	return true;
 }
 
-static bool FnSound(C4PropList * _this, C4String *szSound, bool fGlobal, Nillable<long> iLevel, Nillable<long> iAtPlayer, long iLoop, long iCustomFalloffDistance)
+static bool FnSound(C4PropList * _this, C4String *szSound, bool fGlobal, Nillable<long> iLevel, Nillable<long> iAtPlayer, long iLoop, long iCustomFalloffDistance, long iPitch, C4PropList *modifier_props)
 {
 	// play here?
 	if (!iAtPlayer.IsNil())
@@ -513,31 +546,84 @@ static bool FnSound(C4PropList * _this, C4String *szSound, bool fGlobal, Nillabl
 	// default sound level
 	if (iLevel.IsNil() || iLevel>100)
 		iLevel=100;
+	// modifier from prop list
+	C4SoundModifier *modifier;
+	if (modifier_props)
+		modifier = Application.SoundSystem.Modifiers.Get(modifier_props, true);
+	else
+		modifier = NULL;
 	// target object
 	C4Object *pObj = NULL;
 	if (!fGlobal) pObj = Object(_this);
-	// already playing?
-	if (iLoop >= 0 && GetSoundInstance(FnStringPar(szSound), pObj))
-		return false;
-	// try to play effect
+	// play/stop?
 	if (iLoop >= 0)
-		StartSoundEffect(FnStringPar(szSound),!!iLoop,iLevel,pObj, iCustomFalloffDistance);
+	{
+		// already playing?
+		C4SoundInstance *inst = GetSoundInstance(FnStringPar(szSound), pObj);
+		if (inst)
+		{
+			// then just update parameters
+			SoundUpdate(inst, iLevel, iPitch);
+		}
+		else
+		{
+			// try to play effect
+			StartSoundEffect(FnStringPar(szSound), !!iLoop, iLevel, pObj, iCustomFalloffDistance, iPitch, modifier);
+		}
+	}
 	else
-		StopSoundEffect(FnStringPar(szSound),pObj);
+	{
+		StopSoundEffect(FnStringPar(szSound), pObj);
+	}
 	// always return true (network safety!)
 	return true;
 }
 
-static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop, long iFadeTime_ms)
+static bool FnChangeSoundModifier(C4PropList * _this, C4PropList *modifier_props, bool release)
+{
+	// internal function to be used by sound library: Updates sound modifier
+	C4SoundModifier *modifier = Application.SoundSystem.Modifiers.Get(modifier_props, false);
+	// modifier not found. May be due to savegame resume.
+	// In that case, creation/updates will happen automatically next time Sound() is called
+	// always return true for sync safety because the internal C4SoundModifierList is not synchronized
+	if (!modifier) return true;
+	if (release)
+		modifier->Release();
+	else
+		modifier->Update();
+	return true;
+}
+
+static bool FnSetGlobalSoundModifier(C4PropList * _this, C4PropList *modifier_props, Nillable<long> at_player)
+{
+	// set modifier to be applied to all future sounds
+	if (at_player.IsNil())
+	{
+		// no player given: Global modifier for all players.
+		Game.SetGlobalSoundModifier(modifier_props);
+	}
+	else
+	{
+		// modifier for all viewports of a player
+		C4Player *plr = ::Players.Get(at_player);
+		if (!plr) return false;
+		plr->SetSoundModifier(modifier_props);
+	}
+	// always true on valid params for sync safety
+	return true;
+}
+
+static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop, long iFadeTime_ms, long max_resume_time_ms)
 {
 	bool success;
+	if (max_resume_time_ms < 0) return false; // Safety
 	if (!szSongname)
 	{
 		success = Application.MusicSystem.Stop();
 	}
 	else
 	{
-		success = Application.MusicSystem.Play(FnStringPar(szSongname), !!fLoop, iFadeTime_ms);
+		success = Application.MusicSystem.Play(FnStringPar(szSongname), !!fLoop, iFadeTime_ms, double(max_resume_time_ms)/1000.0);
 	}
 	if (::Control.SyncMode()) return true;
 	return success;
@@ -545,12 +631,13 @@ static bool FnMusic(C4PropList * _this, C4String *szSongname, bool fLoop, long i
 
 static long FnMusicLevel(C4PropList * _this, long iLevel)
 {
-	Game.SetMusicLevel(iLevel);
-	return Application.MusicSystem.SetVolume(iLevel);
+	return ::Application.MusicSystem.SetGameMusicLevel(iLevel);
 }
 
-static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<long> iAtPlayer, bool fForceSwitch, long iFadeTime_ms)
+static long FnSetPlayList(C4PropList * _this, const C4Value & playlist_data, Nillable<long> iAtPlayer, bool fForceSwitch, long iFadeTime_ms, long max_resume_time_ms)
 {
+	// Safety
+	if (max_resume_time_ms < 0) return 0;
 	// If a player number is provided, set play list for clients where given player is local only
 	if (!iAtPlayer.IsNil() && iAtPlayer != NO_OWNER)
 	{
@@ -558,9 +645,25 @@ static long FnSetPlayList(C4PropList * _this, C4String *szPlayList, Nillable<lon
 		if (!at_plr) return 0;
 		if (!at_plr->LocalControl) return 0;
 	}
+	// Playlist might be a string for the new playlist, a proplist with more info, or nil to reset the playlist
+	C4String * szPlayList = playlist_data.getStr();
+	C4PropList *playlist_props = NULL;
+	if (!szPlayList)
+	{
+		playlist_props = playlist_data.getPropList();
+		if (playlist_props)
+		{
+			szPlayList = playlist_props->GetPropertyStr(P_PlayList);
+			// Update playlist properties
+			C4Value val;
+			if (playlist_props->GetProperty(P_MusicBreakMin, &val)) ::Application.MusicSystem.SetMusicBreakMin(val.getInt());
+			if (playlist_props->GetProperty(P_MusicBreakMax, &val)) ::Application.MusicSystem.SetMusicBreakMax(val.getInt());
+			if (playlist_props->GetProperty(P_MusicBreakChance, &val)) ::Application.MusicSystem.SetMusicBreakChance(val.getInt());
+			if (playlist_props->GetProperty(P_MusicMaxPositionMemory, &val)) ::Application.MusicSystem.SetMusicMaxPositionMemory(val.getInt());
+		}
+	}
 	// Set playlist; count entries
-	long iFilesInPlayList = Application.MusicSystem.SetPlayList(FnStringPar(szPlayList), fForceSwitch, iFadeTime_ms);
-	Game.PlayList.Copy(FnStringPar(szPlayList));
+	long iFilesInPlayList = ::Application.MusicSystem.SetPlayList(FnStringPar(szPlayList), fForceSwitch, iFadeTime_ms, double(max_resume_time_ms)/1000.0f);
 	// network/record/replay: return 0 for sync reasons
 	if (::Control.SyncMode()) return 0;
 	return iFilesInPlayList;
@@ -580,7 +683,7 @@ static bool FnGainMissionAccess(C4PropList * _this, C4String *szPassword)
 
 static C4Value FnPlayerMessage(C4PropList * _this, C4Value * Pars)
 {
-	if (!Object(_this)) throw new NeedObjectContext("PlayerMessage");
+	if (!Object(_this)) throw NeedObjectContext("PlayerMessage");
 	int iPlayer = Pars[0].getInt();
 	C4String * szMessage = Pars[1].getStr();
 	if (!szMessage) return C4VBool(false);
@@ -606,7 +709,7 @@ static C4Value FnPlayerMessage(C4PropList * _this, C4Value * Pars)
 
 static C4Value FnMessage(C4PropList * _this, C4Value * Pars)
 {
-	if (!Object(_this)) throw new NeedObjectContext("Message");
+	if (!Object(_this)) throw NeedObjectContext("Message");
 	C4String * szMessage = Pars[0].getStr();
 	if (!szMessage) return C4VBool(false);
 	StdStrBuf buf;
@@ -632,7 +735,7 @@ static C4Value FnMessage(C4PropList * _this, C4Value * Pars)
 // undocumented!
 static C4Value FnAddMessage(C4PropList * _this, C4Value * Pars)
 {
-	if (!Object(_this)) throw new NeedObjectContext("AddMessage");
+	if (!Object(_this)) throw NeedObjectContext("AddMessage");
 	C4String * szMessage = Pars[0].getStr();
 	if (!szMessage) return C4VBool(false);
 
@@ -646,12 +749,23 @@ static long FnMaterial(C4PropList * _this, C4String *mat_name)
 	return ::MaterialMap.Get(FnStringPar(mat_name));
 }
 
-C4Object* FnPlaceVegetation(C4PropList * _this, C4PropList * Def, long iX, long iY, long iWdt, long iHgt, long iGrowth)
+C4Object* FnPlaceVegetation(C4PropList * _this, C4PropList * Def, long iX, long iY, long iWdt, long iHgt, long iGrowth, C4PropList * shape)
 {
-	// Local call: relative coordinates
-	if (Object(_this)) { iX+=Object(_this)->GetX(); iY+=Object(_this)->GetY(); }
-	// Place vegetation
-	return Game.PlaceVegetation(Def,iX,iY,iWdt,iHgt,iGrowth);
+	if (shape)
+	{
+		// New-style call with scripted shape
+		C4PropList *out_pos = C4PropList::New(NULL);
+		C4Value vout_pos = C4VPropList(out_pos);
+		return Game.PlaceVegetation(Def, iX, iY, iWdt, iHgt, iGrowth, shape, out_pos);
+	}
+	else
+	{
+		// Call in old-style shape
+		// Local call: relative coordinates
+		if (Object(_this)) { iX += Object(_this)->GetX(); iY += Object(_this)->GetY(); }
+		// Place vegetation
+		return Game.PlaceVegetation(Def, iX, iY, iWdt, iHgt, iGrowth, NULL, NULL);
+	}
 }
 
 C4Object* FnPlaceAnimal(C4PropList * _this, C4PropList * Def)
@@ -687,10 +801,10 @@ static bool FnSetHostility(C4PropList * _this, long iPlr, long iPlr2, bool fHost
 	return true;
 }
 
-static bool FnSetPlrView(C4PropList * _this, long iPlr, C4Object *tobj)
+static bool FnSetPlrView(C4PropList * _this, long iPlr, C4Object *tobj, bool immediate_position)
 {
 	if (!ValidPlr(iPlr)) return false;
-	::Players.Get(iPlr)->SetViewMode(C4PVM_Target,tobj);
+	::Players.Get(iPlr)->SetViewMode(C4PVM_Target, tobj, immediate_position);
 	return true;
 }
 
@@ -701,10 +815,10 @@ static long FnGetPlrViewMode(C4PropList * _this, long iPlr)
 	return ::Players.Get(iPlr)->ViewMode;
 }
 
-static C4Void FnResetCursorView(C4PropList * _this, long plr)
+static C4Void FnResetCursorView(C4PropList * _this, long plr, bool immediate_position)
 {
 	C4Player *pplr = ::Players.Get(plr);
-	if (pplr) pplr->ResetCursorView();
+	if (pplr) pplr->ResetCursorView(immediate_position);
 	return C4Void();
 }
 
@@ -1349,7 +1463,6 @@ static bool FnGetMissionAccess(C4PropList * _this, C4String *strMissionAccess)
 	if (::Control.SyncMode())
 		Log("Warning: using GetMissionAccess may cause desyncs when playing records!");
 
-	if (!Config.General.MissionAccess) return false;
 	return SIsModule(Config.General.MissionAccess, FnStringPar(strMissionAccess));
 }
 
@@ -1502,7 +1615,7 @@ C4Value GetValByStdCompiler(const char *strEntry, const char *strSection, int iE
 static C4Value FnGetDefCoreVal(C4PropList * _this, C4String * strEntry, C4String * strSection, int iEntryNr)
 {
 	if (!_this || !_this->GetDef())
-		throw new NeedNonGlobalContext("GetDefCoreVal");
+		throw NeedNonGlobalContext("GetDefCoreVal");
 
 	return GetValByStdCompiler(FnStringPar(strEntry), strSection ? strSection->GetCStr() : NULL,
 			iEntryNr, mkNamingAdapt(*_this->GetDef(), "DefCore"));
@@ -1893,15 +2006,18 @@ static long FnReloadParticle(C4PropList * _this, C4String *szParticleName)
 	return Game.ReloadParticle(FnStringPar(szParticleName));
 }
 
-static bool FnSetGamma(C4PropList * _this, long dwClr1, long dwClr2, long dwClr3, long iRampIndex)
+static bool FnSetGamma(C4PropList * _this, long iRed, long iGreen, long iBlue, long iRampIndex)
 {
-	pDraw->SetGamma(dwClr1, dwClr2, dwClr3, iRampIndex);
+	pDraw->SetGamma(float(iRed) / 100,
+	                float(iGreen) / 100,
+	                float(iBlue) / 100,
+	                iRampIndex);
 	return true;
 }
 
 static bool FnResetGamma(C4PropList * _this, long iRampIndex)
 {
-	pDraw->SetGamma(0x000000, 0x808080, 0xffffff, iRampIndex);
+	::Game.SetDefaultGamma();
 	return true;
 }
 
@@ -1914,14 +2030,20 @@ struct PathInfo
 	long ilen;
 };
 
-static bool SumPathLength(int32_t iX, int32_t iY, intptr_t iTransferTarget, intptr_t ipPathInfo)
+struct SumPathLength
 {
-	PathInfo *pPathInfo = (PathInfo*) ipPathInfo;
-	pPathInfo->ilen += Distance(pPathInfo->ilx, pPathInfo->ily, iX, iY);
-	pPathInfo->ilx = iX;
-	pPathInfo->ily = iY;
-	return true;
-}
+	explicit SumPathLength(PathInfo *info) : pPathInfo(info) {}
+	bool operator()(int32_t iX, int32_t iY, C4Object *TransferTarget)
+	{
+		pPathInfo->ilen += Distance(pPathInfo->ilx, pPathInfo->ily, iX, iY);
+		pPathInfo->ilx = iX;
+		pPathInfo->ily = iY;
+		return true;
+	}
+
+private:
+	PathInfo *pPathInfo;
+};
 
 static Nillable<long> FnGetPathLength(C4PropList * _this, long iFromX, long iFromY, long iToX, long iToY)
 {
@@ -1929,7 +2051,7 @@ static Nillable<long> FnGetPathLength(C4PropList * _this, long iFromX, long iFro
 	PathInfo.ilx = iFromX;
 	PathInfo.ily = iFromY;
 	PathInfo.ilen = 0;
-	if (!Game.PathFinder.Find(iFromX, iFromY, iToX, iToY, &SumPathLength, (intptr_t) &PathInfo))
+	if (!Game.PathFinder.Find(iFromX, iFromY, iToX, iToY, SumPathLength(&PathInfo)))
 		return C4Void();
 	return PathInfo.ilen + Distance(PathInfo.ilx, PathInfo.ily, iToX, iToY);
 }
@@ -1952,10 +2074,29 @@ static const int32_t DMQ_Sky = 0, // draw w/ sky IFT
                      DMQ_Sub = 1, // draw w/ tunnel IFT
                      DMQ_Bridge = 2; // draw only over materials you can bridge over
 
-static bool FnDrawMaterialQuad(C4PropList * _this, C4String *szMaterial, long iX1, long iY1, long iX2, long iY2, long iX3, long iY3, long iX4, long iY4, int draw_mode)
+static bool FnDrawMaterialQuad(C4PropList * _this, C4String *szMaterial, long iX1, long iY1, long iX2, long iY2, long iX3, long iY3, long iX4, long iY4, const C4Value& draw_mode)
 {
 	const char *szMat = FnStringPar(szMaterial);
-	return !! ::Landscape.DrawQuad(iX1, iY1, iX2, iY2, iX3, iY3, iX4, iY4, szMat, draw_mode == DMQ_Sub, draw_mode==DMQ_Bridge);
+
+	const char *szBackMat = NULL;
+	bool fBridge = false;
+	if (draw_mode.GetType() == C4V_Int)
+	{
+		// Default behaviour: Default background material
+		const int draw_mode_value = draw_mode.getInt();
+		switch(draw_mode_value)
+		{
+		case DMQ_Sky: break;
+		case DMQ_Sub: szBackMat = "Tunnel"; break; // TODO: Go via DefaultBkgMat
+		case DMQ_Bridge: fBridge = true; break;
+		}
+	}
+	else if (draw_mode.GetType() == C4V_String)
+	{
+		szBackMat = FnStringPar(draw_mode.getStr());
+	}
+
+	return !! ::Landscape.DrawQuad(iX1, iY1, iX2, iY2, iX3, iY3, iX4, iY4, szMat, szBackMat, fBridge);
 }
 
 static bool FnSetFilmView(C4PropList * _this, long iToPlr)
@@ -2067,16 +2208,22 @@ static bool FnRemoveEffect(C4PropList * _this, C4String *psEffectName, C4Object 
 {
 	// evaluate parameters
 	const char *szEffect = FnStringPar(psEffectName);
-	// get effects
-	C4Effect *pEffect = pTarget ? pTarget->pEffects : Game.pGlobalEffects;
+	// if the user passed an effect, it can be used straight-away
+	C4Effect *pEffect = pEffect2;
+	// otherwise, the correct effect will be searched in the target's effects or in the global ones
+	if (!pEffect)
+	{
+		pEffect = pTarget ? pTarget->pEffects : Game.pGlobalEffects;
+		// the object has no effects attached, nothing to look for
+		if (!pEffect) return 0;
+		// name/wildcard given: find effect by name
+		if (szEffect && *szEffect)
+			pEffect = pEffect->Get(szEffect, 0);
+	}
+
+	// neither passed nor found - nothing to remove!
 	if (!pEffect) return 0;
-	// name/wildcard given: find effect by name
-	if (szEffect && *szEffect)
-		pEffect = pEffect->Get(szEffect, 0);
-	else
-		pEffect = pEffect2;
-	// effect found?
-	if (!pEffect) return 0;
+
 	// kill it
 	if (fDoNoCalls)
 		pEffect->SetDead();
@@ -2310,7 +2457,7 @@ static bool FnDoScoreboardShow(C4PropList * _this, long iChange, long iForPlr)
 		if (!pPlr->LocalControl) return true;
 	}
 	Game.Scoreboard.DoDlgShow(iChange, false);
-	return true; //Game.Scoreboard.ShouldBeShown();
+	return true;
 }
 
 static bool FnSortScoreboard(C4PropList * _this, long iByColID, bool fReverse)
@@ -2339,9 +2486,9 @@ static C4Void FnHideSettlementScoreInEvaluation(C4PropList * _this, bool fHide)
 
 static bool FnCustomMessage(C4PropList * _this, C4String *pMsg, C4Object *pObj, Nillable<long> iOwner, long iOffX, long iOffY, long dwClr, C4ID idDeco, C4PropList *pSrc, long dwFlags, long iHSize)
 {
-	// safeties
+	// safeties: for global messages pSrc needs to be object/definition. For object-local messages, any proplist is OK
 	if (pSrc)
-		if(!pSrc->GetDef() && !pSrc->GetObject() && !pSrc->GetPropertyPropList(P_Source)) return false;
+		if(!pSrc->GetDef() && !pSrc->GetObject() && !pSrc->GetPropertyPropList(P_Source) && !pObj) return false;
 	if (!pMsg) return false;
 	if (pObj && !pObj->Status) return false;
 	const char *szMsg = pMsg->GetCStr();
@@ -2353,11 +2500,11 @@ static bool FnCustomMessage(C4PropList * _this, C4String *pMsg, C4Object *pObj, 
 	uint32_t vpos = dwFlags & (C4GM_Top | C4GM_VCenter | C4GM_Bottom);
 	if (((hpos | (hpos-1)) + 1)>>1 != hpos)
 	{
-		throw new C4AulExecError("CustomMessage: Only one horizontal positioning flag allowed");
+		throw C4AulExecError("CustomMessage: Only one horizontal positioning flag allowed");
 	}
 	if (((vpos | (vpos-1)) + 1)>>1 != vpos)
 	{
-		throw new C4AulExecError("CustomMessage: Only one vertical positioning flag allowed");
+		throw C4AulExecError("CustomMessage: Only one vertical positioning flag allowed");
 	}
 	// message color
 	if (!dwClr) dwClr = 0xffffffff;
@@ -2381,10 +2528,66 @@ static bool FnCustomMessage(C4PropList * _this, C4String *pMsg, C4Object *pObj, 
 	return ::Messages.New(iType,sMsg,pObj,iOwner,iOffX,iOffY,(uint32_t)dwClr, idDeco, pSrc, dwFlags, iHSize);
 }
 
-/*static long FnSetSaturation(C4AulContext *ctx, long s)
-  {
-  return pDraw->SetSaturation(Clamp(s,0l,255l));
-  }*/
+static int FnGuiOpen(C4PropList * _this, C4PropList *menu)
+{
+	C4ScriptGuiWindow *window = new C4ScriptGuiWindow;
+
+	::Game.ScriptGuiRoot->AddChild(window);
+
+	if (!window->CreateFromPropList(menu, true))
+	{
+		::Game.ScriptGuiRoot->RemoveChild(window, false);
+		return 0;
+	}
+
+	return window->GetID();
+}
+
+static bool FnGuiUpdateTag(C4PropList * _this, C4String *tag, int32_t guiID, int32_t childID, C4Object *target)
+{
+	C4ScriptGuiWindow *window = ::Game.ScriptGuiRoot->GetChildByID(guiID);
+	if (!window) return false;
+	if (childID) // note: valid child IDs are always non-zero
+	{
+		C4ScriptGuiWindow *subwindow = window->GetSubWindow(childID, target);
+		if (!subwindow) return false;
+		subwindow->SetTag(tag);
+		return true;
+	}
+	window->SetTag(tag);
+	return true;
+}
+
+static bool FnGuiClose(C4PropList *_this, int32_t guiID, int32_t childID, C4Object *target)
+{
+	C4ScriptGuiWindow *window = ::Game.ScriptGuiRoot->GetChildByID(guiID);
+	if (!window) return false;
+	if (childID) // note: valid child IDs are always non-zero
+	{
+		C4ScriptGuiWindow *subwindow = window->GetSubWindow(childID, target);
+		if (!subwindow) return false;
+		subwindow->Close();
+		return true;
+	}
+	window->Close();
+	return true;
+}
+
+static bool FnGuiUpdate(C4PropList *_this, C4PropList *update, int32_t guiID, int32_t childID, C4Object *target)
+{
+	if (!update) return false;
+	C4ScriptGuiWindow *window = ::Game.ScriptGuiRoot->GetChildByID(guiID);
+	if (!window) return false;
+	if (childID) // note: valid child IDs are always non-zero
+	{
+		C4ScriptGuiWindow *subwindow = window->GetSubWindow(childID, target);
+		if (!subwindow) return false;
+		subwindow->CreateFromPropList(update, false, true);
+		return true;
+	}
+	window->CreateFromPropList(update, false, true);
+	return true;
+}
 
 // undocumented!
 static bool FnPauseGame(C4PropList * _this, bool fToggle)
@@ -2431,16 +2634,11 @@ static bool FnSetNextMission(C4PropList * _this, C4String *szNextMission, C4Stri
 	return true;
 }
 
-// undocumented!
 static long FnGetPlayerControlState(C4PropList * _this, long iPlr, long iControl)
 {
 	// get control set to check
 	C4PlayerControl *pCheckCtrl = NULL;
-	if (iPlr == NO_OWNER)
-	{
-		//pCheckCtrl = Game.GlobalPlayerControls;
-	}
-	else
+	if (iPlr != NO_OWNER)
 	{
 		C4Player *pPlr = ::Players.Get(iPlr);
 		if (pPlr)
@@ -2463,11 +2661,7 @@ static bool FnSetPlayerControlEnabled(C4PropList * _this, long iplr, long ctrl, 
 {
 	// get control set to check
 	C4PlayerControl *plrctrl = NULL;
-	if (iplr == NO_OWNER)
-	{
-		//plrctrl = Game.GlobalPlayerControls;
-	}
-	else
+	if (iplr != NO_OWNER)
 	{
 		C4Player *plr = ::Players.Get(iplr);
 		if (plr)
@@ -2488,11 +2682,7 @@ static bool FnGetPlayerControlEnabled(C4PropList * _this, long iplr, long ctrl)
 {
 	// get control set to check
 	C4PlayerControl *plrctrl = NULL;
-	if (iplr == NO_OWNER)
-	{
-		//plrctrl = Game.GlobalPlayerControls;
-	}
-	else
+	if (iplr != NO_OWNER)
 	{
 		C4Player *plr = ::Players.Get(iplr);
 		if (plr)
@@ -2526,6 +2716,12 @@ static int32_t FnGetStartupPlayerCount(C4PropList * _this)
 	return ::Game.StartupPlayerCount;
 }
 
+static int32_t FnGetStartupTeamCount(C4PropList * _this)
+{
+	// returns number of non-empty teams when game was initially started
+	return ::Game.StartupTeamCount;
+}
+
 static bool FnGainScenarioAchievement(C4PropList * _this, C4String *achievement_name, Nillable<long> avalue, Nillable<long> player, C4String *for_scenario)
 {
 	// safety
@@ -2546,7 +2742,7 @@ static bool FnGainScenarioAchievement(C4PropList * _this, C4String *achievement_
 			if (!plr->GainScenarioAchievement(achievement_name->GetCStr(), value, for_scenario ? for_scenario->GetCStr() : NULL))
 				result = false;
 	}
-	return true;
+	return result;
 }
 
 static long FnGetPXSCount(C4PropList * _this, Nillable<long> iMaterial, Nillable<long> iX0, Nillable<long> iY0, Nillable<long> iWdt, Nillable<long> iHgt)
@@ -2583,7 +2779,6 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	for (C4ScriptFnDef *pDef = &C4ScriptGameFnMap[0]; pDef->Identifier; pDef++)
 		new C4AulDefFunc(pEngine, pDef);
 #define F(f) AddFunc(pEngine, #f, Fn##f)
-//  AddFunc(pEngine, "SetSaturation", FnSetSaturation); //public: 0
 
 	AddFunc(pEngine, "GetX", FnGetX);
 	AddFunc(pEngine, "GetY", FnGetY);
@@ -2599,6 +2794,8 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "CheckConstructionSite", FnCheckConstructionSite);
 	AddFunc(pEngine, "Sound", FnSound);
 	AddFunc(pEngine, "SoundAt", FnSoundAt);
+	AddFunc(pEngine, "ChangeSoundModifier", FnChangeSoundModifier);
+	AddFunc(pEngine, "SetGlobalSoundModifier", FnSetGlobalSoundModifier);
 	AddFunc(pEngine, "Music", FnMusic);
 	AddFunc(pEngine, "MusicLevel", FnMusicLevel);
 	AddFunc(pEngine, "SetPlayList", FnSetPlayList);
@@ -2632,7 +2829,7 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "GetPlayerByIndex", FnGetPlayerByIndex);
 	AddFunc(pEngine, "EliminatePlayer", FnEliminatePlayer);
 	AddFunc(pEngine, "SurrenderPlayer", FnSurrenderPlayer);
-	AddFunc(pEngine, "FnGetLeagueScore", FnGetLeagueScore);
+	AddFunc(pEngine, "GetLeagueScore", FnGetLeagueScore);
 	AddFunc(pEngine, "SetLeaguePerformance", FnSetLeaguePerformance);
 	AddFunc(pEngine, "SetLeagueProgressData", FnSetLeagueProgressData);
 	AddFunc(pEngine, "GetLeagueProgressData", FnGetLeagueProgressData);
@@ -2642,7 +2839,9 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "SetCursor", FnSetCursor);
 	AddFunc(pEngine, "SetViewCursor", FnSetViewCursor);
 	AddFunc(pEngine, "GetMaterial", FnGetMaterial);
+	AddFunc(pEngine, "GetBackMaterial", FnGetBackMaterial);
 	AddFunc(pEngine, "GetTexture", FnGetTexture);
+	AddFunc(pEngine, "GetBackTexture", FnGetBackTexture);
 	AddFunc(pEngine, "GetAverageTextureColor", FnGetAverageTextureColor);
 	AddFunc(pEngine, "GetMaterialCount", FnGetMaterialCount);
 	AddFunc(pEngine, "GBackSolid", FnGBackSolid);
@@ -2726,6 +2925,10 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "ExtractMaterialAmount", FnExtractMaterialAmount);
 	AddFunc(pEngine, "GetEffectCount", FnGetEffectCount);
 	AddFunc(pEngine, "CustomMessage", FnCustomMessage);
+	AddFunc(pEngine, "GuiOpen", FnGuiOpen);
+	AddFunc(pEngine, "GuiUpdateTag", FnGuiUpdateTag);
+	AddFunc(pEngine, "GuiClose", FnGuiClose);
+	AddFunc(pEngine, "GuiUpdate", FnGuiUpdate);
 	AddFunc(pEngine, "PauseGame", FnPauseGame, false);
 	AddFunc(pEngine, "PathFree", FnPathFree);
 	AddFunc(pEngine, "PathFree2", FnPathFree2);
@@ -2735,6 +2938,7 @@ void InitGameFunctionMap(C4AulScriptEngine *pEngine)
 	AddFunc(pEngine, "GetPlayerControlEnabled", FnGetPlayerControlEnabled);
 	AddFunc(pEngine, "GetPlayerControlAssignment", FnGetPlayerControlAssignment);
 	AddFunc(pEngine, "GetStartupPlayerCount", FnGetStartupPlayerCount);
+	AddFunc(pEngine, "GetStartupTeamCount", FnGetStartupTeamCount);
 	AddFunc(pEngine, "PlayerObjectCommand", FnPlayerObjectCommand);
 	AddFunc(pEngine, "EditCursor", FnEditCursor);
 	AddFunc(pEngine, "GainScenarioAchievement", FnGainScenarioAchievement);
@@ -2846,6 +3050,8 @@ C4ScriptConstDef C4ScriptGameConstMap[]=
 	{ "C4FO_Func"                 ,C4V_Int,     C4FO_Func           },
 	{ "C4FO_Layer"                ,C4V_Int,     C4FO_Layer          },
 	{ "C4FO_InArray"              ,C4V_Int,     C4FO_InArray        },
+	{ "C4FO_Property"             ,C4V_Int,     C4FO_Property       },
+	{ "C4FO_AnyLayer"             ,C4V_Int,     C4FO_AnyLayer       },
 
 	{ "MD_DragSource"             ,C4V_Int,     C4MC_MD_DragSource  },
 	{ "MD_DropTarget"             ,C4V_Int,     C4MC_MD_DropTarget  },
@@ -2878,6 +3084,7 @@ C4ScriptConstDef C4ScriptGameConstMap[]=
 	{ "MSG_WidthRel"              ,C4V_Int,      C4GM_WidthRel },
 	{ "MSG_XRel"                  ,C4V_Int,      C4GM_XRel },
 	{ "MSG_YRel"                  ,C4V_Int,      C4GM_YRel },
+	{ "MSG_Zoom"                  ,C4V_Int,      C4GM_Zoom },
 
 	{ "C4PT_User"                 ,C4V_Int,      C4PT_User },
 	{ "C4PT_Script"               ,C4V_Int,      C4PT_Script },
@@ -2902,6 +3109,25 @@ C4ScriptConstDef C4ScriptGameConstMap[]=
 	{ "ATTACH_Back"               ,C4V_Int,      C4ATTACH_Back },
 	{ "ATTACH_MoveRelative"       ,C4V_Int,      C4ATTACH_MoveRelative },
 
+	// sound modifier type
+	{ "C4SMT_Reverb"              ,C4V_Int,      C4SoundModifier::C4SMT_Reverb },
+	{ "C4SMT_Echo"                ,C4V_Int,      C4SoundModifier::C4SMT_Echo },
+	{ "C4SMT_Equalizer"           ,C4V_Int,      C4SoundModifier::C4SMT_Equalizer },
+
+	{ "GUI_SetTag"               ,C4V_Int,      C4ScriptGuiWindowActionID::SetTag },
+	{ "GUI_Call"                 ,C4V_Int,      C4ScriptGuiWindowActionID::Call },
+	{ "GUI_GridLayout"           ,C4V_Int,      C4ScriptGuiWindowStyleFlag::GridLayout },
+	{ "GUI_VerticalLayout"       ,C4V_Int,      C4ScriptGuiWindowStyleFlag::VerticalLayout },
+	{ "GUI_TextVCenter"          ,C4V_Int,      C4ScriptGuiWindowStyleFlag::TextVCenter },
+	{ "GUI_TextHCenter"          ,C4V_Int,      C4ScriptGuiWindowStyleFlag::TextHCenter },
+	{ "GUI_TextRight"            ,C4V_Int,      C4ScriptGuiWindowStyleFlag::TextRight },
+	{ "GUI_TextBottom"           ,C4V_Int,      C4ScriptGuiWindowStyleFlag::TextBottom },
+	{ "GUI_TextTop"              ,C4V_Int,      C4ScriptGuiWindowStyleFlag::None }, // note that top and left are considered default
+	{ "GUI_TextLeft"             ,C4V_Int,      C4ScriptGuiWindowStyleFlag::None }, // they are only included for completeness
+	{ "GUI_FitChildren"          ,C4V_Int,      C4ScriptGuiWindowStyleFlag::FitChildren },
+	{ "GUI_Multiple"             ,C4V_Int,      C4ScriptGuiWindowStyleFlag::Multiple },
+	{ "GUI_IgnoreMouse"          ,C4V_Int,      C4ScriptGuiWindowStyleFlag::IgnoreMouse },
+	{ "GUI_NoCrop"               ,C4V_Int,      C4ScriptGuiWindowStyleFlag::NoCrop },
 	{ NULL, C4V_Nil, 0}
 };
 

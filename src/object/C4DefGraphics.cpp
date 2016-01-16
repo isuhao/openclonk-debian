@@ -86,7 +86,7 @@ bool C4DefGraphics::LoadBitmap(C4Group &hGroup, const char *szFilename, const ch
 	if (!szFilename) return false;
 	Type = TYPE_Bitmap; // will be reset to TYPE_None in Clear() if loading fails
 	Bmp.Bitmap = new C4Surface();
-	if (!Bmp.Bitmap->Load(hGroup, szFilename, false, true))
+	if (!Bmp.Bitmap->Load(hGroup, szFilename, false, true, C4SF_MipMap))
 	{
 		Clear();
 		return false;
@@ -98,7 +98,7 @@ bool C4DefGraphics::LoadBitmap(C4Group &hGroup, const char *szFilename, const ch
 		// Create additionmal bitmap
 		Bmp.BitmapClr=new C4Surface();
 		// if overlay-surface is present, load from that
-		if (szOverlay && Bmp.BitmapClr->Load(hGroup, szOverlay))
+		if (szOverlay && Bmp.BitmapClr->Load(hGroup, szOverlay, false, false, C4SF_MipMap))
 		{
 			// set as Clr-surface, also checking size
 			if (!Bmp.BitmapClr->SetAsClrByOwnerOf(Bmp.Bitmap))
@@ -125,7 +125,7 @@ bool C4DefGraphics::LoadBitmap(C4Group &hGroup, const char *szFilename, const ch
 	if (szNormal)
 	{
 		Bmp.BitmapNormal = new C4Surface();
-		if (Bmp.BitmapNormal->Load(hGroup, szNormal, false, true))
+		if (Bmp.BitmapNormal->Load(hGroup, szNormal, false, true, C4SF_MipMap))
 		{
 			// Normal map loaded. Sanity check and link.
 			if(Bmp.BitmapNormal->Wdt != Bmp.Bitmap->Wdt ||
@@ -172,6 +172,8 @@ bool C4DefGraphics::LoadMesh(C4Group &hGroup, const char* szFileName, StdMeshSke
 			Mesh = StdMeshLoader::LoadMeshBinary(buf, size, ::MeshMaterialManager, loader, hGroup.GetName());
 		}
 		delete[] buf;
+
+		Mesh->SetLabel(pDef->id.ToString());
 
 		// order submeshes
 		Mesh->PostInit();
@@ -234,7 +236,9 @@ bool C4DefGraphics::Load(C4Group &hGroup, StdMeshSkeletonLoader &loader, bool fC
 	}
 
 	// Try from Mesh first
-	if (!LoadMesh(hGroup, C4CFN_DefMesh, loader) && !LoadMesh(hGroup, C4CFN_DefMeshXml, loader) && !LoadBitmap(hGroup, C4CFN_DefGraphics, C4CFN_ClrByOwner, C4CFN_NormalMap, fColorByOwner)) return false;
+	if (!LoadMesh(hGroup, C4CFN_DefMesh, loader))
+		if(!LoadMesh(hGroup, C4CFN_DefMeshXml, loader))
+			LoadBitmap(hGroup, C4CFN_DefGraphics, C4CFN_ClrByOwner, C4CFN_NormalMap, fColorByOwner);
 
 	// load additional graphics
 	C4DefGraphics *pLastGraphics = this;
@@ -979,7 +983,7 @@ void C4GraphicsOverlay::Draw(C4TargetFacet &cgo, C4Object *pForObj, int32_t iByP
 			C4DrawTransform trf(Transform, offX, offY);
 			if (fZoomToShape)
 			{
-				float fZoom = Min<float>((float) pForObj->Shape.Wdt / Max<int>(fctBlit.Wdt,1), (float) pForObj->Shape.Hgt / Max<int>(fctBlit.Hgt,1));
+				float fZoom = std::min(pForObj->Shape.Wdt / std::max(fctBlit.Wdt, 1.0f), pForObj->Shape.Hgt / std::max(fctBlit.Hgt, 1.0f));
 				trf.ScaleAt(fZoom, fZoom, offX, offY);
 			}
 
@@ -993,7 +997,7 @@ void C4GraphicsOverlay::Draw(C4TargetFacet &cgo, C4Object *pForObj, int32_t iByP
 			C4DrawTransform trf(Transform, offX, offY);
 			if (fZoomToShape)
 			{
-				float fZoom = Min<float>((float) pForObj->Shape.Wdt / Max<int>(pDef->Shape.Wdt,1), (float) pForObj->Shape.Hgt / Max<int>(pDef->Shape.Hgt,1));
+				float fZoom = std::min((float)pForObj->Shape.Wdt / std::max(pDef->Shape.Wdt, 1), (float)pForObj->Shape.Hgt / std::max(pDef->Shape.Hgt, 1));
 				trf.ScaleAt(fZoom, fZoom,  offX, offY);
 			}
 

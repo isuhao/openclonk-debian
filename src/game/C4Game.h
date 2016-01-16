@@ -27,6 +27,10 @@
 #include <C4PlayerControl.h>
 #include <C4TransferZone.h>
 
+#include <memory>
+
+class C4ScriptGuiWindow;
+
 class C4Game
 {
 private:
@@ -83,10 +87,11 @@ public:
 	C4PlayerControlDefs PlayerControlDefs;
 	C4PlayerControlAssignmentSets PlayerControlUserAssignmentSets, PlayerControlDefaultAssignmentSets;
 	C4Scoreboard        Scoreboard;
-	C4Network2Stats *pNetworkStatistics; // may be NULL if no statistics are recorded
+	std::unique_ptr<C4Network2Stats> pNetworkStatistics; // may be NULL if no statistics are recorded
 	C4KeyboardInput &KeyboardInput;
-	C4FileMonitor *pFileMonitor;
-	C4GameSec1Timer *pSec1Timer;
+	std::unique_ptr<C4FileMonitor> pFileMonitor;
+	std::unique_ptr<C4GameSec1Timer> pSec1Timer;
+	C4Value            &GlobalSoundModifier; // contains proplist for sound modifier to be applied to all new sounds played
 
 	char CurrentScenarioSection[C4MaxName+1];
 	char ScenarioFilename[_MAX_PATH+1];
@@ -94,8 +99,9 @@ public:
 	char PlayerFilenames[20*_MAX_PATH+1];
 	char DefinitionFilenames[20*_MAX_PATH+1];
 	char DirectJoinAddress[_MAX_PATH+1];
-	C4Network2Reference *pJoinReference;
+	std::unique_ptr<C4Network2Reference> pJoinReference;
 	int32_t StartupPlayerCount;
+	int32_t StartupTeamCount;
 	int32_t FPS,cFPS;
 	int32_t HaltCount;
 	bool GameOver;
@@ -127,9 +133,7 @@ public:
 	bool PointersDenumerated; // (NoSave) set after object pointers have been denumerated
 	size_t StartupLogPos, QuitLogPos; // current log positions when game was last started and cleared
 	bool fQuitWithError; // if set, game shut down irregularly
-	int32_t iMusicLevel;      // scenario-defined music level
-	// current play list
-	StdCopyStrBuf PlayList;
+	// Show errors and allow debug commands?
 	bool DebugMode;
 	// next mission to be played after this one
 	StdCopyStrBuf NextMission, NextMissionText, NextMissionDesc;
@@ -166,12 +170,9 @@ public:
 	// Network
 	void Synchronize(bool fSavePlayerFiles);
 	void SyncClearance();
-	bool ReSync();
-	void SyncCheckFiles(); // check if files are in sync
 	// Editing
 	bool DropFile(const char *szFilename, float iX, float iY);
 	bool DropDef(C4ID id, float iX, float iY);
-	bool LoadDef(const char *szFilename);
 	bool ReloadFile(const char *szPath);
 	bool ReloadDef(C4ID id);
 	bool ReloadParticle(const char *szName);
@@ -200,20 +201,12 @@ public:
 	  float iX, float iY,
 	  DWORD category,
 	  float gui_x, float gui_y);
-	/* int32_t ObjectCount(C4ID id,
-	     int32_t x=0, int32_t y=0, int32_t wdt=0, int32_t hgt=0,
-	     DWORD ocf=OCF_All,
-	     const char *szAction=NULL, C4Object *pActionTarget=NULL,
-	     C4Object *pExclude=NULL,
-	     C4Object *pContainer=NULL,
-	                 int32_t iOwner=ANY_OWNER);*/
 	int32_t ObjectCount(C4ID id);
 	void CastObjects(C4ID id, C4Object *pCreator, int32_t num, int32_t level, int32_t tx, int32_t ty, int32_t iOwner=NO_OWNER, int32_t iController=NO_OWNER, C4ValueArray *out_objects=NULL);
-	C4Object *PlaceVegetation(C4PropList *def, int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt, int32_t iGrowth);
+	C4Object *PlaceVegetation(C4PropList *def, int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt, int32_t iGrowth, C4PropList *shape_proplist, C4PropList * out_pos_proplist);
 	C4Object *PlaceAnimal(C4PropList *def);
 
 	bool LoadScenarioSection(const char *szSection, DWORD dwFlags);
-	bool SaveDesc(C4Group &hGroup, bool fSaveGame=false, bool fReference=false, bool fLobby=false, bool fUnregistered=false, bool fRecord=false);
 
 	bool DrawTextSpecImage(C4Facet& fctTarget, const char *szSpec, class C4DrawTransform* pTransform, uint32_t dwClr=0xff);
 	float GetTextSpecImageAspect(const char* szSpec);
@@ -226,6 +219,7 @@ public:
 	bool InitPlayerControlUserSettings(); // merge player control default settings and config overloads into user setting
 	void SetDefaultGamma();
 
+	std::unique_ptr<C4ScriptGuiWindow> ScriptGuiRoot;
 protected:
 	void Default();
 	void InitInEarth();
@@ -250,13 +244,10 @@ protected:
 	bool InitNetworkFromAddress(const char *szAddress);
 	bool InitNetworkFromReference(const C4Network2Reference &Reference);
 	bool InitNetworkHost();
-	bool DoLobby();
-	bool PreInitControl();
 	bool InitControl();
 	bool InitScriptEngine();
 	bool LinkScriptEngine();
 	bool InitPlayers(C4ValueNumbers *);
-	bool InitRecord();
 	bool OpenScenario();
 	bool InitDefs();
 	bool InitMaterialTexture();
@@ -267,8 +258,6 @@ public:
 	bool SaveData(C4Group &hGroup, bool fSaveSection, bool fSaveExact, bool fSaveSync, C4ValueNumbers *);
 protected:
 	bool CompileRuntimeData(C4Group &hGroup, bool fLoadSection, bool exact, bool sync, C4ValueNumbers *);
-	bool StoreParticipantPlayers();
-	bool RecreatePlayerFiles();
 
 	// Object function internals
 	C4Object *NewObject( C4PropList *ndef, C4Object *pCreator,
@@ -284,7 +273,7 @@ protected:
 
 public:
 	bool ToggleChart(); // chart dlg on/off
-	void SetMusicLevel(int32_t iToLvl); // change game music volume; multiplied by config volume for real volume
+	void SetGlobalSoundModifier(C4PropList *modifier_props);
 };
 
 extern C4Game         Game;

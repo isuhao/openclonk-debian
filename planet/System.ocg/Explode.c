@@ -114,23 +114,16 @@ global func ExplosionParticles_Init()
 
 /*-- Explosion --*/
 
-global func Explode(int level, bool silent)
+global func Explode(int level, bool silent, int damage_level)
 {
 	if(!this) FatalError("Function Explode must be called from object context");
+	
+	// Special: Implode
+	if (level <= 0) return RemoveObject();
 
 	// Shake the viewport.
 	ShakeViewport(level);
 	
-	// Sound must be created before object removal, for it to be played at the right position.
-	if(!silent) //Does object use it's own explosion sound effect?
-	{
-		var grade = BoundBy(level / 10 - 1, 1, 3);
-		if(GBackLiquid())
-			Sound(Format("BlastLiquid%d",grade));
-		else
-			Sound(Format("Blast%d", grade));
-	}
-
 	// Explosion parameters.
 	var x = GetX(), y = GetY();
 	var cause_plr = GetController();
@@ -144,11 +137,13 @@ global func Explode(int level, bool silent)
 	// Execute the explosion in global context.
 	// There is no possibility to interact with the global context, apart from GameCall.
 	// So at least remove the object context.
-	exploding_id->DoExplosion(x, y, level, container, cause_plr, layer);
+	exploding_id->DoExplosion(x, y, level, container, cause_plr, layer, silent, damage_level);
 }
 
-global func DoExplosion(int x, int y, int level, object inobj, int cause_plr, object layer)
+global func DoExplosion(int x, int y, int level, object inobj, int cause_plr, object layer, bool silent, int damage_level)
 {
+	// Zero-size explosion doesn't affect anything
+	if (level <= 0) return;
 	// If the object is contained, loop through all parent containers until the blast is contained or no container is found.
 	// Blast the containers it passes through and the objects inside them.
 	var container = inobj;
@@ -160,7 +155,7 @@ global func DoExplosion(int x, int y, int level, object inobj, int cause_plr, ob
 		var contains_blast = container.ContainBlast;
 		var parent_container = container->Contained();
 		// Blast the current container, but not the previous container.
-		BlastObjects(x + GetX(), y + GetY(), level, container, cause_plr, layer, prev_container);
+		BlastObjects(x + GetX(), y + GetY(), level, container, cause_plr, damage_level, layer, prev_container);
 		// Break the blasting if this container contains the blast.
 		if (contains_blast)
 			break;
@@ -168,94 +163,41 @@ global func DoExplosion(int x, int y, int level, object inobj, int cause_plr, ob
 		prev_container = container;
 		container = parent_container;
 	}
-	// Blast objects outside if there was no final container containing the blast.
-	if (!container)
-		BlastObjects(x + GetX(), y + GetY(), level, container, cause_plr, layer, prev_container);
 	
 	// Explosion outside: Explosion effects.
 	if (!container)
 	{
+		// Blast objects outside if there was no final container containing the blast.
+		BlastObjects(x + GetX(), y + GetY(), level, container, cause_plr, damage_level, layer, prev_container);
 		// Incinerate oil.
-		if (!IncinerateLandscape(x, y))
-			if (!IncinerateLandscape(x, y - 10))
-				if (!IncinerateLandscape(x - 5, y - 5))
-					IncinerateLandscape(x + 5, y - 5);
+		if (!IncinerateLandscape(x, y, cause_plr))
+			if (!IncinerateLandscape(x, y - 10, cause_plr))
+				if (!IncinerateLandscape(x - 5, y - 5, cause_plr))
+					IncinerateLandscape(x + 5, y - 5, cause_plr);
 		// Graphic effects.
-		ExplosionEffect(level, x, y);
-	}
-	
-	// Landscape destruction. Happens after BlastObjects, so that recently blown-free materials are not affected
-	if (!container)
+		Call("ExplosionEffect", level, x, y, 0, silent, damage_level);
+		// Landscape destruction. Happens after BlastObjects, so that recently blown-free materials are not affected
 		BlastFree(x, y, level, cause_plr);
+	}
 
 	return true;
 }
 
 /*
 Creates a visual explosion effect at a position.
-smoothness (in percent) determines how round the effect will look like
-*/
-global func ExplosionEffect(int level, int x, int y, int smoothness)
-{
-	// possibly init particle definitions?
-	if (!ExplosionParticles_Blast)
-		ExplosionParticles_Init();
-	
-	smoothness = smoothness ?? 0;
-	var level_pow = level ** 2;
-	var level_pow_fraction = Max(level_pow / 25, 5 * level);
-	var wilderness_level = level * (100 - smoothness) / 100;
-	var smoothness_level = level * smoothness / 100;
-	
-	var smoke_size = PV_KeyFrames(0, 180, level, 1000, level * 2);
-	var blast_size = PV_KeyFrames(0, 0, 0, 260, level * 2, 1000, level);
-	var blast_smooth_size = PV_KeyFrames(0, 0, 0, 250, PV_Random(level, level * 2), 1000, level);
-	var star_size = PV_KeyFrames(0, 0, 0, 500, level * 2, 1000, 0);
-	var shockwave_size = PV_Linear(0, level * 4);
-	
-	CreateParticle("SmokeDirty", PV_Random(x - 10,x + 10), PV_Random(y - 10, y + 10), 0, PV_Random(-2, 0), PV_Random(50, 100), {Prototype = ExplosionParticles_Smoke, Size = smoke_size}, Max(2, wilderness_level / 10));
-	CreateParticle("SmokeDirty", PV_Random(x - 5, x + 5), PV_Random(y - 5, y + 5), PV_Random(-1, 1), PV_Random(-1, 1), PV_Random(20, 40), {Prototype = ExplosionParticles_BlastSmoothBackground, Size = blast_smooth_size}, smoothness_level / 5);
-	CreateParticle("SmokeDirty", PV_Random(x - 5, x + 5), PV_Random(y - 5, y + 5), PV_Random(-1, 1), PV_Random(-1, 1), PV_Random(20, 40), {Prototype = ExplosionParticles_BlastSmooth, Size = blast_smooth_size}, smoothness_level / 5);
-	CreateParticle("Dust", PV_Random(x - 5, x + 5), PV_Random(y - 5, y + 5), 0, 0, PV_Random(18, 25), {Prototype = ExplosionParticles_Blast, Size = blast_size}, smoothness_level / 5);
-	CreateParticle("StarFlash", PV_Random(x - 6, x + 6), PV_Random(y - 6, y + 6), PV_Random(-wilderness_level/4, wilderness_level/4), PV_Random(-wilderness_level/4, wilderness_level/4), PV_Random(10, 12), {Prototype = ExplosionParticles_Star, Size = star_size}, wilderness_level / 3);
-	CreateParticle("Shockwave", x, y, 0, 0, 15, {Prototype = ExplosionParticles_Shockwave, Size = shockwave_size}, nil);
-	
-	// cast either some sparks on land or bubbles under water
-	if(GBackLiquid(x, y) && Global.CastBubbles)
-	{
-		Global->CastBubbles(level * 7 / 10, level, x, y);
-	}
-	else
-	{
-		CreateParticle("Magic", PV_Random(x - 5, x + 5), PV_Random(y - 5, y + 5), PV_Random(-level_pow_fraction, level_pow_fraction), PV_Random(-level_pow_fraction, level_pow_fraction), PV_Random(25, 70), ExplosionParticles_Glimmer, level);
-	}
-	
-	// very wild explosion? Smoke trails!
-	var smoke_trail_count = wilderness_level / 10;
-	var angle  = Random(360);
-	var failsafe = 0; // against infinite loops
-	while (smoke_trail_count > 0 && (++failsafe < smoke_trail_count * 10))
-	{
-		angle += RandomX(40, 80);
-		var smokex = Sin(angle, RandomX(level / 4, level / 2));
-		var smokey = -Cos(angle, RandomX(level / 4, level / 2));
-		if (GBackSolid(x + smokex, y + smokey))
-			continue;
-		var lvl = 2 * wilderness_level;
-		CreateSmokeTrail(lvl, angle, x + smokex, y + smokey);
-		smoke_trail_count--;
-	}
-	
-	// Temporary light effect
-	if (level>5) CreateLight(x, y, level, Fx_Light.LGT_Blast);
+smoothness (in percent) determines how round the effect will look like.
 
-	return;
+Defined in Objects.ocd/System.ocg because it depends on particles/definitions to be loaded.
+*/
+global func ExplosionEffect(...)
+{
+	return _inherited(...);
 }
 
 /*-- Blast objects & shockwaves --*/
 
 // Damage and hurl objects away.
-global func BlastObjects(int x, int y, int level, object container, int cause_plr, object layer, object no_blast)
+global func BlastObjects(int x, int y, int level, object container, int cause_plr, int damage_level, object layer, object no_blast)
 {
 	var obj;
 	
@@ -263,84 +205,40 @@ global func BlastObjects(int x, int y, int level, object container, int cause_pl
 	var l_x = x - GetX(), l_y = y - GetY();
 	
 	// caused by: if not specified, controller of calling object
-	if(cause_plr == nil)
-		if(this)
+	if (cause_plr == nil)
+		if (this)
 			cause_plr = GetController();
+	
+	// damage: if not specified this is the same as the explosion radius
+	if (damage_level == nil)
+		damage_level = level;
 	
 	// In a container?
 	if (container)
 	{
 		if (container->GetObjectLayer() == layer)
 		{
-			container->BlastObject(level, cause_plr);
+			container->BlastObject(damage_level, cause_plr);
 			if (!container)
 				return true; // Container could be removed in the meanwhile.
 			for (obj in FindObjects(Find_Container(container), Find_Layer(layer), Find_Exclude(no_blast)))
 				if (obj)
-					obj->BlastObject(level, cause_plr);
+					obj->BlastObject(damage_level, cause_plr);
 		}
 	}
 	else
 	{
 		// Object is outside.
+		var at_rect = Find_AtRect(l_x - 5, l_y - 5, 10, 10);
 		// Damage objects at point of explosion.
-		for (var obj in FindObjects(Find_AtRect(l_x - 5, l_y - 5, 10,10), Find_NoContainer(), Find_Layer(layer), Find_Exclude(no_blast)))
-			if (obj) obj->BlastObject(level, cause_plr);
+		for (var obj in FindObjects(at_rect, Find_NoContainer(), Find_Layer(layer), Find_Exclude(no_blast)))
+			if (obj) obj->BlastObject(damage_level, cause_plr);
+			
+		// Damage objects in radius.
+		for (var obj in FindObjects(Find_Distance(level, l_x, l_y), Find_Not(at_rect), Find_NoContainer(), Find_Layer(layer), Find_Exclude(no_blast)))
+			if (obj) obj->BlastObject(damage_level / 2, cause_plr);
 
-		// TODO: -> Shockwave in own global func(?)
-
-		// Hurl objects in explosion radius.
-		var shockwave_objs = FindObjects(Find_Distance(level, l_x, l_y), Find_NoContainer(), Find_Layer(layer),
-			Find_Or(Find_Category(C4D_Object|C4D_Living|C4D_Vehicle), Find_Func("CanBeHitByShockwaves")), Find_Func("BlastObjectsShockwaveCheck", x, y));
-		var cnt = GetLength(shockwave_objs);
-		if (cnt)
-		{
-			// The hurl energy is distributed over the objects.
-			//Log("Shockwave objs %v (%d)", shockwave_objs, cnt);
-			var shock_speed = Sqrt(2 * level * level / BoundBy(cnt, 2, 12));
-			for (var obj in shockwave_objs)
-				if (obj) // Test obj, cause OnShockwaveHit could have removed objects.
-				{
-					// Object has special reaction on shockwave?
-					if (obj->~OnShockwaveHit(level, x, y, cause_plr))
-						continue;
-					// Living beings are hurt more.
-					var cat = obj->GetCategory();
-					if (cat & C4D_Living)
-					{
-						obj->DoEnergy(level / -2, false, FX_Call_EngBlast, cause_plr);
-						obj->DoDamage(level / 2, FX_Call_DmgBlast, cause_plr);
-					}
-					// Killtracing for projectiles.
-					if (cat & C4D_Object)
-						obj->SetController(cause_plr);
-					// Shockwave.
-					var mass_fact = 20, mass_mul = 100;
-					if (cat & C4D_Living)
-					{
-						mass_fact = 8;
-						mass_mul = 80;
-					}
-					mass_fact = BoundBy(obj->GetMass() * mass_mul / 1000, 4, mass_fact);
-					var dx = 100 * (obj->GetX() - x) + Random(51) - 25;
-					var dy = 100 * (obj->GetY() - y) + Random(51) - 25;
-					var vx, vy;
-					if (dx)
-						vx = Abs(dx) / dx * (100 * level - Abs(dx)) * shock_speed / level / mass_fact;
-					vy = (Abs(dy) - 100 * level) * shock_speed / level / mass_fact;
-					if (cat & C4D_Object)
-					{
-						// Objects shouldn't move too fast.
-						var ovx = obj->GetXDir(100), ovy = obj->GetYDir(100);
-						if (ovx * vx > 0)
-							vx = (Sqrt(vx * vx + ovx * ovx) - Abs(vx)) * Abs(vx) / vx;
-						if (ovy * vy > 0)
-							vy = (Sqrt(vy * vy + ovy * ovy) - Abs(vy)) * Abs(vy) / vy;
-					}
-					//Log("%v v(%v %v)   d(%v %v)  m=%v  l=%v  s=%v", obj, vx,vy, dx,dy, mass_fact, level, shock_speed);
-					obj->Fling(vx, vy, 100, true);
-				}
-		}
+		DoShockwave(x, y, level, cause_plr, layer);
 	}
 	// Done.
 	return true;
@@ -356,7 +254,7 @@ global func BlastObject(int level, int caused_by)
 	if (!self) return;
 
 	if (GetAlive())
-		DoEnergy(-level/3, false, FX_Call_EngBlast, caused_by);
+		DoEnergy(-level, false, FX_Call_EngBlast, caused_by);
 	if (!self) return;
 
 	if (this.BlastIncinerate && GetDamage() >= this.BlastIncinerate)
@@ -364,13 +262,75 @@ global func BlastObject(int level, int caused_by)
 	return;
 }
 
-global func BlastObjectsShockwaveCheck(int x, int y)
+global func DoShockwave(int x, int y, int level, int cause_plr, object layer)
+{
+	// Zero-size shockwave
+	if (level <= 0) return;
+	
+	// Coordinates are always supplied globally, convert to local coordinates.
+	var l_x = x - GetX(), l_y = y - GetY();
+	
+	// caused by: if not specified, controller of calling object
+	if (cause_plr == nil)
+		if (this)
+			cause_plr = GetController();
+
+	// Hurl objects in explosion radius.
+	var shockwave_objs = FindObjects(Find_Distance(level, l_x, l_y), Find_NoContainer(), Find_Layer(layer),
+		Find_Or(Find_Category(C4D_Object|C4D_Living|C4D_Vehicle), Find_Func("CanBeHitByShockwaves", cause_plr)), Find_Func("DoShockwaveCheck", x, y, cause_plr));
+	var cnt = GetLength(shockwave_objs);
+	if (cnt)
+	{
+		// The hurl energy is distributed over the objects.
+		//Log("Shockwave objs %v (%d)", shockwave_objs, cnt);
+		var shock_speed = Sqrt(2 * level * level / BoundBy(cnt, 2, 12));
+		for (var obj in shockwave_objs)
+			if (obj) // Test obj, cause OnShockwaveHit could have removed objects.
+			{
+				var cat = obj->GetCategory();
+				// Object has special reaction on shockwave?
+				if (obj->~OnShockwaveHit(level, x, y, cause_plr))
+					continue;
+				// Killtracing for projectiles.
+				if (cat & C4D_Object)
+					obj->SetController(cause_plr);
+				// Shockwave.
+				var mass_fact = 20, mass_mul = 100;
+				if (cat & C4D_Living)
+				{
+					mass_fact = 8;
+					mass_mul = 80;
+				}
+				mass_fact = BoundBy(obj->GetMass() * mass_mul / 1000, 4, mass_fact);
+				var dx = 100 * (obj->GetX() - x) + Random(51) - 25;
+				var dy = 100 * (obj->GetY() - y) + Random(51) - 25;
+				var vx, vy;
+				if (dx)
+					vx = Abs(dx) / dx * (100 * level - Abs(dx)) * shock_speed / level / mass_fact;
+				vy = (Abs(dy) - 100 * level) * shock_speed / level / mass_fact;
+				if (cat & C4D_Object)
+				{
+					// Objects shouldn't move too fast.
+					var ovx = obj->GetXDir(100), ovy = obj->GetYDir(100);
+					if (ovx * vx > 0)
+						vx = (Sqrt(vx * vx + ovx * ovx) - Abs(vx)) * Abs(vx) / vx;
+					if (ovy * vy > 0)
+						vy = (Sqrt(vy * vy + ovy * ovy) - Abs(vy)) * Abs(vy) / vy;
+				}
+				//Log("%v v(%v %v)   d(%v %v)  m=%v  l=%v  s=%v", obj, vx,vy, dx,dy, mass_fact, level, shock_speed);
+				obj->Fling(vx, vy, 100, true);
+			}
+	}
+}
+
+global func DoShockwaveCheck(int x, int y, int cause_plr)
 {
 	var def = GetID();
 	// Some special cases, which won't go into FindObjects.
 	if (def->GetDefHorizontalFix())
 		return false;
-	if (def->GetDefGrab() != 1)
+	// Only move vehicles and floating objects which can be grabbed and pushed (Touchable = 1).	
+	if (this.Touchable != 1)
 	{
 		if (GetCategory() & C4D_Vehicle)
 			return false;
@@ -399,16 +359,17 @@ strength falls off linearly by distance from 100% to 0% when the player is 700 p
              as the explosion level.
 @param x_off x offset in relative coordinates from the calling object
 @param y_off y offset in relative coordinates from the calling object
+@param range range of clonk to explosion at which shaking falls off to 0%
 */
-global func ShakeViewport(int level, int x_off, int y_off)
+global func ShakeViewport(int level, int x_off, int y_off, range)
 {
 	if (level <= 0)
 		return false;
 		
 	x_off += GetX();
 	y_off += GetY();
-
-	AddEffect("ShakeViewport", nil, 300, 1, nil, nil, level, x_off, y_off);
+	
+	AddEffect("ShakeViewport", nil, 300, 1, nil, nil, level, x_off, y_off, range ?? 700);
 }
 
 global func FxShakeViewportEffect(string new_name)
@@ -419,17 +380,17 @@ global func FxShakeViewportEffect(string new_name)
 	return;
 }
 
-global func FxShakeViewportStart(object target, effect e, int temporary, level, xpos, ypos)
+global func FxShakeViewportStart(object target, effect e, int temporary, level, xpos, ypos, range)
 {
 	if(temporary != 0) return;
 	
 	e.shakers = CreateArray();
-	e.shakers[0] = { x = xpos, y = ypos, strength = level, time = 0 };
+	e.shakers[0] = { x = xpos, y = ypos, strength = level, time = 0, range = range };
 }
 
-global func FxShakeViewportAdd(object target, effect e, string new_name, int new_timer, level, xpos, ypos)
+global func FxShakeViewportAdd(object target, effect e, string new_name, int new_timer, level, xpos, ypos, range)
 {
-	e.shakers[GetLength(e.shakers)] = { x = xpos, y = ypos, strength = level, time = e.Time};
+	e.shakers[GetLength(e.shakers)] = { x = xpos, y = ypos, strength = level, time = e.Time, range = range };
 }
 
 global func FxShakeViewportTimer(object target, effect e, int time)
@@ -450,7 +411,7 @@ global func FxShakeViewportTimer(object target, effect e, int time)
 
 			// shake strength lowers as a function of the distance
 			var distance = Distance(cursor->GetX(), cursor->GetY(), shaker.x, shaker.y);
-			var maxDistance = 700;
+			var maxDistance = shaker.range;
 			var level = shaker.strength * BoundBy(100-100*distance/maxDistance,0,100)/100;
 
 			// calculate total shake strength by adding up all shake positions in the player's vicinity

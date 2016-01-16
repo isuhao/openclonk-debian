@@ -176,8 +176,6 @@ namespace
 			if(pComp->isCompiler())
 				*ValueProvider = svp;
 		}
-
-		ALLOW_TEMP_TO_REF(ValueProviderAdapt)
 	};
 
 	ValueProviderAdapt mkValueProviderAdapt(StdMeshInstance::ValueProvider** ValueProvider) { return ValueProviderAdapt(ValueProvider); }
@@ -218,8 +216,6 @@ namespace
 
 			pComp->Separator(StdCompiler::SEP_END);
 		}
-
-		ALLOW_TEMP_TO_REF(MatrixAdapt)
 	};
 
 	struct TransformAdapt
@@ -242,8 +238,6 @@ namespace
 			CompileFloat(pComp, Trans.scale.z);
 			pComp->Separator(StdCompiler::SEP_END);
 		}
-
-		ALLOW_TEMP_TO_REF(TransformAdapt);
 	};
 
 	MatrixAdapt mkMatrixAdapt(StdMeshMatrix& Matrix) { return MatrixAdapt(Matrix); }
@@ -261,15 +255,15 @@ namespace
 		}
 	}
 
-	// Mirror is wrt X axis
+	// Mirror is wrt Z axis
 	void MirrorKeyFrame(StdMeshKeyFrame& frame, const StdMeshTransformation& old_bone_transformation, const StdMeshTransformation& new_inverse_bone_transformation)
 	{
 		// frame was a keyframe of a track for old_bone and was now transplanted to new_bone.
+		frame.Transformation.rotate.x = -frame.Transformation.rotate.x;
 		frame.Transformation.rotate.y = -frame.Transformation.rotate.y;
-		frame.Transformation.rotate.z = -frame.Transformation.rotate.z;
 
 		StdMeshVector d = old_bone_transformation.scale * (old_bone_transformation.rotate * frame.Transformation.translate);
-		d.x = -d.x;
+		d.z = -d.z;
 		frame.Transformation.translate = new_inverse_bone_transformation.rotate * (new_inverse_bone_transformation.scale * d);
 
 		// TODO: scale
@@ -290,36 +284,48 @@ namespace
 	}
 }
 
-StdMeshTransformation StdMeshTrack::GetTransformAt(float time) const
+StdMeshTransformation StdMeshTrack::GetTransformAt(float time, float length) const
 {
 	std::map<float, StdMeshKeyFrame>::const_iterator iter = Frames.lower_bound(time);
 
-	// If this points to end(), then either
-	// a) time > animation length
-	// b) The track does not include a frame for the very end of the animation
-	// Both is considered an error
-	assert(iter != Frames.end());
-
+	// We are at or before the first keyframe. This short typically not
+	// happen, since all animations have a keyframe 0. Simply return the
+	// first keyframe.
 	if (iter == Frames.begin())
 		return iter->second.Transformation;
 
 	std::map<float, StdMeshKeyFrame>::const_iterator prev_iter = iter;
-	-- prev_iter;
+	--prev_iter;
 
-	float dt = iter->first - prev_iter->first;
+	float iter_pos;
+	if (iter == Frames.end())
+	{
+		// We are beyond the last keyframe.
+		// Interpolate between the last and the first keyframe.
+		// See also bug #1406.
+		iter = Frames.begin();
+		iter_pos = length;
+	}
+	else
+	{
+		iter_pos = iter->first;
+	}
+
+	// No two keyframes with the same position:
+	assert(iter_pos > prev_iter->first);
+
+	// Requested position is between the two selected keyframes:
+	assert(time >= prev_iter->first);
+	assert(iter_pos >= time);
+
+	float dt = iter_pos - prev_iter->first;
 	float weight1 = (time - prev_iter->first) / dt;
-
-	float weight2 = (iter->first - time) / dt;
+	float weight2 = (iter_pos - time) / dt;
 	(void)weight2; // used in assertion only
 
 	assert(weight1 >= 0 && weight2 >= 0 && weight1 <= 1 && weight2 <= 1);
 	assert(fabs(weight1 + weight2 - 1) < 1e-6);
 
-	/*StdMeshTransformation transformation;
-	transformation.scale = weight1 * iter->second.Transformation.scale + weight2 * prev_iter->second.Transformation.scale;
-	transformation.rotate = weight1 * iter->second.Transformation.rotate + weight2 * prev_iter->second.Transformation.rotate; // TODO: slerp or renormalize
-	transformation.translate = weight1 * iter->second.Transformation.translate + weight2 * prev_iter->second.Transformation.translate;
-	return transformation;*/
 	return StdMeshTransformation::Nlerp(prev_iter->second.Transformation, iter->second.Transformation, weight1);
 }
 
@@ -393,6 +399,15 @@ const StdMeshAnimation* StdMeshSkeleton::GetAnimationByName(const StdStrBuf& nam
 	std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator iter = Animations.find(name2);
 	if (iter == Animations.end()) return NULL;
 	return &iter->second;
+}
+
+std::vector<const StdMeshAnimation*> StdMeshSkeleton::GetAnimations() const
+{
+	std::vector<const StdMeshAnimation*> result;
+	result.reserve(Animations.size());
+	for (std::map<StdCopyStrBuf, StdMeshAnimation>::const_iterator iter = Animations.begin(); iter != Animations.end(); ++iter)
+		result.push_back(&iter->second);
+	return result;
 }
 
 void StdMeshSkeleton::MirrorAnimation(const StdMeshAnimation& animation)
@@ -534,7 +549,11 @@ StdSubMesh::StdSubMesh() :
 {
 }
 
-StdMesh::StdMesh() : Skeleton(new StdMeshSkeleton), vbo(0)
+StdMesh::StdMesh() :
+	Skeleton(new StdMeshSkeleton)
+#ifndef USE_CONSOLE
+	, vbo(0)
+#endif
 {
 	BoundingBox.x1 = BoundingBox.y1 = BoundingBox.z1 = 0.0f;
 	BoundingBox.x2 = BoundingBox.y2 = BoundingBox.z2 = 0.0f;
@@ -543,17 +562,22 @@ StdMesh::StdMesh() : Skeleton(new StdMeshSkeleton), vbo(0)
 
 StdMesh::~StdMesh()
 {
+#ifndef USE_CONSOLE
 	if (vbo)
 		glDeleteBuffers(1, &vbo);
+#endif
 }
 
 void StdMesh::PostInit()
 {
+#ifndef USE_CONSOLE
 	// Order submeshes so that opaque submeshes come before non-opaque ones
 	std::sort(SubMeshes.begin(), SubMeshes.end(), StdMeshSubMeshVisibilityCmpPred());
 	UpdateVBO();
+#endif
 }
 
+#ifndef USE_CONSOLE
 void StdMesh::UpdateVBO()
 {
 	// We're only uploading vertices once, so there shouldn't be a VBO so far
@@ -570,6 +594,11 @@ void StdMesh::UpdateVBO()
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+#ifdef GL_KHR_debug
+	if (glObjectLabel)
+		glObjectLabel(GL_BUFFER, vbo, -1, (Label + "/VBO").c_str());
+#endif
+
 	// Unmapping the buffer may fail for certain reasons, in which case we need to try again.
 	do
 	{
@@ -603,18 +632,21 @@ void StdMesh::UpdateVBO()
 	// Unbind the buffer so following rendering calls do not use it
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
-
+#endif
 
 StdSubMeshInstance::StdSubMeshInstance(StdMeshInstance& instance, const StdSubMesh& submesh, float completion):
 	base(&submesh), Material(NULL), CurrentFaceOrdering(FO_Fixed)
 {
+#ifndef USE_CONSOLE
 	LoadFacesForCompletion(instance, submesh, completion);
+#endif
 
 	SetMaterial(submesh.GetMaterial());
 }
 
 void StdSubMeshInstance::LoadFacesForCompletion(StdMeshInstance& instance, const StdSubMesh& submesh, float completion)
 {
+#ifndef USE_CONSOLE
 	// First: Copy all faces
 	Faces.resize(submesh.GetNumFaces());
 	for (unsigned int i = 0; i < submesh.GetNumFaces(); ++i)
@@ -637,12 +669,14 @@ void StdSubMeshInstance::LoadFacesForCompletion(StdMeshInstance& instance, const
 		assert(submesh.GetNumFaces() >= 1);
 		Faces.resize(Clamp<unsigned int>(static_cast<unsigned int>(completion * submesh.GetNumFaces() + 0.5), 1, submesh.GetNumFaces()));
 	}
+#endif
 }
 
 void StdSubMeshInstance::SetMaterial(const StdMeshMaterial& material)
 {
 	Material = &material;
 
+#ifndef USE_CONSOLE
 	// Setup initial texture animation data
 	assert(Material->BestTechniqueIndex >= 0);
 	const StdMeshMaterialTechnique& technique = Material->Techniques[Material->BestTechniqueIndex];
@@ -664,31 +698,35 @@ void StdSubMeshInstance::SetMaterial(const StdMeshMaterial& material)
 	}
 
 	// TODO: Reset face ordering
+#endif
 }
 
-void StdSubMeshInstance::SetFaceOrdering(const StdSubMesh& submesh, FaceOrdering ordering)
+void StdSubMeshInstance::SetFaceOrdering(StdMeshInstance& instance, const StdSubMesh& submesh, FaceOrdering ordering)
 {
+#ifndef USE_CONSOLE
 	if (CurrentFaceOrdering != ordering)
 	{
 		CurrentFaceOrdering = ordering;
 		if (ordering == FO_Fixed)
 		{
-			for (unsigned int i = 0; i < submesh.GetNumFaces(); ++i)
-				Faces[i] = submesh.GetFace(i);
+			LoadFacesForCompletion(instance, submesh, instance.GetCompletion());
 		}
 	}
+#endif
 }
 
-void StdSubMeshInstance::SetFaceOrderingForClrModulation(const StdSubMesh& submesh, uint32_t clrmod)
+void StdSubMeshInstance::SetFaceOrderingForClrModulation(StdMeshInstance& instance, const StdSubMesh& submesh, uint32_t clrmod)
 {
+#ifndef USE_CONSOLE
 	bool opaque = Material->IsOpaque();
 
 	if(!opaque)
-		SetFaceOrdering(submesh, FO_FarthestToNearest);
+		SetFaceOrdering(instance, submesh, FO_FarthestToNearest);
 	else if( ((clrmod >> 24) & 0xff) != 0xff)
-		SetFaceOrdering(submesh, FO_NearestToFarthest);
+		SetFaceOrdering(instance, submesh, FO_NearestToFarthest);
 	else
-		SetFaceOrdering(submesh, FO_Fixed);
+		SetFaceOrdering(instance, submesh, FO_Fixed);
+#endif
 }
 
 void StdSubMeshInstance::CompileFunc(StdCompiler* pComp)
@@ -778,10 +816,9 @@ bool StdMeshInstance::AnimationNode::GetBoneTransform(unsigned int bone, StdMesh
 	switch (Type)
 	{
 	case LeafNode:
-		//if(!Leaf.Animation) return false;
 		track = Leaf.Animation->Tracks[bone];
 		if (!track) return false;
-		transformation = track->GetTransformAt(fixtof(Leaf.Position->Value));
+		transformation = track->GetTransformAt(fixtof(Leaf.Position->Value), Leaf.Animation->Length);
 		return true;
 	case CustomNode:
 		if(bone == Custom.BoneIndex)
@@ -993,6 +1030,9 @@ void StdMeshInstance::AttachedMesh::DenumeratePointers()
 	Child->AttachParent = this;
 
 	MapBonesOfChildToParent(Parent->GetMesh().GetSkeleton(), Child->GetMesh().GetSkeleton());
+
+	if(OwnChild)
+		Child->DenumeratePointers();
 }
 
 bool StdMeshInstance::AttachedMesh::ClearPointers(class C4Object* pObj)
@@ -1050,36 +1090,42 @@ StdMeshInstance::~StdMeshInstance()
 
 void StdMeshInstance::SetFaceOrdering(FaceOrdering ordering)
 {
+#ifndef USE_CONSOLE
 	for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
-		SubMeshInstances[i]->SetFaceOrdering(Mesh->GetSubMesh(i), ordering);
+		SubMeshInstances[i]->SetFaceOrdering(*this, Mesh->GetSubMesh(i), ordering);
 
 	// Update attachments (only own meshes for now... others might be displayed both attached and non-attached...)
 	// still not optimal.
 	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
 		if ((*iter)->OwnChild)
 			(*iter)->Child->SetFaceOrdering(ordering);
+#endif
 }
 
 void StdMeshInstance::SetFaceOrderingForClrModulation(uint32_t clrmod)
 {
+#ifndef USE_CONSOLE
 	for (unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
-		SubMeshInstances[i]->SetFaceOrderingForClrModulation(Mesh->GetSubMesh(i), clrmod);
+		SubMeshInstances[i]->SetFaceOrderingForClrModulation(*this, Mesh->GetSubMesh(i), clrmod);
 
 	// Update attachments (only own meshes for now... others might be displayed both attached and non-attached...)
 	// still not optimal.
 	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
 		if ((*iter)->OwnChild)
 			(*iter)->Child->SetFaceOrderingForClrModulation(clrmod);
+#endif
 }
 
 void StdMeshInstance::SetCompletion(float completion)
 {
 	Completion = completion;
 
+#ifndef USE_CONSOLE
 	// TODO: Load all submesh faces and then determine the ones to use from the
 	// full pool.
 	for(unsigned int i = 0; i < Mesh->GetNumSubMeshes(); ++i)
 		SubMeshInstances[i]->LoadFacesForCompletion(*this, Mesh->GetSubMesh(i), completion);
+#endif
 }
 
 StdMeshInstance::AnimationNode* StdMeshInstance::PlayAnimation(const StdStrBuf& animation_name, int slot, AnimationNode* sibling, ValueProvider* position, ValueProvider* weight)
@@ -1210,6 +1256,7 @@ void StdMeshInstance::ExecuteAnimation(float dt)
 		if(!ExecuteAnimationNode(AnimationStack[i-1]))
 			StopAnimation(AnimationStack[i-1]);
 
+#ifndef USE_CONSOLE
 	// Update animated textures
 	for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
 	{
@@ -1240,21 +1287,48 @@ void StdMeshInstance::ExecuteAnimation(float dt)
 			}
 		}
 	}
+#endif
 
 	// Update animation for attached meshes
 	for (AttachedMeshList::iterator iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
 		(*iter)->Child->ExecuteAnimation(dt);
 }
 
-StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags)
+StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(const StdMesh& mesh, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags, unsigned int attach_number)
 {
+	std::unique_ptr<AttachedMesh::Denumerator> auto_denumerator(denumerator);
+
 	StdMeshInstance* instance = new StdMeshInstance(mesh, 1.0f);
-	AttachedMesh* attach = AttachMesh(*instance, denumerator, parent_bone, child_bone, transformation, flags, true);
+	AttachedMesh* attach = AttachMesh(*instance, auto_denumerator.release(), parent_bone, child_bone, transformation, flags, true, attach_number);
 	if (!attach) { delete instance; return NULL; }
 	return attach;
 }
 
-StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags, bool own_child)
+StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags, bool own_child, unsigned int attach_number)
+{
+	std::unique_ptr<AttachedMesh::Denumerator> auto_denumerator(denumerator);
+
+	// Owned attach children must be set via the topmost instance, to ensure
+	// attach number uniqueness.
+	if (AttachParent && AttachParent->OwnChild) return NULL;
+
+	// Find free index.
+	unsigned int number = 0;
+	ScanAttachTree(AttachChildren.begin(), AttachChildren.end(), [&number](AttachedMeshList::const_iterator iter) { number = std::max(number, (*iter)->Number); return true; });
+	number += 1; // One above highest
+
+	StdMeshInstance* direct_parent = this;
+	if (attach_number != 0)
+	{
+		AttachedMesh* attach = GetAttachedMeshByNumber(attach_number);
+		if (attach == NULL) return NULL;
+		direct_parent = attach->Child;
+	}
+
+	return direct_parent->AttachMeshImpl(instance, auto_denumerator.release(), parent_bone, child_bone, transformation, flags, own_child, number);
+}
+
+StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMeshImpl(StdMeshInstance& instance, AttachedMesh::Denumerator* denumerator, const StdStrBuf& parent_bone, const StdStrBuf& child_bone, const StdMeshMatrix& transformation, uint32_t flags, bool own_child, unsigned int new_attach_number)
 {
 	std::unique_ptr<AttachedMesh::Denumerator> auto_denumerator(denumerator);
 
@@ -1266,19 +1340,11 @@ StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& inst
 		if (Parent == &instance)
 			return NULL;
 
-	AttachedMesh* attach = NULL;
-	unsigned int number = 1;
-
-	// Find free index.
-	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
-		if ((*iter)->Number >= number)
-			number = (*iter)->Number + 1;
-
 	const StdMeshBone* parent_bone_obj = Mesh->GetSkeleton().GetBoneByName(parent_bone);
 	const StdMeshBone* child_bone_obj = instance.Mesh->GetSkeleton().GetBoneByName(child_bone);
 	if (!parent_bone_obj || !child_bone_obj) return NULL;
 
-	attach = new AttachedMesh(number, this, &instance, own_child, auto_denumerator.release(), parent_bone_obj->Index, child_bone_obj->Index, transformation, flags);
+	AttachedMesh* attach = new AttachedMesh(new_attach_number, this, &instance, own_child, auto_denumerator.release(), parent_bone_obj->Index, child_bone_obj->Index, transformation, flags);
 	instance.AttachParent = attach;
 
 	// If DrawInFront is set then sort before others so that drawing order is easy
@@ -1292,36 +1358,53 @@ StdMeshInstance::AttachedMesh* StdMeshInstance::AttachMesh(StdMeshInstance& inst
 
 bool StdMeshInstance::DetachMesh(unsigned int number)
 {
-	for (AttachedMeshList::iterator iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
+	return !ScanAttachTree(AttachChildren.begin(), AttachChildren.end(), [this, number](AttachedMeshList::iterator iter)
 	{
 		if ((*iter)->Number == number)
 		{
+			AttachedMesh* attached = *iter;
+
 			// Reset attach parent of child so it does not try
 			// to detach itself on destruction.
-			(*iter)->Child->AttachParent = NULL;
+			attached->Child->AttachParent = NULL;
+			attached->Parent->AttachChildren.erase(iter);
 
-			delete *iter;
-			AttachChildren.erase(iter);
-			return true;
+			delete attached;
+
+			// Finish scan
+			return false;
 		}
-	}
 
-	return false;
+		// Continue scan
+		return true;
+	});
 }
 
 StdMeshInstance::AttachedMesh* StdMeshInstance::GetAttachedMeshByNumber(unsigned int number) const
 {
-	for (AttachedMeshIter iter = AttachChildren.begin(); iter != AttachChildren.end(); ++iter)
+	StdMeshInstance::AttachedMesh* result = NULL;
+
+	ScanAttachTree(AttachChildren.begin(), AttachChildren.end(), [number, &result](AttachedMeshList::const_iterator iter)
+	{
 		if ((*iter)->Number == number)
-			return *iter;
-	return NULL;
+		{
+			result = *iter;
+			return false;
+		}
+
+		return true;
+	});
+
+	return result;
 }
 
 void StdMeshInstance::SetMaterial(size_t i, const StdMeshMaterial& material)
 {
 	assert(i < SubMeshInstances.size());
 	SubMeshInstances[i]->SetMaterial(material);
+#ifndef USE_CONSOLE
 	std::stable_sort(SubMeshInstancesOrdered.begin(), SubMeshInstancesOrdered.end(), StdMeshSubMeshInstanceVisibilityCmpPred());
+#endif
 }
 
 const StdMeshMatrix& StdMeshInstance::GetBoneTransform(size_t i) const
@@ -1433,6 +1516,7 @@ bool StdMeshInstance::UpdateBoneTransforms()
 
 void StdMeshInstance::ReorderFaces(StdMeshMatrix* global_trans)
 {
+#ifndef USE_CONSOLE
 	for (unsigned int i = 0; i < SubMeshInstances.size(); ++i)
 	{
 		StdSubMeshInstance& inst = *SubMeshInstances[i];
@@ -1450,6 +1534,7 @@ void StdMeshInstance::ReorderFaces(StdMeshMatrix* global_trans)
 	}
 
 	// TODO: Also reorder submeshes, attached meshes and include AttachTransformation for attached meshes...
+#endif
 }
 
 void StdMeshInstance::CompileFunc(StdCompiler* pComp, AttachedMesh::DenumeratorFactoryFunc Factory)
@@ -1570,6 +1655,23 @@ void StdMeshInstance::ClearPointers(class C4Object* pObj)
 
 	for(unsigned int i = 0; i < Removal.size(); ++i)
 		DetachMesh(Removal[i]);
+}
+
+template<typename IteratorType, typename FuncObj>
+bool StdMeshInstance::ScanAttachTree(IteratorType begin, IteratorType end, const FuncObj& obj)
+{
+	for (IteratorType iter = begin; iter != end; ++iter)
+	{
+		if (!obj(iter)) return false;
+
+		// Scan attached tree of own children. For non-owned children,
+		// we can't guarantee unique attach numbers.
+		if( (*iter)->OwnChild)
+			if (!ScanAttachTree((*iter)->Child->AttachChildren.begin(), (*iter)->Child->AttachChildren.end(), obj))
+				return false;
+	}
+
+	return true;
 }
 
 StdMeshInstance::AnimationNodeList::iterator StdMeshInstance::GetStackIterForSlot(int slot, bool create)

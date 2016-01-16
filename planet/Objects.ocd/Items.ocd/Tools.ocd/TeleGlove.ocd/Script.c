@@ -5,7 +5,6 @@
 	Move objects remotely.
 --*/
 
-local reach;
 local radius; //actual effect radius to grab objects
 local radiusparticle; //radius of particles around object
 
@@ -20,10 +19,12 @@ local target_object;
 
 protected func Initialize()
 {
-	reach = 150;
 	radius = 60;
 	radiusparticle = radius / 4;
 }
+
+// The reach of the tele glove, can be modified by overloading.
+public func GetTeleGloveReach() { return 150; }
 
 public func GetCarryMode() { return CARRY_HandBack; }
 public func GetCarrySpecial(clonk) { return carry_bone; }
@@ -31,24 +32,22 @@ public func GetCarryBone()	{	return "main";	}
 public func GetCarryTransform()
 {
 	//Left hand's bone is different? I don't know, but this is a work-around.
-	if(carry_bone == "pos_hand1") return Trans_Rotate(180,0,0,1);
-	return Trans_Rotate(-90,0,0,1);
+	if(carry_bone == "pos_hand1") return Trans_Rotate(180,0,1,0);
+	return Trans_Rotate(-90,0,1,0);
 }
 
 protected func HoldingEnabled() { return true; }
 
+public func RejectUse(object clonk)
+{
+	return !clonk->HasHandAction() || !(clonk->IsWalking() || clonk->IsJumping());
+}
+
 protected func ControlUseStart(object clonk, ix, iy)
 {
-	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction() || (!clonk->IsWalking() && !clonk->IsJumping()))
+	StartUsage(clonk);
+	UpdateGloveAngle(clonk, ix, iy);
 	return true;
-	else
-	{
-		StartUsage(clonk);
-		UpdateGloveAngle(clonk, ix, iy);
-	}
-
-	return 1;
 }
 
 private func StartUsage(object clonk)
@@ -68,14 +67,18 @@ private func StartUsage(object clonk)
 
 	aiming = 1;
 
-	aim_anim = clonk->PlayAnimation(hand, 10, Anim_Const(clonk->GetAnimationLength(hand)/2), Anim_Const(1000));
+	aim_anim = clonk->PlayAnimation(hand, CLONK_ANIM_SLOT_Arms, Anim_Const(clonk->GetAnimationLength(hand)/2), Anim_Const(1000));
 	clonk->UpdateAttach();
 
 
 	//Animations and effects for TeleGlove
-	Sound("Electrical",nil,nil,nil,+1);
+	Sound("Objects::Electrical",nil,nil,nil,+1);
 	PlayAnimation("Opening", -5, Anim_Linear(0,0,GetAnimationLength("Opening"), 10, ANIM_Hold), Anim_Const(1000));
 	anim_spin = PlayAnimation("Spin",5, Anim_Linear(0,0,GetAnimationLength("Spin"), 40, ANIM_Loop), Anim_Const(1000));
+	
+	// Light effects
+	SetLightRange(50, 10);
+	SetLightColor(0xa0a0ff);
 }
 
 private func EndUsage(object clonk)
@@ -85,6 +88,7 @@ private func EndUsage(object clonk)
 	iAngle = 0;
 	clonk->StopAnimation(clonk->GetRootAnimation(10));
 	clonk->UpdateAttach();
+	SetLightRange();
 }
 
 // Update the glove aim angle
@@ -104,10 +108,11 @@ private func UpdateGloveAngle(object clonk, int x, int y)
 
 	iAngle=angle;
 
-//	var weight = 0;
-//	if( Abs(iAngle) > 90) weight = 1000*( Abs(iAngle)-60 )/90;
-
 	clonk->SetAnimationPosition(aim_anim,  Anim_Const(Abs(iAngle) * 11111/1000));
+	
+	// Light position at remote location
+	this.LightOffset = [x, y];
+	return true;
 }
 
 public func ControlUseHolding(object clonk, ix, iy)
@@ -130,7 +135,7 @@ public func ControlUseHolding(object clonk, ix, iy)
 	if (Random(2)) particles = Particles_ElectroSpark1();
 	else particles = Particles_ElectroSpark2();
 	
-	if(distp < reach)
+	if (distp < GetTeleGloveReach())
 	{
 		//Particles moving towards object
 		CreateParticle("ElectroSpark", ix + xs, iy + ys, PV_Random(-xs/2, -xs/4), PV_Random(-ys/2, -ys/4), PV_Random(5, 10), particles, 5);
@@ -150,7 +155,7 @@ public func ControlUseHolding(object clonk, ix, iy)
 	if(target_object)
 	{
 		if(Distance(target_object->GetX(), target_object->GetY(), clonk->GetX() + ix, clonk->GetY() + iy) > radius ||
-		Distance(target_object->GetX(), target_object->GetY(), clonk->GetX(), clonk->GetY()) > reach)
+		Distance(target_object->GetX(), target_object->GetY(), clonk->GetX(), clonk->GetY()) > GetTeleGloveReach())
 		{
 			LostTargetObject(target);
 			target_object = nil;
@@ -163,7 +168,7 @@ public func ControlUseHolding(object clonk, ix, iy)
 					Find_NoContainer(),
 					Find_Category(C4D_Object),
 					Find_And(Find_Distance(radius, ix, iy),
-					Find_Distance(reach - 15)),
+					Find_Distance(GetTeleGloveReach() - 15)),
 					Sort_Distance(ix,iy));
 
 		if(target)
@@ -251,7 +256,7 @@ protected func ControlUseCancel(object clonk, int ix, int iy)
 protected func CancelUse(object clonk)
 {
 	EndUsage(clonk);
-	Sound("Electrical",nil,nil,nil,-1);
+	Sound("Objects::Electrical",nil,nil,nil,-1);
 	if(aiming = 1) PlayAnimation("Closing", -5, Anim_Linear(0,0,GetAnimationLength("Closing"), 10, ANIM_Hold), Anim_Const(1000));
 	StopAnimation(anim_spin);
 	aiming = 0;
@@ -262,7 +267,7 @@ protected func CancelUse(object clonk)
 
 func Hit()
 {
-	Sound("GeneralHit?");
+	Sound("Hits::GeneralHit?");
 }
 
 func IsInventorProduct() { return true; }
@@ -275,4 +280,3 @@ local Name = "$Name$";
 local UsageHelp = "$UsageHelp$";
 local Description = "$Description$";
 local Collectible = 1;
-local Rebuy = true;

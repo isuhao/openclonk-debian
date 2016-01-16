@@ -44,6 +44,8 @@ enum C4FindObjectCondID
 	C4FO_Func          = 20,
 	C4FO_Layer         = 21,
 	C4FO_InArray       = 22,
+	C4FO_Property      = 23,
+	C4FO_AnyLayer      = 24,
 	// last C4FO must be smaller than C4SO_First.
 };
 
@@ -74,7 +76,7 @@ public:
 	C4FindObject() : pSort(NULL) { }
 	virtual ~C4FindObject();
 
-	static C4FindObject *CreateByValue(const C4Value &Data, C4SortObject **ppSortObj=NULL, const C4Object *context=NULL); // createFindObject or SortObject - if ppSortObj==NULL, SortObject is not allowed
+	static C4FindObject *CreateByValue(const C4Value &Data, C4SortObject **ppSortObj=NULL, const C4Object *context=NULL, bool *has_layer_check=NULL); // createFindObject or SortObject - if ppSortObj==NULL, SortObject is not allowed
 
 	int32_t Count(const C4ObjectList &Objs); // Counts objects for which the condition is true
 	C4Object *Find(const C4ObjectList &Objs); // Returns first object for which the condition is true
@@ -357,6 +359,17 @@ public:
 private:
 	C4String * Name;
 	C4AulParSet Pars;
+protected:
+	virtual bool Check(C4Object *pObj);
+	virtual bool IsImpossible();
+};
+
+class C4FindObjectProperty : public C4FindObject
+{
+public:
+	C4FindObjectProperty(C4String * Name) : Name(Name) { }
+private:
+	C4String * Name;
 protected:
 	virtual bool Check(C4Object *pObj);
 	virtual bool IsImpossible();

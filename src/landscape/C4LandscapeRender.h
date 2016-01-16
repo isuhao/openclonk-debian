@@ -36,15 +36,17 @@ enum C4LR_Byte {
 // Don't forget to update GetUniformName when introducing new uniforms!
 enum C4LR_Uniforms
 {
+	C4LRU_ProjectionMatrix,
+
 	C4LRU_LandscapeTex,
 	C4LRU_ScalerTex,
 	C4LRU_MaterialTex,
 	C4LRU_LightTex,
 	C4LRU_AmbientTex,
 
+	C4LRU_Gamma,
 	C4LRU_Resolution,
 	C4LRU_Center,
-	C4LRU_MatMap,
 	C4LRU_MatMapTex,
 	C4LRU_MaterialDepth,
 	C4LRU_MaterialSize,
@@ -52,6 +54,15 @@ enum C4LR_Uniforms
 	C4LRU_AmbientTransform,
 
 	C4LRU_Count
+};
+
+enum C4LR_Attributes
+{
+	C4LRA_Position,
+	C4LRA_LandscapeTexCoord,
+	C4LRA_LightTexCoord,
+
+	C4LRA_Count
 };
 
 // How much data we want to store per landscape pixel
@@ -109,7 +120,8 @@ private:
 	C4Shader Shader;
 	C4Shader ShaderLight;
 	static const char *UniformNames[];
-	GLenum hLandscapeTexCoord, hLightTexCoord;
+	// VBO for landscape vertex data
+	GLuint hVBO;
 
 	// 3D texture of material textures
 	GLuint hMaterialTexture[C4LR_MipMapCount];
@@ -133,14 +145,13 @@ public:
 
 	virtual void Draw(const C4TargetFacet &cgo, const C4FoWRegion *Light);
 
-	void RefreshShaders();
-
 private:
 	bool InitLandscapeTexture();
 	bool InitMaterialTexture(C4TextureMap *pMap);
 	bool LoadShader(C4GroupSet *pGraphics, C4Shader& shader, const char* name, int ssc);
 	bool LoadShaders(C4GroupSet *pGraphics);
-    void ClearShaders();
+	bool InitVBO();
+	void ClearShaders();
 	bool LoadScaler(C4GroupSet *pGraphics);
 
 	int CalculateScalerBitmask(int x, int y, C4Rect To, C4Landscape *pSource);
@@ -149,7 +160,7 @@ private:
 	void AddTextureTransition(const char *szFrom, const char *szTo);
 	void AddTextureAnim(const char *szTextureAnim);
 	void AddTexturesFromMap(C4TextureMap *pMap);
-	void BuildMatMap(GLfloat *pFMap, GLubyte *pIMap);
+	void BuildMatMap(uint32_t *pTex);
 };
 #endif
 

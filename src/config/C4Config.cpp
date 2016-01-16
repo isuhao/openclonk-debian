@@ -83,7 +83,9 @@ void C4ConfigDeveloper::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(AutoFileReload,      "AutoFileReload",     1                   , false, true));
 	pComp->Value(mkNamingAdapt(ExtraWarnings,      "ExtraWarnings",       0                   , false, true));
 	pComp->Value(mkNamingAdapt(s(TodoFilename),    "TodoFilename",       "{SCENARIO}/TODO.txt", false, true));
-	pComp->Value(mkNamingAdapt(s(AltTodoFilename), "AltTodoFilename",    "TODO.txt"           , false, true));
+	pComp->Value(mkNamingAdapt(s(AltTodoFilename), "AltTodoFilename2",   "{USERPATH}/TODO.txt", false, true));
+	pComp->Value(mkNamingAdapt(MaxScriptMRU,        "MaxScriptMRU",       30                  , false, false));
+	pComp->Value(mkNamingAdapt(DebugShapeTextures,  "DebugShapeTextures", 0                   , false, true));
 }
 
 void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
@@ -95,10 +97,8 @@ void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(RefreshRate,           "RefreshRate",          0             ));
 	pComp->Value(mkNamingAdapt(SplitscreenDividers,   "SplitscreenDividers",  1             ));
 	pComp->Value(mkNamingAdapt(ShowStartupMessages,   "ShowStartupMessages",  1             ,false, true));
-	pComp->Value(mkNamingAdapt(ColorAnimation,        "ColorAnimation",       0             ,false, true));
 	pComp->Value(mkNamingAdapt(HighResLandscape,      "HighResLandscape",     1             ,false, true));
 	pComp->Value(mkNamingAdapt(VerboseObjectLoading,  "VerboseObjectLoading", 0             ));
-	pComp->Value(mkNamingAdapt(VideoModule,           "VideoModule",          0             ,false, true));
 	pComp->Value(mkNamingAdapt(MenuTransparency,      "MenuTransparency",     1             ,false, true));
 	pComp->Value(mkNamingAdapt(UpperBoard,            "UpperBoard",           1             ,false, true));
 	pComp->Value(mkNamingAdapt(ShowClock,             "ShowClock",            0             ,false, true));
@@ -107,12 +107,9 @@ void C4ConfigGraphics::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(BitDepth,              "BitDepth",             32            ,false, true));
 	pComp->Value(mkNamingAdapt(Windowed,              "Windowed",             0             ,false, true));
 	pComp->Value(mkNamingAdapt(PXSGfx,                "PXSGfx"  ,             1             ));
-	pComp->Value(mkNamingAdapt(Gamma1,                "Gamma1"  ,             0             ));
-	pComp->Value(mkNamingAdapt(Gamma2,                "Gamma2"  ,             0x808080      ));
-	pComp->Value(mkNamingAdapt(Gamma3,                "Gamma3"  ,             0xffffff      ));
+	pComp->Value(mkNamingAdapt(Gamma,                 "Gamma"  ,              100           ));
 	pComp->Value(mkNamingAdapt(Currency,              "Currency"  ,           0             ));
 	pComp->Value(mkNamingAdapt(RenderInactiveEM,      "RenderInactiveEM",     1             ));
-	pComp->Value(mkNamingAdapt(DisableGamma,          "DisableGamma",         0             ,false, true));
 	pComp->Value(mkNamingAdapt(Monitor,               "Monitor",              0             )); // 0 = D3DADAPTER_DEFAULT
 	pComp->Value(mkNamingAdapt(FireParticles,         "FireParticles",        1         ));
 	pComp->Value(mkNamingAdapt(MaxRefreshDelay,       "MaxRefreshDelay",      30            ));
@@ -129,7 +126,7 @@ void C4ConfigSound::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(FESamples,             "MenuSound",            1             ,false, true));
 	pComp->Value(mkNamingAdapt(FMMode,                "FMMode",               1             ));
 	pComp->Value(mkNamingAdapt(Verbose,               "Verbose",              0             ));
-	pComp->Value(mkNamingAdapt(MusicVolume,           "MusicVolume",          100           ,false, true));
+	pComp->Value(mkNamingAdapt(MusicVolume,           "MusicVolume2",         40            ,false, true));
 	pComp->Value(mkNamingAdapt(SoundVolume,           "SoundVolume",          100           ,false, true));
 }
 
@@ -168,7 +165,6 @@ void C4ConfigNetwork::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(PacketLogging,           "PacketLogging",        0             ));
 	
 
-	pComp->Value(mkNamingAdapt(s(PuncherAddress),       "PuncherAddress",       "clonk.de:11115")); // maybe store default for this one?
 	pComp->Value(mkNamingAdapt(mkParAdapt(LastLeagueServer, StdCompiler::RCT_All),     "LastLeagueServer",     ""            ));
 	pComp->Value(mkNamingAdapt(mkParAdapt(LastLeaguePlayerName, StdCompiler::RCT_All), "LastLeaguePlayerName", ""            ));
 	pComp->Value(mkNamingAdapt(mkParAdapt(LastLeagueAccount, StdCompiler::RCT_All),    "LastLeagueAccount",    ""            ));
@@ -376,8 +372,6 @@ bool C4Config::Load(const char *szConfigFile)
 	}
 	// Empty nick already defaults to GetRegistrationData("Nick") or
 	// Network.LocalName at relevant places.
-	/*if (!Network.Nick.getLength())
-	  Network.Nick.Copy(Network.LocalName); // assuming that LocalName will always contain some useful value*/
 	fConfigLoaded = true;
 	if (szConfigFile) ConfigFilename.Copy(szConfigFile); else ConfigFilename.Clear();
 	return true;

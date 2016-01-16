@@ -71,6 +71,11 @@
         <col>The scenario will only load if the player gained this password in another scenario. See script function <funclink>GainMissionAccess</funclink>().</col>
       </row>
       <row>
+        <col>Secret</col>
+        <col>bool</col>
+        <col>If true and MissionAccess is set, the scenario is invisible in the scenario selection list if the player does not have the required password access.</col>
+      </row>
+      <row>
         <col>ForcedFairCrew</col>
         <col>Integer</col>
         <col>0 or 1. If 1, fair crew is always used in this scenario.</col>
@@ -253,7 +258,7 @@
       <row>
         <literal_col>MapZoom</literal_col>
         <col>4 integers</col>
-        <col>Factor for zooming the map to the real game world. Default is 10.</col>
+        <col>Factor for zooming the map to the real game world. Default is 8.</col>
       </row>
       <row>
         <literal_col>Amplitude</literal_col>

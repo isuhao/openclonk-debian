@@ -27,6 +27,7 @@
 #include <C4AulDefFunc.h>
 #include <C4Value.h>
 #include <C4ValueArray.h>
+#include <C4Material.h>
 #include <C4MeshAnimation.h>
 #include <C4DrawGL.h>
 #include <C4Random.h>
@@ -100,7 +101,7 @@ bool C4ParticleDef::Load(C4Group &group)
 		}
 		delete [] particle_source;
 		// load graphics
-		if (!Gfx.Load(group, C4CFN_DefGraphics))
+		if (!Gfx.Load(group, C4CFN_DefGraphics, C4FCT_Full, C4FCT_Full, false, C4SF_MipMap))
 		{
 			DebugLogF("particle %s has no valid graphics defined", Name.getData());
 			return false;
@@ -365,7 +366,6 @@ void C4ParticleValueProvider::Floatify(float denominator)
 		{
 			FloatifyParameterValue(0, 1000.f, 2 * i); // even numbers are the time values
 			FloatifyParameterValue(0, denominator, 2 * i + 1); // odd numbers are the actual values
-			//LogF("KF is %f @ %f", keyFrames[2 * i + 1], keyFrames[2 * i]);
 		}
 	}
 	else if (valueFunction == &C4ParticleValueProvider::Speed || valueFunction == &C4ParticleValueProvider::Wind || valueFunction == &C4ParticleValueProvider::Gravity)
@@ -610,8 +610,6 @@ void C4ParticleValueProvider::Set(const C4ValueArray &fromArray)
 			keyFrames[2 * keyFrameCount - 2] = 1500.f;
 			keyFrames[2 * keyFrameCount - 1] = keyFrames[keyFrameCount - 1 - 2];
 
-			//for (int i = 0; i < keyFrameCount; ++i)
-			//	LogF("KF is %f @ %d of %d", keyFrames[i * 2 + 1], int(keyFrames[i * 2]), keyFrameCount);
 		}
 		break;
 	case C4PV_Sin:
@@ -648,7 +646,7 @@ void C4ParticleValueProvider::Set(const C4ValueArray &fromArray)
 		}
 		break;
 	default:
-		throw new C4AulExecError("invalid particle value provider supplied");
+		throw C4AulExecError("invalid particle value provider supplied");
 		break;
 	}
 }
@@ -679,6 +677,7 @@ C4ParticleProperties::C4ParticleProperties()
 	bouncyness = 0.f;
 
 	// all values in pre-floatified range (f.e. 0..255 instead of 0..1)
+	collisionDensity.Set(static_cast<float>(C4M_Solid));
 	collisionVertex.Set(0.f);
 	size.Set(8.f);
 	stretch.Set(1000.f);
@@ -698,6 +697,7 @@ void C4ParticleProperties::Floatify()
 {
 	bouncyness /= 1000.f;
 
+	collisionDensity.Floatify(1.f);
 	collisionVertex.Floatify(1000.f);
 	size.Floatify(2.f);
 	stretch.Floatify(1000.f);
@@ -791,6 +791,10 @@ void C4ParticleProperties::Set(C4PropList *dataSource)
 			collisionVertex.Set(property);
 			if (property.GetType() != C4V_Nil)
 				hasCollisionVertex = true;
+		}
+		else if (&Strings.P[P_CollisionDensity] == key)
+		{
+			collisionDensity.Set(property);
 		}
 		else if(&Strings.P[P_OnCollision] == key)
 		{
@@ -886,7 +890,9 @@ bool C4Particle::Exec(C4Object *obj, float timeDelta, C4ParticleDef *sourceDef)
 			float collisionPoint = properties.collisionVertex.GetValue(this);
 			float size_x = (currentSpeedX > 0.f ? size : -size) * 0.5f * collisionPoint;
 			float size_y = (currentSpeedY > 0.f ? size : -size) * 0.5f * collisionPoint;
-			if (GBackSolid(positionX + size_x + timeDelta * currentSpeedX, positionY + size_y + timeDelta * currentSpeedY))
+			float density = static_cast<float>(GBackDensity(positionX + size_x + timeDelta * currentSpeedX, positionY + size_y + timeDelta * currentSpeedY));
+			
+			if (density + 0.5f >= properties.collisionDensity.GetValue(this)) // Small offset against floating point insanities.
 			{
 				// exec collision func
 				if (properties.collisionCallback != 0 && !(properties.*properties.collisionCallback)(this)) return false;
@@ -930,8 +936,7 @@ void C4ParticleChunk::Clear()
 	particles.clear();
 	vertexCoordinates.clear();
 
-	if (!Particles.useBufferObjectWorkaround)
-		ClearBufferObjects();
+	ClearBufferObjects();
 }
 
 void C4ParticleChunk::DeleteAndReplaceParticle(size_t indexToReplace, size_t indexFrom)
@@ -972,7 +977,7 @@ bool C4ParticleChunk::Exec(C4Object *obj, float timeDelta)
 #define glDeleteVertexArrays glDeleteVertexArraysAPPLE
 #endif
 
-void C4ParticleChunk::Draw(C4TargetFacet cgo, C4Object *obj, int texUnit)
+void C4ParticleChunk::Draw(C4TargetFacet cgo, C4Object *obj, C4ShaderCall& call, int texUnit, const StdProjectionMatrix& modelview)
 {
 	if (particleCount == 0) return;
 	const int stride = sizeof(C4Particle::DrawingData::Vertex);
@@ -981,12 +986,16 @@ void C4ParticleChunk::Draw(C4TargetFacet cgo, C4Object *obj, int texUnit)
 	assert(textureRef != 0 && "Particle definition had no texture assigned.");
 
 	// use a relative offset?
-	bool resetMatrix(false);
+	// (note the normal matrix is unaffected by this)
 	if ((attachment & C4ATTACH_MoveRelative) && (obj != 0))
 	{
-		resetMatrix = true;
-		glPushMatrix();
-		glTranslatef((float)obj->GetX(), (float)obj->GetY(), 0.0f);
+		StdProjectionMatrix new_modelview(modelview);
+		Translate(new_modelview, fixtof(obj->GetFixedX()), fixtof(obj->GetFixedY()), 0.0f);
+		call.SetUniformMatrix4x4(C4SSU_ModelViewMatrix, new_modelview);
+	}
+	else
+	{
+		call.SetUniformMatrix4x4(C4SSU_ModelViewMatrix, modelview);
 	}
 
 	// enable additive blending for particles with that blit mode
@@ -995,49 +1004,65 @@ void C4ParticleChunk::Draw(C4TargetFacet cgo, C4Object *obj, int texUnit)
 	glActiveTexture(texUnit);
 	glBindTexture(GL_TEXTURE_2D, textureRef->texName);
 
-	if (!Particles.useBufferObjectWorkaround)
+	// generate the buffer as necessary
+	if (drawingDataVertexBufferObject == 0)
 	{
-		// generate the buffer as necessary
-		if (drawingDataVertexBufferObject == 0)
-		{
-			// clear up old data
-			ClearBufferObjects();
-			// generate new buffer objects
-			glGenBuffers(1, &drawingDataVertexBufferObject);
-			assert (drawingDataVertexBufferObject != 0 && "Could not generate OpenGL buffer object.");
+		// clear up old data
+		ClearBufferObjects();
+		// generate new buffer objects
+		glGenBuffers(1, &drawingDataVertexBufferObject);
+		assert (drawingDataVertexBufferObject != 0 && "Could not generate OpenGL buffer object.");
+		// Immediately bind the buffer.
+		// glVertexAttribPointer requires a valid GL_ARRAY_BUFFER to be bound and we need the buffer to be created for glObjectLabel.
+		glBindBuffer(GL_ARRAY_BUFFER, drawingDataVertexBufferObject);
 
-			// generate new vertex arrays object
+#ifdef GL_KHR_debug
+		if (glObjectLabel)
+			glObjectLabel(GL_BUFFER, drawingDataVertexBufferObject, -1, "<particles>/VBO");
+#endif
+
+		// generate new vertex arrays object
+		if (!Particles.useVAOWorkaround)
+		{
 			glGenVertexArrays(1, &drawingDataVertexArraysObject);
 			assert (drawingDataVertexArraysObject != 0 && "Could not generate OpenGL vertex arrays object.");
 			
 			// set up the vertex array structure once
 			glBindVertexArray(drawingDataVertexArraysObject);
-			glBindBuffer(GL_ARRAY_BUFFER, drawingDataVertexBufferObject);
-			glEnableClientState(GL_VERTEX_ARRAY);
-			glEnableClientState(GL_COLOR_ARRAY);
-			glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-			glVertexPointer(2, GL_FLOAT, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, x)));
-			glTexCoordPointer(2, GL_FLOAT , stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, u)));
-			glColorPointer(4, GL_FLOAT , stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, r)));
+
+#ifdef GL_KHR_debug
+			if (glObjectLabel)
+				glObjectLabel(GL_VERTEX_ARRAY, drawingDataVertexArraysObject, -1, "<particles>/VAO");
+#endif
+
+			glEnableVertexAttribArray(call.GetAttribute(C4SSA_Position));
+			glEnableVertexAttribArray(call.GetAttribute(C4SSA_Color));
+			glEnableVertexAttribArray(call.GetAttribute(C4SSA_TexCoord));
+			glVertexAttribPointer(call.GetAttribute(C4SSA_Position), 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, x)));
+			glVertexAttribPointer(call.GetAttribute(C4SSA_TexCoord), 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, u)));
+			glVertexAttribPointer(call.GetAttribute(C4SSA_Color), 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, r)));
 			glBindVertexArray(0);
 		}
+	}
 
-		assert ((drawingDataVertexArraysObject != 0) && "No vertex arrays object has been created yet.");
-		assert ((drawingDataVertexBufferObject != 0) && "No buffer object has been created yet.");
+	assert ((Particles.useVAOWorkaround || drawingDataVertexArraysObject != 0) && "No vertex arrays object has been created yet.");
+	assert ((drawingDataVertexBufferObject != 0) && "No buffer object has been created yet.");
 
-		// bind the VBO and push the new vertex data
-		// this has to be done before binding the vertex arrays object
-		glBindBuffer(GL_ARRAY_BUFFER, drawingDataVertexBufferObject);
-		glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(C4Particle::DrawingData::Vertex) * particleCount, &vertexCoordinates[0], GL_DYNAMIC_DRAW);
+	// bind the VBO and push the new vertex data
+	// this has to be done before binding the vertex arrays object
+	glBindBuffer(GL_ARRAY_BUFFER, drawingDataVertexBufferObject);
+	glBufferData(GL_ARRAY_BUFFER, 4 * sizeof(C4Particle::DrawingData::Vertex) * particleCount, &vertexCoordinates[0], GL_DYNAMIC_DRAW);
 
-		// bind VAO and set correct state
+	// bind VAO and set correct state
+	if (!Particles.useVAOWorkaround)
+	{
 		glBindVertexArray(drawingDataVertexArraysObject);
 	}
 	else
 	{
-		glVertexPointer(2, GL_FLOAT, stride, &(vertexCoordinates[0].x));
-		glTexCoordPointer(2, GL_FLOAT, stride, &(vertexCoordinates[0].u));
-		glColorPointer(4, GL_FLOAT, stride, &(vertexCoordinates[0].r));
+		glVertexAttribPointer(call.GetAttribute(C4SSA_Position), 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, x)));
+		glVertexAttribPointer(call.GetAttribute(C4SSA_TexCoord), 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, u)));
+		glVertexAttribPointer(call.GetAttribute(C4SSA_Color), 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<GLvoid*>(offsetof(C4Particle::DrawingData::Vertex, r)));
 	}
 
 	if (!Particles.usePrimitiveRestartIndexWorkaround)
@@ -1048,15 +1073,14 @@ void C4ParticleChunk::Draw(C4TargetFacet cgo, C4Object *obj, int texUnit)
 	{
 		glMultiDrawElements(GL_TRIANGLE_STRIP, ::Particles.GetMultiDrawElementsCountArray(), GL_UNSIGNED_INT, const_cast<const GLvoid**>(::Particles.GetMultiDrawElementsIndexArray()), static_cast<GLsizei> (particleCount));
 	}
-	if (resetMatrix)
-		glPopMatrix();
 
 	// reset buffer data
-	if (!Particles.useBufferObjectWorkaround)
+	if (!Particles.useVAOWorkaround)
 	{
 		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 bool C4ParticleChunk::IsOfType(C4ParticleDef *def, uint32_t _blitMode, uint32_t _attachment) const
@@ -1131,9 +1155,6 @@ void C4ParticleList::Draw(C4TargetFacet cgo, C4Object *obj)
 {
 	if (particleChunks.empty()) return;
 
-	//glDisable(GL_DEPTH_TEST);
-	//if (additiveBlit)
-	//	pDraw->SetBlitMode(C4GFXBLIT_ADDITIVE);
 	pDraw->DeactivateBlitModulation();
 	pDraw->ResetBlitMode();
 	
@@ -1146,22 +1167,24 @@ void C4ParticleList::Draw(C4TargetFacet cgo, C4Object *obj)
 	// enable shader
 	C4ShaderCall call(pGL->GetSpriteShader(true, false, false));
 	// apply zoom and upload shader uniforms
-	pGL->SetupMultiBlt(call, NULL, 0, 0, 0, 0);
-	// go to correct output position
-	glTranslatef(cgo.X-cgo.TargetX, cgo.Y-cgo.TargetY, 0.0f);
+	StdProjectionMatrix modelview = StdProjectionMatrix::Identity();
+	pGL->SetupMultiBlt(call, NULL, 0, 0, 0, 0, &modelview);
+	// go to correct output position (note the normal matrix is unaffected
+	// by this)
+	Translate(modelview, cgo.X-cgo.TargetX, cgo.Y-cgo.TargetY, 0.0f);
 	// allocate texture unit for particle texture, and remember allocated
 	// texture unit. Will be used for each particle chunk to bind
 	// their texture to this unit.
-	const GLint texUnit = call.AllocTexUnit(C4SSU_BaseTex, GL_TEXTURE_2D);
+	const GLint texUnit = call.AllocTexUnit(C4SSU_BaseTex);
 	// Texture coordinates are always associated to texture unit 0, since
 	// there is only one set of texture coordinates
 	glClientActiveTexture(GL_TEXTURE0);
 
-	if (Particles.useBufferObjectWorkaround)
+	if (Particles.useVAOWorkaround)
 	{
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glEnableClientState(GL_COLOR_ARRAY);
-		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glEnableVertexAttribArray(call.GetAttribute(C4SSA_Position));
+		glEnableVertexAttribArray(call.GetAttribute(C4SSA_Color));
+		glEnableVertexAttribArray(call.GetAttribute(C4SSA_TexCoord));
 	}
 
 	accessMutex.Enter();
@@ -1176,20 +1199,18 @@ void C4ParticleList::Draw(C4TargetFacet cgo, C4Object *obj)
 		}
 		else
 		{
-			(*iter)->Draw(cgo, obj, texUnit);
+			(*iter)->Draw(cgo, obj, call, texUnit, modelview);
 			++iter;
 		}
 	}
 
 	accessMutex.Leave();
 
-	pGL->ResetMultiBlt();
-
-	if (Particles.useBufferObjectWorkaround)
+	if (Particles.useVAOWorkaround)
 	{
-		glDisableClientState(GL_VERTEX_ARRAY);
-		glDisableClientState(GL_COLOR_ARRAY);
-		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		glDisableVertexAttribArray(call.GetAttribute(C4SSA_Position));
+		glDisableVertexAttribArray(call.GetAttribute(C4SSA_Color));
+		glDisableVertexAttribArray(call.GetAttribute(C4SSA_TexCoord));
 	}
 
 	if (!Particles.usePrimitiveRestartIndexWorkaround)
@@ -1266,7 +1287,7 @@ C4ParticleSystem::C4ParticleSystem() : frameCounterAdvancedEvent(false)
 	currentSimulationTime = 0;
 	globalParticles = 0;
 	usePrimitiveRestartIndexWorkaround = false;
-	useBufferObjectWorkaround = false;
+	useVAOWorkaround = false;
 }
 
 C4ParticleSystem::~C4ParticleSystem()
@@ -1290,13 +1311,15 @@ void C4ParticleSystem::DoInit()
 	}
 
 	assert (glGenBuffers != 0 && "Your graphics card does not seem to support buffer objects.");
-	useBufferObjectWorkaround = false;
+	useVAOWorkaround = false;
 
+#ifndef USE_WIN32_WINDOWS
 	// Every window in developers' mode has an own OpenGL context at the moment. Certain objects are not shared between contexts.
-	// In that case we can just use the slower workaround without VBAs and VBOs to allow the developer to view particles in every viewport.
+	// In that case we can just use the slower workaround without VAOs to allow the developer to view particles in every viewport.
 	// The best solution would obviously be to make all windows use a single OpenGL context. This has to be considered as a workaround.
 	if (Application.isEditor)
-		useBufferObjectWorkaround = true;
+		useVAOWorkaround = true;
+#endif
 }
 
 void C4ParticleSystem::ExecuteCalculation()

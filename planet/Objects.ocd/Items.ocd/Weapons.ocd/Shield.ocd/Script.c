@@ -11,18 +11,15 @@ local solid_mask_helper;
 
 /* Usage callbacks */
 
+func RejectUse(object clonk)
+{
+	return !clonk->HasHandAction() || !clonk->IsWalking() || !CanStrikeWithWeapon(clonk);
+}
+
 public func ControlUseStart(object clonk, int x, int y)
 {
-	// may only be used while walking
-	if(!clonk->HasHandAction() || !clonk->IsWalking() || !CanStrikeWithWeapon(clonk))
-	{
-		AddEffect("IntShieldSuspend", clonk, 1, 5, this);
-	}
-	else
-	{
-		StartUsage(clonk);
-		UpdateShieldAngle(clonk, x,y);
-	}
+	StartUsage(clonk);
+	UpdateShieldAngle(clonk, x,y);
 	return true;
 }
 
@@ -60,7 +57,7 @@ private func StartUsage(object clonk)
 		hand = "ShieldArms.L";
 	}
 
-	aim_anim = clonk->PlayAnimation(hand, 10, Anim_Const(clonk->GetAnimationLength(hand)/2), Anim_Const(1000));
+	aim_anim = clonk->PlayAnimation(hand, CLONK_ANIM_SLOT_Arms, Anim_Const(clonk->GetAnimationLength(hand)/2), Anim_Const(1000));
 
 	var handLR;
 	if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 0)
@@ -124,14 +121,11 @@ private func UpdateShieldAngle(object clonk, int x, int y)
 	clonk->ReplaceAction("Walk", [Format("ShieldWalkUp.%s",handLR), Format("ShieldWalkDown.%s",handLR), weight]);
 	clonk->ReplaceAction("Run", [Format("ShieldWalkUp.%s",handLR), Format("ShieldWalkDown.%s",handLR), weight]);
 
-	if(!GetEffect("IntShieldSuspend", clonk))
-	{
-		if(angle > 0) clonk->SetTurnForced(DIR_Right);
-		else clonk->SetTurnForced(DIR_Left);
+	if(angle > 0) clonk->SetTurnForced(DIR_Right);
+	else clonk->SetTurnForced(DIR_Left);
 	
-		clonk->SetAnimationPosition(aim_anim,  Anim_Const(Abs(angle) * 11111/1000));
-		AdjustSolidMaskHelper();
-	}
+	clonk->SetAnimationPosition(aim_anim,  Anim_Const(Abs(angle) * 11111/1000));
+	AdjustSolidMaskHelper();
 }
 
 // Adjust solid mask of shield
@@ -169,7 +163,7 @@ private func AdjustSolidMaskHelper()
 
 func Hit()
 {
-	Sound("DullMetalHit?");
+	Sound("Hits::Materials::Metal::DullMetalHit?");
 }
 
 func OnWeaponHitCheckStop()
@@ -185,7 +179,7 @@ func HitByWeapon(by, iDamage)
 	var angle_diff = Abs(Normalize(shield_angle-object_angle,-180));
 	if (angle_diff > 45) return 0;
 
-	Sound("ShieldMetalHit?");
+	Sound("Objects::Weapons::Shield::MetalHit?");
 	
 	// bash him hard!
 	ApplyWeaponBash(by, 100, iAngle);
@@ -216,9 +210,10 @@ func FxShieldStopControlTimer(object target, effect)
 	// suspend usage if not walking
 	if(!target->IsWalking())
 	{
-		AddEffect("IntShieldSuspend", target, 1, 5, this);
-		EndUsage(target);
+		target->PauseUse(this);
+		return -1;
 	}
+	return 1;
 }
 
 func FxShieldStopControlQueryCatchBlow(object target, effect, object obj)
@@ -238,7 +233,7 @@ func FxShieldStopControlQueryCatchBlow(object target, effect, object obj)
 	// angle difference: 0..180
 	var angle_diff = Abs(Normalize(shield_angle-object_angle,-180));
 
-	// objects hits if the angle difference is greater than 45°
+	// objects hits if the angle difference is greater than 45 degrees
 	if (angle_diff > 45) return false;
 	
 	// projectile bounces off
@@ -252,20 +247,9 @@ func FxShieldStopControlQueryCatchBlow(object target, effect, object obj)
 	// dont collect blocked objects
 	AddEffect("NoCollection", obj, 1, 30);
 	
-	Sound("ShieldMetalHit?");
+	Sound("Objects::Weapons::Shield::MetalHit?");
 	
 	return true;
-}
-
-/* Suspend effect */
-
-func FxIntShieldSuspendTimer(object target, effect)
-{
-	if(target->IsWalking() && CanStrikeWithWeapon(target))
-	{
-		StartUsage(target);
-		return -1;
-	}
 }
 
 /* Colour by owner */
@@ -280,18 +264,18 @@ public func GetCarryMode() { return CARRY_HandBack; }
 public func GetCarrySpecial(clonk) { return carry_bone; }
 public func GetCarryTransform(clonk, sec, back)
 {
-	if(aim_anim && !sec) return Trans_Mul(Trans_Rotate(180,0,0,1),Trans_Rotate(90,0,0,1));
-	if(aim_anim && sec) return Trans_Mul(Trans_Rotate(180,1,0,0), Trans_Rotate(90,0,0,1));
+	if(aim_anim && !sec) return Trans_Mul(Trans_Rotate(180,0,1,0),Trans_Rotate(90,0,1,0));
+	if(aim_anim && sec) return Trans_Mul(Trans_Rotate(180,0,0,1), Trans_Rotate(90,0,1,1));
 
 	if(mTrans != nil) return mTrans;
 	if(!sec)
 	{
-		if(back) return Trans_Mul(Trans_Rotate(-90, 0, 0, 1),Trans_Translate(0,0,400));
+		if(back) return Trans_Mul(Trans_Rotate(-90, 0, 1, 0),Trans_Translate(0,-400,0));
 		return nil;
 	}
 	
-	if(back) return Trans_Mul(Trans_Mul(Trans_Rotate(90, 0, 0, 1),Trans_Rotate(180, 0, 1)),Trans_Translate(0,0,400));
-	return Trans_Rotate(180,1,0,0);
+	if(back) return Trans_Mul(Trans_Mul(Trans_Rotate(90, 0, 1, 0),Trans_Rotate(180, 1, 0, 0)),Trans_Translate(0,-400,0));
+	return Trans_Rotate(180,0,0,1);
 }
 
 public func IsWeapon() { return true; }
@@ -307,4 +291,3 @@ local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = true;

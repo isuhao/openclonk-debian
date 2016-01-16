@@ -23,21 +23,17 @@
 #include "StdMeshMaterial.h"
 #include <cassert>
 #include <vector>
-#include <boost/foreach.hpp>
-#include <boost/ptr_container/ptr_map.hpp>
-#include <boost/ptr_container/ptr_vector.hpp>
-
-#include <C4DefList.h>
-#include <C4Def.h>
 
 namespace
 {
-	bool VertexDeclarationIsSane(const boost::ptr_vector<Ogre::Mesh::ChunkGeometryVertexDeclElement> &decl, const char *filename)
+	using Ogre::unique_ptr_vector;
+
+	bool VertexDeclarationIsSane(const unique_ptr_vector<Ogre::Mesh::ChunkGeometryVertexDeclElement> &decl, const char *filename)
 	{
 		bool semanticSeen[Ogre::Mesh::ChunkGeometryVertexDeclElement::VDES_MAX + 1] = { false };
-		BOOST_FOREACH(Ogre::Mesh::ChunkGeometryVertexDeclElement element, decl)
+		for(auto& element: decl)
 		{
-			switch (element.semantic)
+			switch (element->semantic)
 			{
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDES_Texcoords:
 				// FIXME: The Ogre format supports denoting multiple texture coordinates, but the rendering code only supports one
@@ -48,14 +44,14 @@ namespace
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDES_Diffuse:
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDES_Specular:
 				// Only one set of each of these elements allowed
-				if (semanticSeen[element.semantic])
+				if (semanticSeen[element->semantic])
 					return false;
 				break;
 			default:
 				// We ignore unhandled element semantics.
 				break;
 			}
-			semanticSeen[element.semantic] = true;
+			semanticSeen[element->semantic] = true;
 		}
 		return true;
 	}
@@ -63,7 +59,7 @@ namespace
 	template<size_t N>
 	void ReadNormalizedVertexData(float (&dest)[N], const char *source, Ogre::Mesh::ChunkGeometryVertexDeclElement::Type vdet)
 	{
-		BOOST_STATIC_ASSERT(N >= 4);
+		static_assert(N >= 4, "");
 		dest[0] = dest[1] = dest[2] = 0; dest[3] = 1;
 		switch (vdet)
 		{
@@ -100,10 +96,10 @@ namespace
 
 		// Get maximum size of a vertex according to the declaration
 		std::map<int, size_t> max_offset;
-		BOOST_FOREACH(const Ogre::Mesh::ChunkGeometryVertexDeclElement &el, geo.vertexDeclaration)
+		for(const auto &el: geo.vertexDeclaration)
 		{
 			size_t elsize = 0;
-			switch (el.type)
+			switch (el->type)
 			{
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDET_Float1: elsize = sizeof(float) * 1; break;
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDET_Float2: elsize = sizeof(float) * 2; break;
@@ -113,23 +109,23 @@ namespace
 			case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDET_Color_ARGB: elsize = sizeof(uint8_t) * 4; break;
 			default: assert(!"Unexpected enum value"); break;
 			}
-			max_offset[el.source] = std::max<size_t>(max_offset[el.source], el.offset + elsize);
+			max_offset[el->source] = std::max<size_t>(max_offset[el->source], el->offset + elsize);
 		}
 
 		// Generate array of vertex buffer cursors
 		std::map<int, const char *> cursors;
-		BOOST_FOREACH(const Ogre::Mesh::ChunkGeometryVertexBuffer &buf, geo.vertexBuffers)
+		for(const auto &buf: geo.vertexBuffers)
 		{
-			if (cursors.find(buf.index) != cursors.end())
+			if (cursors.find(buf->index) != cursors.end())
 				throw Ogre::MultipleSingletonChunks("Multiple vertex buffers were bound to the same stream");
-			cursors[buf.index] = static_cast<const char *>(buf.data->data);
+			cursors[buf->index] = static_cast<const char *>(buf->data->data);
 			// Check that the vertices don't overlap
-			if (buf.vertexSize < max_offset[buf.index])
+			if (buf->vertexSize < max_offset[buf->index])
 				throw Ogre::InsufficientData("Vertices overlapping");
 			// Check that the vertex buffer has enough room for all vertices
-			if (buf.GetSize() < (geo.vertexCount - 1) * buf.vertexSize + max_offset[buf.index])
+			if (buf->GetSize() < (geo.vertexCount - 1) * buf->vertexSize + max_offset[buf->index])
 				throw Ogre::InsufficientData("Vertex buffer too small");
-			max_offset.erase(buf.index);
+			max_offset.erase(buf->index);
 		}
 
 		if (!max_offset.empty())
@@ -146,11 +142,11 @@ namespace
 			vertex.u = vertex.v = 0;
 			bool read_tex = false;
 			// Read vertex declaration
-			BOOST_FOREACH(Ogre::Mesh::ChunkGeometryVertexDeclElement element, geo.vertexDeclaration)
+			for(const auto& element: geo.vertexDeclaration)
 			{
 				float values[4];
-				ReadNormalizedVertexData(values, cursors[element.source] + element.offset, element.type);
-				switch (element.semantic)
+				ReadNormalizedVertexData(values, cursors[element->source] + element->offset, element->type);
+				switch (element->semantic)
 				{
 				case Ogre::Mesh::ChunkGeometryVertexDeclElement::VDES_Position:
 					vertex.x = values[0];
@@ -174,10 +170,10 @@ namespace
 					break;
 				}
 			}
-			vertices.push_back(vertex);
+			vertices.push_back(OgreToClonk::TransformVertex(vertex));
 			// Advance vertex buffer cursors
-			BOOST_FOREACH(const Ogre::Mesh::ChunkGeometryVertexBuffer &buf, geo.vertexBuffers)
-			cursors[buf.index] += buf.vertexSize;
+			for(const std::unique_ptr<Ogre::Mesh::ChunkGeometryVertexBuffer> &buf: geo.vertexBuffers)
+			cursors[buf->index] += buf->vertexSize;
 		}
 
 		return vertices;
@@ -302,8 +298,6 @@ std::shared_ptr<StdMeshSkeleton> StdMeshSkeletonLoader::GetSkeletonByName(const 
 {
 	StdCopyStrBuf filename(name);
 
-	//DebugLogF("Loading skeleton %s\n", filename.getData());
-
 	std::map<StdCopyStrBuf, std::shared_ptr<StdMeshSkeleton>>::const_iterator iter = Skeletons.find(filename);
 	if (iter == Skeletons.end()) return NULL;
 	return iter->second;
@@ -311,18 +305,18 @@ std::shared_ptr<StdMeshSkeleton> StdMeshSkeletonLoader::GetSkeletonByName(const 
 
 void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char* filename, const char *sourcefile, size_t size)
 {
-	boost::scoped_ptr<Ogre::Skeleton::Chunk> chunk;
+	std::unique_ptr<Ogre::Skeleton::Chunk> chunk;
 	Ogre::DataStream stream(sourcefile, size);
 
 	std::shared_ptr<StdMeshSkeleton> Skeleton(new StdMeshSkeleton);
 
 	// First chunk must be the header
-	chunk.reset(Ogre::Skeleton::Chunk::Read(&stream));
+	chunk = Ogre::Skeleton::Chunk::Read(&stream);
 	if (chunk->GetType() != Ogre::Skeleton::CID_Header)
 		throw Ogre::Skeleton::InvalidVersion();
 
-	boost::ptr_map<uint16_t, StdMeshBone> bones;
-	boost::ptr_vector<Ogre::Skeleton::ChunkAnimation> animations;
+	std::map<uint16_t, std::unique_ptr<StdMeshBone>> bones;
+	unique_ptr_vector<Ogre::Skeleton::ChunkAnimation> animations;
 	for (Ogre::Skeleton::ChunkID id = Ogre::Skeleton::Chunk::Peek(&stream);
 		id == Ogre::Skeleton::CID_BlendMode || id == Ogre::Skeleton::CID_Bone || id == Ogre::Skeleton::CID_Bone_Parent || id == Ogre::Skeleton::CID_Animation;
 		id = Ogre::Skeleton::Chunk::Peek(&stream)
@@ -345,7 +339,7 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 			// Check that the bone ID is unique
 			if (bones.find(cbone.handle) != bones.end())
 				throw Ogre::Skeleton::IdNotUnique();
-			StdMeshBone *bone = new StdMeshBone;
+			auto bone = std::make_unique<StdMeshBone>();
 			bone->Parent = NULL;
 			bone->ID = cbone.handle;
 			bone->Name = cbone.name.c_str();
@@ -353,7 +347,7 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 			bone->Transformation.rotate = cbone.orientation;
 			bone->Transformation.scale = cbone.scale;
 			bone->InverseTransformation = StdMeshTransformation::Inverse(bone->Transformation);
-			bones.insert(cbone.handle, bone);
+			bones.insert(std::make_pair(cbone.handle, std::move(bone)));
 		}
 		break;
 		case Ogre::Skeleton::CID_Bone_Parent:
@@ -361,13 +355,13 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 			Ogre::Skeleton::ChunkBoneParent &cbparent = *static_cast<Ogre::Skeleton::ChunkBoneParent*>(chunk.get());
 			if (bones.find(cbparent.parentHandle) == bones.end() || bones.find(cbparent.childHandle) == bones.end())
 				throw Ogre::Skeleton::BoneNotFound();
-			bones[cbparent.parentHandle].Children.push_back(&bones[cbparent.childHandle]);
-			bones[cbparent.childHandle].Parent = &bones[cbparent.parentHandle];
+			bones[cbparent.parentHandle]->Children.push_back(bones[cbparent.childHandle].get());
+			bones[cbparent.childHandle]->Parent = bones[cbparent.parentHandle].get();
 		}
 		break;
 		case Ogre::Skeleton::CID_Animation:
 			// Collect animations for later (need bone table index, which we don't know yet)
-			animations.push_back(static_cast<Ogre::Skeleton::ChunkAnimation*>(chunk.release()));
+			animations.emplace_back(static_cast<Ogre::Skeleton::ChunkAnimation*>(chunk.release()));
 			break;
 		default:
 			assert(!"Unexpected enum value");
@@ -378,19 +372,20 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 
 	// Find master bone (i.e., the one without a parent)
 	StdMeshBone *master = NULL;
-	for (boost::ptr_map<uint16_t, StdMeshBone>::iterator it = bones.begin(); it != bones.end(); ++it)
+	for (auto& b: bones)
 	{
-		if (!it->second->Parent)
+		if (!b.second->Parent)
 		{
-			master = it->second;
+			master = b.second.get();
 			Skeleton->AddMasterBone(master);
 		}
 	}
 	if (!master)
 		throw Ogre::Skeleton::MissingMasterBone();
 
-	// Transfer bone ownership to mesh (double .release() is correct)
-	while (!bones.empty()) bones.release(bones.begin()).release();
+	// Transfer bone ownership to mesh
+	for (auto& b: bones) b.second.release();
+	bones.clear();
 
 	// Build handle->index quick access table
 	std::map<uint16_t, size_t> handle_lookup;
@@ -400,39 +395,41 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 	}
 
 	// Fixup animations
-	BOOST_FOREACH(Ogre::Skeleton::ChunkAnimation &canim, animations)
+	for(auto &canim: animations)
 	{
-		StdMeshAnimation &anim = Skeleton->Animations[StdCopyStrBuf(canim.name.c_str())];
-		anim.Name = canim.name.c_str();
-		anim.Length = canim.duration;
+		StdMeshAnimation &anim = Skeleton->Animations[StdCopyStrBuf(canim->name.c_str())];
+		anim.Name = canim->name.c_str();
+		anim.Length = canim->duration;
 		anim.Tracks.resize(Skeleton->GetNumBones());
 		anim.OriginSkeleton = &(*Skeleton);
 
-		BOOST_FOREACH(Ogre::Skeleton::ChunkAnimationTrack &catrack, canim.tracks)
+		for(auto &catrack: canim->tracks)
 		{
-			const StdMeshBone &bone = Skeleton->GetBone(handle_lookup[catrack.bone]);
+			const StdMeshBone &bone = Skeleton->GetBone(handle_lookup[catrack->bone]);
 			StdMeshTrack *&track = anim.Tracks[bone.Index];
 			if (track != NULL)
 				throw Ogre::Skeleton::MultipleBoneTracks();
 			track = new StdMeshTrack;
-			BOOST_FOREACH(Ogre::Skeleton::ChunkAnimationTrackKF &catkf, catrack.keyframes)
+			for(auto &catkf: catrack->keyframes)
 			{
-				StdMeshKeyFrame &kf = track->Frames[catkf.time];
-				kf.Transformation.rotate = catkf.rotation;
-				kf.Transformation.scale = catkf.scale;
-				kf.Transformation.translate = bone.InverseTransformation.rotate * (bone.InverseTransformation.scale * catkf.translation);
+				StdMeshKeyFrame &kf = track->Frames[catkf->time];
+				kf.Transformation.rotate = catkf->rotation;
+				kf.Transformation.scale = catkf->scale;
+				kf.Transformation.translate = bone.InverseTransformation.rotate * (bone.InverseTransformation.scale * catkf->translation);
+				kf.Transformation = OgreToClonk::TransformTransformation(kf.Transformation);
 			}
 		}
 	}
 
 	// Fixup bone transforms
-	BOOST_FOREACH(StdMeshBone *bone, Skeleton->Bones)
+	for(StdMeshBone *bone: Skeleton->Bones)
 	{
 		if (bone->Parent)
-		{
-			bone->Transformation = bone->Parent->Transformation * bone->Transformation;
-			bone->InverseTransformation = StdMeshTransformation::Inverse(bone->Transformation);
-		}
+			bone->Transformation = bone->Parent->Transformation * OgreToClonk::TransformTransformation(bone->Transformation);
+		else
+			bone->Transformation = OgreToClonk::TransformTransformation(bone->Transformation);
+
+		bone->InverseTransformation = StdMeshTransformation::Inverse(bone->Transformation);
 	}
 
 	StoreSkeleton(groupname, filename, Skeleton);
@@ -440,29 +437,22 @@ void StdMeshSkeletonLoader::LoadSkeletonBinary(const char* groupname, const char
 
 StdMesh *StdMeshLoader::LoadMeshBinary(const char *sourcefile, size_t length, const StdMeshMatManager &mat_mgr, StdMeshSkeletonLoader &loader, const char *filename)
 {
-	boost::scoped_ptr<Ogre::Mesh::Chunk> root;
+	std::unique_ptr<Ogre::Mesh::Chunk> root;
 	Ogre::DataStream stream(sourcefile, length);
 
 	// First chunk must be the header
-	root.reset(Ogre::Mesh::Chunk::Read(&stream));
+	root = Ogre::Mesh::Chunk::Read(&stream);
 	if (root->GetType() != Ogre::Mesh::CID_Header)
 		throw Ogre::Mesh::InvalidVersion();
 
 	// Second chunk is the mesh itself
-	root.reset(Ogre::Mesh::Chunk::Read(&stream));
+	root = Ogre::Mesh::Chunk::Read(&stream);
 	if (root->GetType() != Ogre::Mesh::CID_Mesh)
 		throw Ogre::Mesh::InvalidVersion();
 
 	// Generate mesh from data
 	Ogre::Mesh::ChunkMesh &cmesh = *static_cast<Ogre::Mesh::ChunkMesh*>(root.get());
 	std::unique_ptr<StdMesh> mesh(new StdMesh);
-	mesh->BoundingBox = cmesh.bounds;
-	mesh->BoundingRadius = cmesh.radius;
-
-	// We allow bounding box to be empty if it's only due to X direction since
-	// this is what goes inside the screen in Clonk.
-	if(mesh->BoundingBox.y1 == mesh->BoundingBox.y2 || mesh->BoundingBox.z1 == mesh->BoundingBox.z2)
-		throw Ogre::Mesh::EmptyBoundingBox();
 
 	// if the mesh has a skeleton, then try loading
 	// it from the loader by the definition name
@@ -499,7 +489,7 @@ StdMesh *StdMeshLoader::LoadMeshBinary(const char *sourcefile, size_t length, co
 	{
 		mesh->SubMeshes.push_back(StdSubMesh());
 		StdSubMesh &sm = mesh->SubMeshes.back();
-		Ogre::Mesh::ChunkSubmesh &csm = cmesh.submeshes[i];
+		Ogre::Mesh::ChunkSubmesh &csm = *cmesh.submeshes[i];
 		sm.Material = mat_mgr.GetMaterial(csm.material.c_str());
 		if (!sm.Material)
 			throw Ogre::Mesh::InvalidMaterial();
@@ -555,6 +545,56 @@ StdMesh *StdMeshLoader::LoadMeshBinary(const char *sourcefile, size_t length, co
 				vertex.bone_weight[0] = 1.0f;
 		}
 	}
+
+	// Construct bounding box. Don't use bounds and radius from cmesh
+	// because they are in a different coordinate frame.
+	//mesh->BoundingBox = cmesh.bounds;
+	//mesh->BoundingRadius = cmesh.radius;
+
+	bool first = true;
+	for (unsigned int i = 0; i < mesh->SubMeshes.size() + 1; ++i)
+	{
+		const std::vector<StdSubMesh::Vertex>* vertices = NULL;
+		if (i < mesh->SubMeshes.size())
+			vertices = &mesh->SubMeshes[i].Vertices;
+		else
+			vertices = &mesh->SharedVertices;
+
+		for (unsigned int j = 0; j < vertices->size(); ++j)
+		{
+			const StdMeshVertex& vertex = (*vertices)[j];
+
+			const float d = std::sqrt(vertex.x*vertex.x
+		 	                        + vertex.y*vertex.y
+			                        + vertex.z*vertex.z);
+
+			// First vertex
+			if (first)
+			{
+				mesh->BoundingBox.x1 = mesh->BoundingBox.x2 = vertex.x;
+				mesh->BoundingBox.y1 = mesh->BoundingBox.y2 = vertex.y;
+				mesh->BoundingBox.z1 = mesh->BoundingBox.z2 = vertex.z;
+				mesh->BoundingRadius = d;
+				first = false;
+			}
+			else
+			{
+				mesh->BoundingBox.x1 = std::min(vertex.x, mesh->BoundingBox.x1);
+				mesh->BoundingBox.x2 = std::max(vertex.x, mesh->BoundingBox.x2);
+				mesh->BoundingBox.y1 = std::min(vertex.y, mesh->BoundingBox.y1);
+				mesh->BoundingBox.y2 = std::max(vertex.y, mesh->BoundingBox.y2);
+				mesh->BoundingBox.z1 = std::min(vertex.z, mesh->BoundingBox.z1);
+				mesh->BoundingBox.z2 = std::max(vertex.z, mesh->BoundingBox.z2);
+				mesh->BoundingRadius = std::max(mesh->BoundingRadius, d);
+			}
+		}
+	}
+
+	// We allow bounding box to be empty if it's only due to Z direction since
+	// this is what goes inside the screen in Clonk.
+	if(mesh->BoundingBox.x1 == mesh->BoundingBox.x2 || mesh->BoundingBox.y1 == mesh->BoundingBox.y2)
+		throw Ogre::Mesh::EmptyBoundingBox();
+
 	return mesh.release();
 }
 
@@ -579,7 +619,6 @@ void StdMeshSkeletonLoader::DoResetSkeletons()
 		{
 			if (animations->second.OriginSkeleton != &(*(skeleton)))
 			{
-				//DebugLogF("Erasing animation %s from %s", animations->first.getData(), it->first.getData());
 				animations = skeleton->Animations.erase(animations);
 			}
 			else
@@ -623,7 +662,6 @@ void StdMeshSkeletonLoader::DoAppendSkeletons()
 				}
 				else
 				{
-					//DebugLogF("Appending animation %s to definition %s", animations->second.Name.getData(), id.getData());
 					destination->InsertAnimation(*source, animations->second);
 				}
 			}
@@ -664,7 +702,6 @@ void StdMeshSkeletonLoader::DoIncludeSkeletons()
 				}
 				else
 				{
-					//DebugLogF("Including animation %s from skeleton %s", animations->second.Name.getData(), id.getData());
 					destination->InsertAnimation(*source, animations->second);
 				}
 			}

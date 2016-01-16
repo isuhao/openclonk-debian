@@ -243,6 +243,19 @@ global func Particles_Straw()
 	};
 }
 
+global func Particles_CottonBalloon()
+{
+	return
+	{
+		Prototype = Particles_WoodChip(),
+		Phase = PV_Random(0, 3),
+		Size = PV_Random(2, 4),
+		ForceY = PV_Gravity(10),
+		DampingX = 900, DampingY = 900,
+		Attach = nil
+	};
+}
+
 global func Particles_Air()
 {
 	return

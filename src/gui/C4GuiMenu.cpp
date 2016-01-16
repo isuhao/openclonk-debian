@@ -170,7 +170,7 @@ namespace C4GUI
 	void ContextMenu::Abort(bool fByUser)
 	{
 		// effect
-		if (fByUser) GUISound("DoorClose");
+		if (fByUser) GUISound("UI::Close");
 		// simply del menu: dtor will remove itself
 		delete this;
 	}
@@ -332,12 +332,12 @@ namespace C4GUI
 		Element *pCurr = GetFirst();
 		if (!pCurr) return;
 		pCurr->GetBounds().y = 0;
-		int32_t iMinWdt = Max<int32_t>(20, pCurr->GetBounds().Wdt);;
+		int32_t iMinWdt = std::max<int32_t>(20, pCurr->GetBounds().Wdt);;
 		int32_t iOverallHgt = pCurr->GetBounds().Hgt;
 		// others stacked under it
 		while ((pCurr = pCurr->GetNext()))
 		{
-			iMinWdt = Max(iMinWdt, pCurr->GetBounds().Wdt);
+			iMinWdt = std::max(iMinWdt, pCurr->GetBounds().Wdt);
 			int32_t iYSpace = pCurr->GetListItemTopSpacing();
 			int32_t iNewY = iOverallHgt + iYSpace;
 			iOverallHgt += pCurr->GetBounds().Hgt + iYSpace;
@@ -348,7 +348,7 @@ namespace C4GUI
 			}
 		}
 		// don't make smaller
-		iMinWdt = Max(iMinWdt, rcBounds.Wdt - GetMarginLeft() - GetMarginRight());
+		iMinWdt = std::max(iMinWdt, rcBounds.Wdt - GetMarginLeft() - GetMarginRight());
 		// all entries same size
 		for (pCurr = GetFirst(); pCurr; pCurr = pCurr->GetNext())
 			if (pCurr->GetBounds().Wdt != iMinWdt)
@@ -358,7 +358,7 @@ namespace C4GUI
 			}
 		// update own size
 		rcBounds.Wdt = iMinWdt + GetMarginLeft() + GetMarginRight();
-		rcBounds.Hgt = Max<int32_t>(iOverallHgt, 8) + GetMarginTop() + GetMarginBottom();
+		rcBounds.Hgt = std::max<int32_t>(iOverallHgt, 8) + GetMarginTop() + GetMarginBottom();
 		UpdateSize();
 	}
 
@@ -427,7 +427,7 @@ namespace C4GUI
 		if (pSelectedItem)
 		{
 			// effect
-			if (fByUser) GUISound("Command");
+			if (fByUser) GUISound("UI::Select");
 		}
 		// close any submenu from prev selection
 		if (pSubmenu) pSubmenu->Abort(true);
@@ -460,6 +460,9 @@ namespace C4GUI
 
 	void ContextMenu::Draw(C4TargetFacet &cgo)
 	{
+		// In editor mode, the surface is not assigned
+		// The menu is drawn directly by the dialogue, so just exit here.
+		if (!cgo.Surface) return;
 		// draw self
 		Window::Draw(cgo);
 		// draw submenus on top
@@ -474,7 +477,7 @@ namespace C4GUI
 		// set target
 		this->pTarget = pTarget;
 		// effect :)
-		GUISound("DoorOpen");
+		GUISound("UI::Open");
 		// done
 	}
 
@@ -537,7 +540,7 @@ namespace C4GUI
 		// close all menus (deletes this class!) w/o sound
 		GetScreen()->AbortContext(false);
 		// sound
-		GUISound("Click");
+		GUISound("UI::Click");
 		// do CB
 		pCallback->OnOK(pTarget);
 		// free CB class

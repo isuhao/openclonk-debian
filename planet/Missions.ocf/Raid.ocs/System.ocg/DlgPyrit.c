@@ -98,15 +98,29 @@ func Dlg_Pyrit_15(object clonk)
 	MessageBox("$Pyrit15$", clonk, dlg_target); // take con plans for plane
 	g_pyrit_spoken = true;
 	g_goal->SetStagePlane();
+	AddTimer(this.CheckOilAtPlane, 10);
 	SetBroadcast(false);
 	StopDialogue();
 	SetDialogueProgress(16);
-	SetPlrKnowledge(NO_OWNER, Plane);
+	SetPlrKnowledge(NO_OWNER, Airplane);
 	// many NPCs get new texts now
 	Dialogue->FindByTarget(npc_newton)->SetDialogueProgress(200, nil, true);
 	Dialogue->FindByTarget(npc_mave)->SetDialogueProgress(100, nil, true);
 	Dialogue->FindByTarget(npc_clonko)->SetDialogueProgress(100, nil, true);
 	Dialogue->FindByTarget(npc_dora)->AddAttention(); // in case player spoke to Dora before speaking to Pyrit...
+	return true;
+}
+
+// called every 10 frames after plane+oil task has been given
+func CheckOilAtPlane()
+{
+	var barrel;
+	for (var plane in FindObjects(Find_ID(Airplane)))
+		if (barrel = plane->FindObject(plane->Find_AtRect(-30,-10,60,20), Find_ID(MetalBarrel)))
+		{
+			RemoveTimer(Scenario.CheckOilAtPlane);
+			ScheduleCall(nil, Global.GameCall, 1,1, "OnPlaneLoaded", plane, barrel);
+		}
 	return true;
 }
 
@@ -179,7 +193,7 @@ static const Pyrit_Hammer_SwingTime = 40;
 func Dlg_Pyrit_Init(object clonk)
 {
 	// Pyit has a red hat!
-	clonk->AttachMesh(Hat, "skeleton_head", "main", Trans_Translate(0,5500));
+	clonk->AttachMesh(Hat, "skeleton_head", "main", Trans_Translate(5500, 0, 0));
 	// Clonk moves slowly.
 	clonk.ActMap = { Prototype = Clonk.ActMap, Walk = { Prototype = Clonk.ActMap.Walk } };
 	clonk.ActMap.Walk.Speed /= 3;
@@ -223,7 +237,7 @@ func Pyrit_HitFx()
 	var x = (GetDir()*2-1) * 14;
 	var y = 4;
 	CreateParticle("StarSpark", x*9/10,y*9/10, PV_Random(-20, 20), PV_Random(-20, 20), PV_Random(10, 20), Particles_Glimmer(), 10);
-	Sound("Clang?");
+	Sound("Objects::Pickaxe::Clang?");
 	return true;
 }
 

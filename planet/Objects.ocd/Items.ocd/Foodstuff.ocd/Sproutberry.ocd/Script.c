@@ -2,24 +2,28 @@
 
 protected func Hit()
 {
-	Sound("SoftHit1");
+	Sound("Hits::SoftHit1");
 }
 
+public func Construction()
+{
+	this.MeshTransformation = Trans_Scale(1500, 1500, 1500);
+}
 
 /* Eating */
 
 protected func ControlUse(object clonk, int iX, int iY)
 {
 	clonk->Eat(this);
+	return true;
 }
 
-public func NutritionalValue() { return 10; }
+public func NutritionalValue() { return 5; }
 
 local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = false;
 
 
 // sproutberries are extremely unstable and likely to grow a new plant if not carried

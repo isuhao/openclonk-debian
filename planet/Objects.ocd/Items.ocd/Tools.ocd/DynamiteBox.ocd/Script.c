@@ -31,7 +31,7 @@ public func Initialize()
 
 private func Hit()
 {
-	Sound("DullWoodHit?");
+	Sound("Hits::Materials::Wood::DullWoodHit?");
 }
 
 public func HoldingEnabled() { return true; }
@@ -52,46 +52,113 @@ public func ControlUse(object clonk, int x, int y)
 
 	wire = CreateObject(Fuse);
 	wire->Connect(dynamite, this);
-	Sound("Connect");
+	Sound("Objects::Connect");
 	wires[count - 1] = wire;
 	
 	count--;
-
-	UpdatePicture();
 	
 	if (count == 0)
 	{
 		var pos = clonk->GetItemPos(this);
-		ChangeDef(Igniter);
-		SetGraphics("Picture", Igniter, 1, GFXOV_MODE_Picture);
+		ChangeToIgniter();
 		clonk->UpdateAttach();
 		clonk->OnSlotFull(pos);
 	}
+	else
+	{
+		UpdatePicture();
+	}
 
+	// Make sure the inventory gets notified of the changes.
+	clonk->~OnInventoryChange();
 	return true;
+}
+
+// Empty this box and turn it into an igniter
+public func ChangeToIgniter()
+{
+	count = 0;
+	UpdatePicture();
+	ChangeDef(Igniter);
+	SetGraphics("Picture", Igniter, 1, GFXOV_MODE_Picture);
+	return true;
+}
+
+public func SetDynamiteCount(int new_count)
+{
+	count = BoundBy(new_count, 1, DYNA_MaxCount);
+	UpdatePicture();
+	// Update inventory if contained in a crew member.
+	if (Contained())
+		Contained()->~OnInventoryChange();
+	return;
 }
 
 private func UpdatePicture()
 {
-	var s = 400;
-	var yoffs = 14000;
-	var xoffs = 22000;
-	SetGraphics(Format("%d", count), Icon_Number, 12, GFXOV_MODE_Picture);
-	SetObjDrawTransform(s, 0, xoffs, 0, s, yoffs, 12);
 	SetGraphics(Format("%d", 6 - count), DynamiteBox, 1, GFXOV_MODE_Picture);
 	return;
 }
 
-public func OnFuseFinished()
+// Do not stack empty dynamite boxes with full ones.
+public func CanBeStackedWith(object other)
 {
+	if (this.count != other.count) return false;
+	return inherited(other, ...);
+}
+
+// Display the remaining dynamite sticks in menus.
+public func GetInventoryIconOverlay()
+{
+	// Full boxes don't need an overlay. Same for igniters.
+	if (count == DYNA_MaxCount || count <= 0) return nil;
+
+	// Overlay the sticks.
+	var overlay = 
+	{
+		Top = "0.1em",
+		Bottom = "1.1em",
+		back_stripe = 
+		{
+			Priority = -1,
+			Margin = ["0em", "0.3em", "0em", "0.2em"],
+			BackgroundColor = RGBa(0, 0, 0, 200)
+		}
+	};
+	
+	for (var i = 0; i < count; ++i)
+	{
+		var left = -i * 4 - 10;
+		var left_string = ToEmString(left);
+		var stick = 
+		{
+			Left = Format("100%% %s", left_string),
+			Right = Format("100%% %s + 1em", left_string),
+			Symbol = Dynamite
+		};
+		GuiAddSubwindow(stick, overlay);
+	}
+	
+	return overlay;
+}
+
+public func OnFuseFinished(object fuse)
+{
+	SetController(fuse->GetController());
 	DoExplode();
+}
+
+public func ActivateFuse()
+{
+	// Activate all fuses.
+	for (var obj in FindObjects(Find_Category(C4D_StaticBack), Find_Func("IsFuse"), Find_ActionTargets(this)))
+		obj->~StartFusing(this);
 }
 
 public func DoExplode()
 {
 	// Activate all fuses.
-	for (var obj in FindObjects(Find_Category(C4D_StaticBack), Find_Func("IsFuse"), Find_ActionTargets(this)))
-		obj->~StartFusing(this);
+	ActivateFuse();
 	// Explode, calc the radius out of the area of a explosion of a single dynamite times the amount of dynamite
 	// This results to 18, 25, 31, 36, and 40
 	Explode(Sqrt(18**2*count));
@@ -99,8 +166,9 @@ public func DoExplode()
 
 protected func Incineration(int caused_by) 
 {
-	AddEffect("Fuse", this, 100, 1, this);
-	Sound("Fuse");
+	ActivateFuse();
+	if (!GetEffect("Fuse", this)) AddEffect("Fuse", this, 100, 1, this);
+	Sound("Fire::Fuse");
 	SetController(caused_by);
 	return;
 }
@@ -123,6 +191,15 @@ public func IsTool() { return true; }
 public func IsChemicalProduct() { return true; }
 
 
+/* Drop connected or fusing boxes */
+
+public func IsDroppedOnDeath(object clonk)
+{
+	return GetEffect("Fuse", this) || wire;
+}
+
+
+
 /*-- Properties --*/
 
 func Definition(def) {
@@ -133,6 +210,5 @@ local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
-local Rebuy = true;
 local BlastIncinerate = 1;
 local ContactIncinerate = 2;

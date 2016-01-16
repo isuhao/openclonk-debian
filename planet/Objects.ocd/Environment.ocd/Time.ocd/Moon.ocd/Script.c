@@ -8,9 +8,9 @@ local phase;
 
 protected func Initialize()
 {
+	phase = 0;
 	var alpha = 0;
-	var time = FindObject(Find_ID(Environment_Time));
-	if (time && time->IsNight())
+	if (Time->IsNight())
 		alpha = 255;
 	SetClrModulation(RGBa(255, 255, 255, alpha));
 	

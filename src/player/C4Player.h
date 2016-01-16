@@ -137,6 +137,8 @@ public:
 	class C4MessageBoardQuery *pMsgBoardQuery;
 	// BigIcon
 	C4FacetSurface BigIcon;
+	// Sound
+	C4Value SoundModifier;
 	// Dynamic list
 	C4Player *Next;
 
@@ -152,13 +154,11 @@ public:
 
 public:
 	void Eliminate();
-	void Default();
-	void Clear();
 	void ClearPointers(C4Object *tptr, bool fDeath);
 	void Execute();
 	void ExecuteControl();
-	void SetViewMode(int32_t iMode, C4Object *pTarget=NULL);
-	void ResetCursorView(); // reset view to cursor if any cursor exists
+	void SetViewMode(int32_t iMode, C4Object *pTarget=NULL, bool immediate_position=false);
+	void ResetCursorView(bool immediate_position = false); // reset view to cursor if any cursor exists
 	void Evaluate();
 	void Surrender();
 	void ScrollView(float iX, float iY, float ViewWdt, float ViewHgt); // in landscape coordinates
@@ -205,6 +205,7 @@ public:
 	bool IsInvisible() const;
 	bool IsViewLocked() const { return ViewLock; } // return if view is fixed to cursor, so scrolling is not allowed
 	void SetViewLocked(bool to_val); // lock or unlock free scrolling for player
+	void SetSoundModifier(C4PropList *new_modifier); // set modifier to be applied to all new sounds being played in a player's viewport
 
 protected:
 	void ClearControl();

@@ -38,6 +38,7 @@ namespace C4GUI
 
 	void FrameDecoration::Clear()
 	{
+		pSourceDef = nullptr;
 		idSourceDef = C4ID::None;
 		dwBackClr = C4GUI_StandardBGColor;
 		iBorderTop=iBorderLeft=iBorderRight=iBorderBottom=0;
@@ -73,14 +74,18 @@ namespace C4GUI
 
 	bool FrameDecoration::SetByDef(C4ID idSourceDef)
 	{
-		// get source def
-		C4Def *pSrcDef = C4Id2Def(idSourceDef);
+		return SetByDef(C4Id2Def(idSourceDef));
+	}
+
+	bool FrameDecoration::SetByDef(C4Def *pSrcDef)
+	{
 		if (!pSrcDef) return false;
 		// script compiled?
 		if (!pSrcDef->Script.IsReady()) return false;
 		// reset old
 		Clear();
-		this->idSourceDef = idSourceDef;
+		this->pSourceDef = pSrcDef;
+		this->idSourceDef = pSrcDef->id;
 		// query values
 		dwBackClr     = pSrcDef->Call(FormatString(PSF_FrameDecoration, "BackClr"     ).getData()).getInt();
 		iBorderTop    = pSrcDef->Call(FormatString(PSF_FrameDecoration, "BorderTop"   ).getData()).getInt();
@@ -123,7 +128,7 @@ namespace C4GUI
 		{
 			for (x = iBorderLeft; x < rcBounds.Wdt-iBorderRight; x += fctTop.Wdt)
 			{
-				int w = Min<int>(fctTop.Wdt, rcBounds.Wdt-iBorderRight-x);
+				int w = std::min<int>(fctTop.Wdt, rcBounds.Wdt-iBorderRight-x);
 				fctTop.Wdt = w;
 				fctTop.Draw(cgo.Surface, ox+x, oy+fctTop.TargetY);
 			}
@@ -134,7 +139,7 @@ namespace C4GUI
 		{
 			for (y = iBorderTop; y < rcBounds.Hgt-iBorderBottom; y += fctLeft.Hgt)
 			{
-				int h = Min<int>(fctLeft.Hgt, rcBounds.Hgt-iBorderBottom-y);
+				int h = std::min<int>(fctLeft.Hgt, rcBounds.Hgt-iBorderBottom-y);
 				fctLeft.Hgt = h;
 				fctLeft.Draw(cgo.Surface, ox+fctLeft.TargetX, oy+y);
 			}
@@ -145,7 +150,7 @@ namespace C4GUI
 		{
 			for (y = iBorderTop; y < rcBounds.Hgt-iBorderBottom; y += fctRight.Hgt)
 			{
-				int h = Min<int>(fctRight.Hgt, rcBounds.Hgt-iBorderBottom-y);
+				int h = std::min<int>(fctRight.Hgt, rcBounds.Hgt-iBorderBottom-y);
 				fctRight.Hgt = h;
 				fctRight.Draw(cgo.Surface, ox+rcBounds.Wdt-iBorderRight+fctRight.TargetX, oy+y);
 			}
@@ -156,7 +161,7 @@ namespace C4GUI
 		{
 			for (x = iBorderLeft; x < rcBounds.Wdt-iBorderRight; x += fctBottom.Wdt)
 			{
-				int w = Min<int>(fctBottom.Wdt, rcBounds.Wdt-iBorderRight-x);
+				int w = std::min<int>(fctBottom.Wdt, rcBounds.Wdt-iBorderRight-x);
 				fctBottom.Wdt = w;
 				fctBottom.Draw(cgo.Surface, ox+x, oy+rcBounds.Hgt-iBorderBottom+fctBottom.TargetY);
 			}
@@ -227,8 +232,6 @@ namespace C4GUI
 	void DialogWindow::Close()
 	{
 		// FIXME: Close the dialog of this window
-		//Dialog *pDlg = ::pGUI ? ::pGUI->GetDialog(hWindow) : NULL;
-		//if (pDlg) pDlg->Close();
 	}
 
 	bool Dialog::CreateConsoleWindow()
@@ -320,7 +323,7 @@ namespace C4GUI
 	int32_t Dialog::GetDefaultTitleHeight()
 	{
 		// default title font
-		return Min<int32_t>(::GraphicsResource.TextFont.GetLineHeight(), C4GUI_MinWoodBarHgt);
+		return std::min<int32_t>(::GraphicsResource.TextFont.GetLineHeight(), C4GUI_MinWoodBarHgt);
 	}
 
 	void Dialog::SetTitle(const char *szTitle, bool fShowCloseButton)
@@ -354,7 +357,7 @@ namespace C4GUI
 				pTitle->SetRightIndent(20); // for close button
 				if (!pCloseBtn)
 				{
-					AddElement(pCloseBtn = new CallbackButton<Dialog, IconButton>(Ico_Close, pTitle->GetToprightCornerRect(16,16,4,4,0), 0, &Dialog::OnUserClose));
+					AddElement(pCloseBtn = new CallbackButton<Dialog, IconButton>(Ico_Close, pTitle->GetToprightCornerRect(16,16,4,4,0), '\0', &Dialog::OnUserClose));
 					pCloseBtn->SetToolTip(LoadResStr("IDS_MNU_CLOSE"));
 				}
 				else
@@ -474,6 +477,16 @@ namespace C4GUI
 		// blit output to own window
 		if (pWindow)
 		{
+			// Draw context menu on editor window
+			ContextMenu *menu;
+			if ((menu = GetScreen()->pContext))
+			{
+				if (menu->GetTargetDialog() == this)
+				{
+					menu->Draw(cgo);
+				}
+			}
+			// Editor window: Blit to output
 			C4Rect rtSrc,rtDst;
 			rtSrc.x=rcBounds.x; rtSrc.y=rcBounds.y;  rtSrc.Wdt=rcBounds.Wdt; rtSrc.Hgt=rcBounds.Hgt;
 			rtDst.x=0; rtDst.y=0;    rtDst.Wdt=rcBounds.Wdt; rtDst.Hgt=rcBounds.Hgt;
@@ -804,7 +817,7 @@ namespace C4GUI
 	{
 		// draw upper board
 		if (HasUpperBoard())
-			pDraw->BlitSurfaceTile(::GraphicsResource.fctUpperBoard.Surface,cgo.Surface,0,Min<int32_t>(iFade-::GraphicsResource.fctUpperBoard.Hgt, 0),cgo.Wdt,::GraphicsResource.fctUpperBoard.Hgt);
+			pDraw->BlitSurfaceTile(::GraphicsResource.fctUpperBoard.Surface,cgo.Surface,0,std::min<int32_t>(iFade-::GraphicsResource.fctUpperBoard.Hgt, 0),cgo.Wdt,::GraphicsResource.fctUpperBoard.Hgt, 0, 0, NULL);
 	}
 
 	void FullscreenDialog::UpdateOwnPos()
@@ -816,8 +829,6 @@ namespace C4GUI
 	void FullscreenDialog::DrawBackground(C4TargetFacet &cgo, C4Facet &rFromFct)
 	{
 		// draw across fullscreen bounds - zoom 1px border to prevent flashing borders by blit offsets
-		Screen *pScr = GetScreen();
-		C4Rect &rcScreenBounds = pScr ? pScr->GetBounds() : GetBounds();
 		rFromFct.DrawFullScreen(cgo);
 	}
 
@@ -877,7 +888,7 @@ namespace C4GUI
 			if (dwButtons & btnOK)
 			{
 				Button *pBtnOK = new OKButton(rcBtn);
-				AddElement(pBtnOK); //pBtnOK->SetToolTip((dwButtons & btnAbort) ? LoadResStr("IDS_DLGTIP_OK2") : LoadResStr("IDS_DLGTIP_OK"));
+				AddElement(pBtnOK);
 				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!fDefaultNo) btnFocus = pBtnOK;
 			}
@@ -885,7 +896,7 @@ namespace C4GUI
 			if (dwButtons & btnRetry)
 			{
 				Button *pBtnRetry = new RetryButton(rcBtn);
-				AddElement(pBtnRetry); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+				AddElement(pBtnRetry);
 				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!btnFocus) btnFocus = pBtnRetry;
 
@@ -894,7 +905,7 @@ namespace C4GUI
 			if (dwButtons & btnAbort)
 			{
 				Button *pBtnAbort = new CancelButton(rcBtn);
-				AddElement(pBtnAbort); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+				AddElement(pBtnAbort);
 				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!btnFocus) btnFocus = pBtnAbort;
 			}
@@ -902,7 +913,7 @@ namespace C4GUI
 			if (dwButtons & btnYes)
 			{
 				Button *pBtnYes = new YesButton(rcBtn);
-				AddElement(pBtnYes); //pBtnYes->SetToolTip(LoadResStr("IDS_DLGTIP_OK2"));
+				AddElement(pBtnYes);
 				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!btnFocus && !fDefaultNo) btnFocus = pBtnYes;
 			}
@@ -910,15 +921,14 @@ namespace C4GUI
 			if (dwButtons & btnNo)
 			{
 				Button *pBtnNo = new NoButton(rcBtn);
-				AddElement(pBtnNo); //pBtnNo->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
-				//rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
+				AddElement(pBtnNo);
 				if (!btnFocus) btnFocus = pBtnNo;
 			}
 			// Reset
 			if (dwButtons & btnReset)
 			{
 				Button *pBtnReset = new ResetButton(rcBtn);
-				AddElement(pBtnReset); //pBtnAbort->SetToolTip("[!]Reset to default");
+				AddElement(pBtnReset);
 				rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 				if (!btnFocus) btnFocus = pBtnReset;
 
@@ -979,7 +989,7 @@ bool MessageDialog::KeyCopy()
 // ProgressDialog
 
 	ProgressDialog::ProgressDialog(const char *szMessage, const char *szCaption, int32_t iMaxProgress, int32_t iInitialProgress, Icons icoIcon)
-			: Dialog(C4GUI_ProgressDlgWdt, Max(::GraphicsResource.TextFont.BreakMessage(szMessage, C4GUI_ProgressDlgWdt-3*C4GUI_DefDlgIndent-C4GUI_IconWdt, 0, 0, true), C4GUI_IconHgt) + C4GUI_ProgressDlgVRoom, szCaption, false)
+			: Dialog(C4GUI_ProgressDlgWdt, std::max(::GraphicsResource.TextFont.BreakMessage(szMessage, C4GUI_ProgressDlgWdt-3*C4GUI_DefDlgIndent-C4GUI_IconWdt, 0, 0, true), C4GUI_IconHgt) + C4GUI_ProgressDlgVRoom, szCaption, false)
 	{
 		// get positions
 		ComponentAligner caMain(GetClientRect(), C4GUI_DefDlgIndent, C4GUI_DefDlgIndent, true);
@@ -1001,7 +1011,7 @@ bool MessageDialog::KeyCopy()
 		AddElement(pBar);
 		// place abort button
 		Button *pBtnAbort = new CancelButton(caButtonArea.GetCentered(C4GUI_DefButtonWdt, C4GUI_ButtonHgt));
-		AddElement(pBtnAbort); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+		AddElement(pBtnAbort);
 	}
 
 
@@ -1083,7 +1093,7 @@ bool MessageDialog::KeyCopy()
 	InputDialog::InputDialog(const char *szMessage, const char *szCaption, Icons icoIcon, BaseInputCallback *pCB, bool fChatLayout)
 			: Dialog(fChatLayout ? C4GUI::GetScreenWdt()*4/5 : C4GUI_InputDlgWdt,
 			         fChatLayout ? C4GUI::Edit::GetDefaultEditHeight() + 2 :
-			         Max(::GraphicsResource.TextFont.BreakMessage(szMessage, C4GUI_InputDlgWdt - 3 * C4GUI_DefDlgIndent - C4GUI_IconWdt, 0, 0, true),
+			         std::max(::GraphicsResource.TextFont.BreakMessage(szMessage, C4GUI_InputDlgWdt - 3 * C4GUI_DefDlgIndent - C4GUI_IconWdt, 0, 0, true),
 			             C4GUI_IconHgt) + C4GUI_InputDlgVRoom, szCaption, false),
 			pEdit(NULL), pCB(pCB), fChatLayout(fChatLayout), pChatLbl(NULL)
 	{
@@ -1124,11 +1134,11 @@ bool MessageDialog::KeyCopy()
 			rcBtn.Wdt = C4GUI_DefButton2Wdt;
 			// OK
 			Button *pBtnOK = new OKButton(rcBtn);
-			AddElement(pBtnOK); //pBtnOK->SetToolTip(LoadResStr("IDS_DLGTIP_OK"));
+			AddElement(pBtnOK);
 			rcBtn.x += rcBtn.Wdt + C4GUI_DefButton2HSpace;
 			// Cancel
 			Button *pBtnAbort = new CancelButton(rcBtn);
-			AddElement(pBtnAbort); //pBtnAbort->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+			AddElement(pBtnAbort);
 			rcBtn.x += rcBtn.Wdt + C4GUI_DefButton2HSpace;
 		}
 		// input dlg always closed in the end
@@ -1187,7 +1197,6 @@ bool MessageDialog::KeyCopy()
 			pTextWin->AddTextLine(sLine.getData(), &::GraphicsResource.TextFont, C4GUI_MessageFontClr, false, true);
 		}
 		pTextWin->UpdateHeight();
-		//pTextWin->ScrollToBottom();
 	}
 	InfoDialog::~InfoDialog()
 	{

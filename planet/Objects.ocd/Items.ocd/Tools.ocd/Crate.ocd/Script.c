@@ -15,9 +15,9 @@ public func GetCarryPhase() { return 800; }
 public func GetCarryTransform(clonk)
 {
 	if(GetCarrySpecial(clonk))
-		return Trans_Translate(0, 3500, -6500);
+		return Trans_Translate(3500, 6500, 0);
 	
-	return Trans_Translate(-1500, 0, 0);
+	return Trans_Translate(0, 0, -1500);
 }
 
 protected func Construction()
@@ -29,16 +29,13 @@ protected func Construction()
 
 /*-- Contents --*/
 
-public func IsContainer() { return true; }
+local MaxContentsCount = 5;
 
-private func MaxContentsCount()
+protected func RejectCollect(id def, object obj)
 {
-	return 4;
-}
-
-protected func RejectCollect()
-{
-	if (ContentsCount() >= MaxContentsCount())
+	if (ContentsCount() >= MaxContentsCount)
+		return true;
+	if (obj->~IsCarryHeavy())
 		return true;
 	return false;
 }
@@ -47,30 +44,31 @@ private func Open()
 {
 	StopAnimation(crateanim);
 	crateanim = PlayAnimation("Open", 5, Anim_Linear(0, 0, GetAnimationLength("Open"), 22, ANIM_Hold), Anim_Const(1000));
-	Sound("ChestOpen");
+	Sound("Structures::Chest::Open");
 }
 
 private func Close()
 {
 	StopAnimation(crateanim);
 	crateanim = PlayAnimation("Close", 5, Anim_Linear(0, 0, GetAnimationLength("Close"), 15, ANIM_Hold), Anim_Const(1000));
-	Sound("ChestClose");
+	Sound("Structures::Chest::Close");
 }
 
 protected func Definition(def)
 {
-		SetProperty("PictureTransformation", Trans_Mul(Trans_Translate(0,-3000,-5000), Trans_Rotate(-30,1,0,0), Trans_Rotate(30,0,1,0), Trans_Translate(1000,1,0)),def);
+	def.PictureTransformation = Trans_Mul(Trans_Translate(-500, -1500, -3000), Trans_Rotate(-30,1,0,0), Trans_Rotate(30,0,1,0));
 }
 
 public func IsTool() { return true; }
 public func IsToolProduct() { return true; }
+public func IsContainer() { return true; }
 
 func Hit()
 {
-	Sound("DullWoodHit?");
+	Sound("Hits::Materials::Wood::DullWoodHit?");
 }
 
 local Name = "$Name$";
-local Collectible = false;
+local Description = "$Description$";
+local Collectible = true;
 local ContainBlast = true;
-local Touchable = 2;

@@ -248,7 +248,7 @@ bool C4Record::Rec(int iFrame, const StdBuf &sBuf, C4RecordChunkType eType)
 	while (iFrame > int(iLastFrame + 0xff))
 		Rec(iLastFrame + 0xff, StdBuf(), RCT_Frame);
 	// get frame difference
-	uint8_t iFrameDiff = Max<uint8_t>(0, iFrame - iLastFrame);
+	uint8_t iFrameDiff = std::max<uint8_t>(0, iFrame - iLastFrame);
 	iLastFrame += iFrameDiff;
 	// create head
 	C4RecordChunkHead Head = { iFrameDiff, uint8_t(eType) };
@@ -445,7 +445,7 @@ bool C4Playback::Open(C4Group &rGrp)
 				          const size_t iChunkSize = 1024*1024*16; // 16M
 				          while (iSize)
 				            {
-				            size_t iLoadSize = Min<size_t>(iChunkSize, iSize);
+				            size_t iLoadSize = std::min<size_t>(iChunkSize, iSize);
 				            BinaryBuf.SetSize(iLoadSize);
 				            if (!rGrp.Read(BinaryBuf.getMData(), iLoadSize))
 				              {
@@ -729,7 +729,6 @@ void C4Playback::Strip()
 	const bool fStripDebugRec = true;
 	const bool fCheckCheat = false;
 	const bool fStripMessages = true;
-	//const bool fCheckEMControl = true;
 	const int32_t iEndFrame = -1;
 	// Iterate over chunk list
 	for (chunks_t::iterator i = chunks.begin(); i != chunks.end(); )
@@ -991,7 +990,7 @@ StdStrBuf GetDbgRecPktData(C4RecordChunkType eType, const StdBuf & RawData)
 		break;
 	default:
 		for (unsigned int i=0; i<RawData.getSize(); ++i)
-			r.AppendFormat("%02x ", (uint32_t) ((uint8_t *)RawData.getData())[i]);
+			r.AppendFormat("%02x ", (uint32_t) *getBufPtr<uint8_t>(RawData, i));
 		break;
 	}
 	return r;
@@ -1084,7 +1083,7 @@ void C4Playback::Check(C4RecordChunkType eType, const uint8_t *pData, int iSize)
 		DebugRecError(FormatString("Type %s != %s", GetRecordChunkTypeName(PktInReplay.getType()), GetRecordChunkTypeName(eType)).getData());
 		return;
 	}
-	if (PktInReplay.getSize() != iSize)
+	if (PktInReplay.getSize() != unsigned(iSize))
 	{
 		DebugRecError(FormatString("Size %d != %d", (int) PktInReplay.getSize(), (int) iSize).getData());
 	}

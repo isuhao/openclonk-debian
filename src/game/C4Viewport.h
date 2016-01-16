@@ -22,6 +22,9 @@
 
 #include <C4FacetEx.h>
 
+class C4ViewportWindow;
+class C4FoWRegion;
+
 class C4Viewport
 {
 	friend class C4MouseControl;
@@ -41,8 +44,6 @@ public:
 	float GetZoom() { return Zoom; }
 	void SetZoom(float zoomValue);
 	float GetGUIZoom() const { return Clamp<float>(float(ViewWdt)/1280,0.5f,1.0f); }
-	void Default();
-	void Clear();
 	void Execute();
 	void ClearPointers(C4Object *pObj);
 	void SetOutputSize(int32_t iDrawX, int32_t iDrawY, int32_t iOutX, int32_t iOutY, int32_t iOutWdt, int32_t iOutHgt);
@@ -95,24 +96,25 @@ protected:
 	float Zoom;
 	float ZoomTarget;
 	float ZoomLimitMin,ZoomLimitMax;
-	bool ZoomInitialized;
+	int32_t ViewportOpenFrame; // Game FrameCounter in which viewport was opened. Used to init zoom during initial fullscreen viewport movement chaos, but not change it later e.g. when other local players join.
 	int32_t Player;
 	bool PlayerLock;
 	int32_t OutX,OutY;
 	bool ResetMenuPositions;
 	C4Viewport *Next;
-	class C4ViewportWindow * pWindow;
-	class C4FoWRegion *pFoW;
+	std::unique_ptr<C4ViewportWindow> pWindow;
+	std::unique_ptr<C4FoWRegion> pFoW;
 	void DrawPlayerStartup(C4TargetFacet &cgo);
-	void Draw(C4TargetFacet &cgo, bool fDrawOverlay);
+	void Draw(C4TargetFacet &cgo, bool fDrawGame, bool fDrawOverlay);
 	void DrawOverlay(C4TargetFacet &cgo, const ZoomData &GameZoom);
 	void DrawMenu(C4TargetFacet &cgo);
 	void DrawPlayerInfo(C4TargetFacet &cgo);
 	void InitZoom();
 	void BlitOutput();
-	void AdjustPosition();
+	void AdjustZoomAndPosition();
 public:
-	C4ViewportWindow* GetWindow() {return pWindow;}
+	void AdjustPosition(bool immediate = false);
+	C4ViewportWindow* GetWindow() {return pWindow.get();}
 	bool UpdateOutputSize();
 	bool ViewPositionByScrollBars();
 	bool ScrollBarsByViewPosition();
@@ -122,7 +124,6 @@ public:
 	friend class C4ViewportWindow;
 	friend class C4ViewportList;
 	friend class C4GraphicsSystem;
-	friend class C4Video;
 };
 
 class C4ViewportList {
@@ -145,7 +146,7 @@ public:
 #ifdef USE_WIN32_WINDOWS
 	C4Viewport* GetViewport(HWND hwnd);
 #endif
-	int32_t GetAudibility(int32_t iX, int32_t iY, int32_t *iPan, int32_t iAudibilityRadius=0);
+	int32_t GetAudibility(int32_t iX, int32_t iY, int32_t *iPan, int32_t iAudibilityRadius = 0, int32_t *outPlayer = NULL);
 	bool ViewportNextPlayer();
 
 	bool FreeScroll(C4Vec2D vScrollBy); // key callback: Scroll ownerless viewport by some offset

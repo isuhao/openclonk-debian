@@ -93,7 +93,7 @@ bool C4PropListNumbered::CheckPropList(C4PropList *pObj)
 void C4PropListNumbered::SetEnumerationIndex(int32_t iMaxObjectNumber)
 {
 	// update object enumeration index now, because calls like OnSynchronized might create objects
-	EnumerationIndex = Max(EnumerationIndex, iMaxObjectNumber);
+	EnumerationIndex = std::max(EnumerationIndex, iMaxObjectNumber);
 }
 
 void C4PropListNumbered::ResetEnumerationIndex()
@@ -132,6 +132,20 @@ void C4PropListNumbered::ClearShelve()
 {
 	// cleanup shelve - used in game clear, un unsuccessful section load, etc.
 	ShelvedPropLists.clear();
+}
+
+void C4PropListNumbered::ClearNumberedPropLists()
+{
+	// empty all proplists to ensure safe deletion of proplists with circular references
+	// note that this the call to Clear() might delete some prop lists. So it is assumed that
+	// PropLists does not shrink its table as the number of values goes down
+	C4PropListNumbered *const* p_next = PropLists.First(), *const* p;
+	while ((p = p_next))
+	{
+		p_next = PropLists.Next(p);
+		// check *p since it might have been deleted by clearing the previous prop list
+		if (*p) (*p)->Clear();
+	}
 }
 
 C4PropListNumbered::C4PropListNumbered(C4PropList * prototype): C4PropList(prototype), Number(-1)
@@ -188,6 +202,39 @@ C4PropListNumbered::~C4PropListNumbered()
 		PropLists.Remove(this);
 	else
 		Log("removing numbered proplist without number");
+}
+
+void C4PropListScript::ClearScriptPropLists()
+{
+	// empty all proplists to ensure safe deletion of proplists with circular references
+	// note that this the call to Clear() might delete some prop lists. So it is assumed that
+	// PropLists does not shrink its table as the number of values goes down
+	// However, some values may be skipped due to table consolidation. Just fix it by iterating over the table until it's empty.
+	C4PropListScript *const* p_next, *const* p;
+	while ((p_next = PropLists.First()))
+	{
+		size_t prev_size = PropLists.GetSize();
+		while ((p = p_next))
+		{
+			p_next = PropLists.Next(p);
+			// check *p since it might have been deleted by clearing the previous prop list
+			if (*p)
+			{
+				C4Value ref(C4VPropList(*p)); // keep a reference because prop list might delete itself within clearing method otherwise
+				(*p)->Clear();
+			}
+		}
+		if (PropLists.GetSize() >= prev_size)
+		{
+			// Looks like there's a rogue C4Value pointer somewhere.
+			// Could just delete the prop list and let ref counting do the job
+			// However, it might be better to keep the dead pointer to find the leak in debug mode
+#ifdef _DEBUG
+			assert(0);
+#endif
+			break;
+		}
+	}
 }
 
 void C4PropListStatic::RefCompileFunc(StdCompiler *pComp, C4ValueNumbers * numbers) const
@@ -262,7 +309,6 @@ bool C4PropList::operator==(const C4PropList &b) const
 	if (IsNumbered() || b.IsNumbered()) return false;
 	if (Properties.GetSize() != b.Properties.GetSize()) return false;
 	if (GetDef() != b.GetDef()) return false;
-	//if (GetObject() != b.GetObject()) return false;
 	const C4Property * p = Properties.First();
 	while (p)
 	{
@@ -491,7 +537,6 @@ unsigned int C4Set<C4Property>::Hash<C4String *>(C4String * const & e)
 	hash ^= hash << 25;
 	hash += hash >> 6;
 	return hash;
-	//return e->Hash;
 }
 
 template<> template<>
@@ -611,7 +656,7 @@ C4PropertyName C4PropList::GetPropertyP(C4PropertyName n) const
 	return P_LAST;
 }
 
-int32_t C4PropList::GetPropertyInt(C4PropertyName n) const
+int32_t C4PropList::GetPropertyInt(C4PropertyName n, int32_t default_val) const
 {
 	C4String * k = &Strings.P[n];
 	if (Properties.Has(k))
@@ -620,9 +665,9 @@ int32_t C4PropList::GetPropertyInt(C4PropertyName n) const
 	}
 	if (GetPrototype())
 	{
-		return GetPrototype()->GetPropertyInt(n);
+		return GetPrototype()->GetPropertyInt(n, default_val);
 	}
-	return 0;
+	return default_val;
 }
 
 C4PropList *C4PropList::GetPropertyPropList(C4PropertyName n) const
@@ -657,7 +702,9 @@ C4ValueArray * C4PropList::GetProperties() const
 	const C4Property * p = Properties.First();
 	while (p)
 	{
+		assert(p->Key != nullptr && "Proplist key is nullpointer");
 		(*a)[i++] = C4VString(p->Key);
+		assert(((*a)[i - 1].GetType() == C4V_String) && "Proplist key is non-string");
 		p = Properties.Next(p);
 	}
 	return a;
@@ -678,13 +725,12 @@ C4String * C4PropList::EnumerateOwnFuncs(C4String * prev) const
 void C4PropList::SetPropertyByS(C4String * k, const C4Value & to)
 {
 	assert(!constant);
-	/*assert(Strings.Set.Has(k));*/
 	if (k == &Strings.P[P_Prototype])
 	{
 		C4PropList * newpt = to.getPropList();
 		for(C4PropList * it = newpt; it; it = it->GetPrototype())
 			if(it == this)
-				throw new C4AulExecError("Trying to create cyclic prototype structure");
+				throw C4AulExecError("Trying to create cyclic prototype structure");
 		prototype.SetPropList(newpt);
 	}
 	else if (Properties.Has(k))
@@ -693,16 +739,6 @@ void C4PropList::SetPropertyByS(C4String * k, const C4Value & to)
 	}
 	else
 	{
-		//C4Property p(k, to);
-		//Properties.Add(p);
-#ifdef DEBUGREC_SCRIPT
-		if (Config.General.DebugRec)
-		{
-			// deactivate this debugrec for now, because property orders seem to be out of sync
-			// after loading at the moment. might need to invastigate the cause later...
-			//if (k->GetCStr()) AddDbgRec(RCT_SetProperty, k->GetCStr(), strlen(k->GetCStr())+1);
-		}
-#endif
 		Properties.Add(C4Property(k, to));
 	}
 }
@@ -812,4 +848,13 @@ template<> template<>
 unsigned int C4Set<C4PropList *>::Hash<C4PropList *>(C4PropList * const & e)
 {
 	return C4Set<C4PropListNumbered *>::Hash(static_cast<int>(reinterpret_cast<intptr_t>(e)));
+}
+
+template<> template<>
+unsigned int C4Set<C4PropListScript *>::Hash<C4PropListScript *>(C4PropListScript * const & e)
+{
+	// since script prop lists are only put in the set for reference keeping, just hash by pointer
+	// but use only some of the more significant bits because 
+	uintptr_t hash = reinterpret_cast<uintptr_t>(e);
+	return (unsigned int)(hash / 63);
 }

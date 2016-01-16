@@ -109,7 +109,7 @@ struct C4RecordChunk
 		C4Control *pCtrl;
 		C4IDPacket *pPkt;
 		class C4PktDebugRec *pDbg;
-		class StdBuf *pFileData;
+		StdBuf *pFileData;
 	};
 	StdCopyStrBuf Filename; // RCT_File only
 public:
@@ -122,7 +122,8 @@ public:
 struct C4RCSetPix
 {
 	int x,y; // pos
-	BYTE clr; // new color
+	BYTE clr; // new fg color
+	BYTE bgClr; // new bg color
 };
 
 struct C4RCExecObj
@@ -237,7 +238,6 @@ public:
 	C4RecordChunkType getType() const { return eType; }
 
 	virtual void CompileFunc(StdCompiler *pComp);
-	ALLOW_TEMP_TO_REF(C4PktDebugRec)
 };
 
 class C4Record // demo recording

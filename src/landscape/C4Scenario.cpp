@@ -80,13 +80,25 @@ void C4Scenario::Default()
 	Environment.Default();
 }
 
-bool C4Scenario::Load(C4Group &hGroup, bool fLoadSection)
+bool C4Scenario::Load(C4Group &hGroup, bool fLoadSection, bool suppress_errors)
 {
 	StdStrBuf Buf;
 	if (!hGroup.LoadEntryString(C4CFN_ScenarioCore,&Buf)) return false;
 	if (!fLoadSection) Default();
-	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkParAdapt(*this, fLoadSection), Buf, C4CFN_ScenarioCore))
-		{ return false; }
+	if (suppress_errors)
+	{
+		if (!CompileFromBuf_Log<StdCompilerINIRead>(mkParAdapt(*this, fLoadSection), Buf, C4CFN_ScenarioCore))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(mkParAdapt(*this, fLoadSection), Buf, C4CFN_ScenarioCore))
+		{
+			return false;
+		}
+	}
 	return true;
 }
 
@@ -140,8 +152,9 @@ void C4SHead::Default()
 	Origin.Clear();
 	Icon=18;
 	*Title = *Loader = *Font = *Engine = *MissionAccess = '\0';
+	Secret = false;
 	C4XVer[0] = C4XVer[1] = 0;
-	Difficulty = StartupPlayerCount = RandomSeed = 0;
+	Difficulty = RandomSeed = 0;
 	SaveGame = Replay = NoInitialize = false;
 	Film = 0;
 	NetworkGame = NetworkRuntimeJoin = false;
@@ -167,7 +180,6 @@ void C4SHead::CompileFunc(StdCompiler *pComp, bool fSection)
 		pComp->Value(mkNamingAdapt(SaveGame,                  "SaveGame",             false));
 		pComp->Value(mkNamingAdapt(Replay,                    "Replay",               false));
 		pComp->Value(mkNamingAdapt(Film,                      "Film",                 0));
-		pComp->Value(mkNamingAdapt(StartupPlayerCount,        "StartupPlayerCount",   0));
 	}
 	pComp->Value(mkNamingAdapt(NoInitialize,              "NoInitialize",         false));
 	pComp->Value(mkNamingAdapt(RandomSeed,                "RandomSeed",           0));
@@ -175,6 +187,7 @@ void C4SHead::CompileFunc(StdCompiler *pComp, bool fSection)
 	{
 		pComp->Value(mkNamingAdapt(mkStringAdaptMA(Engine),   "Engine",               ""));
 		pComp->Value(mkNamingAdapt(mkStringAdaptMA(MissionAccess), "MissionAccess", ""));
+		pComp->Value(mkNamingAdapt(Secret,                    "Secret",               false));
 		pComp->Value(mkNamingAdapt(NetworkGame,               "NetworkGame",          false));
 		pComp->Value(mkNamingAdapt(NetworkRuntimeJoin,        "NetworkRuntimeJoin",   false));
 		pComp->Value(mkNamingAdapt(mkStrValAdapt(mkParAdapt(Origin, StdCompiler::RCT_All), C4InVal::VAL_SubPathFilename),  "Origin",  StdCopyStrBuf()));
@@ -287,9 +300,9 @@ void C4SLandscape::GetMapSize(int32_t &rWdt, int32_t &rHgt, int32_t iPlayerNum)
 {
 	rWdt = MapWdt.Evaluate();
 	rHgt = MapHgt.Evaluate();
-	iPlayerNum = Max<int32_t>( iPlayerNum, 1 );
+	iPlayerNum = std::max<int32_t>( iPlayerNum, 1 );
 	if (MapPlayerExtend)
-		rWdt = Min(rWdt * Min(iPlayerNum, C4S_MaxMapPlayerExtend), MapWdt.Max);
+		rWdt = std::min(rWdt * std::min(iPlayerNum, C4S_MaxMapPlayerExtend), MapWdt.Max);
 }
 
 void C4SLandscape::CompileFunc(StdCompiler *pComp)
@@ -381,23 +394,8 @@ void C4Scenario::Clear()
 void C4Scenario::SetExactLandscape()
 {
 	if (Landscape.ExactLandscape) return;
-	//int32_t iMapZoom = Landscape.MapZoom.Std;
 	// Set landscape
 	Landscape.ExactLandscape = 1;
-	/*FIXME: warum ist das auskommentiert?
-	// - because Map and Landscape are handled differently in NET2 (Map.bmp vs Landscape.bmp), and the zoomed Map.bmp may be used
-	//   to reconstruct the textures on the Landscape.bmp in case of e.g. runtime joins. In this sense, C4S.Landscape.ExactLandscape
-	//   only marks that the landscape.bmp is an exact one, and there may or may not be an accompanying Map.bmp
-	Landscape.MapZoom.Set(1,0,1,1);
-	// Zoom player starting positions
-	for (int32_t cnt=0; cnt<C4S_MaxPlayer; cnt++)
-	  {
-	  if (PlrStart[cnt].PositionX >= -1)
-	    PlrStart[cnt].PositionX = PlrStart[cnt].PositionX * iMapZoom;
-	  if (PlrStart[cnt].PositionY >= -1)
-	    PlrStart[cnt].PositionY = PlrStart[cnt].PositionY * iMapZoom;
-	  }
-	  */
 }
 
 bool C4SDefinitions::GetModules(StdStrBuf *psOutModules) const

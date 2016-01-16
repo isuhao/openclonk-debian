@@ -2,6 +2,12 @@
 
 #appendto GoldBar
 
+public func Construction(...)
+{
+	this.Description = Format("$SpecialGoldBarDesc$", MAX_GOLD_BARS);
+	return _inherited(...);
+}
+
 public func IsFoundryProduct() { return false; } // Don't let players produce them
 
 func Entrance(container)
@@ -24,7 +30,7 @@ func DoSellEffect(container)
 	fm->FadeOut(2, 10);
 	fm->SetSpeed(0, -5);
 	fm->SetMessage("+1</c>{{GoldBar}}");
-	container->Sound("Cash");
+	container->Sound("UI::Cash");
 	
 	var dust_particles =
 	{

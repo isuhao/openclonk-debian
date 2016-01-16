@@ -47,6 +47,7 @@ class StdMeshMaterialShaderParameter
 public:
 	enum Type {
 		AUTO,
+		AUTO_TEXTURE_MATRIX, // Texture matrix for the i-th texture
 		INT,
 		FLOAT,
 		FLOAT2,
@@ -63,32 +64,32 @@ public:
 	StdMeshMaterialShaderParameter(); // type=FLOAT, value uninitialized
 	StdMeshMaterialShaderParameter(Type type); // value uninitialized
 	StdMeshMaterialShaderParameter(const StdMeshMaterialShaderParameter& other);
-	StdMeshMaterialShaderParameter(StdMeshMaterialShaderParameter RREF other);
+	StdMeshMaterialShaderParameter(StdMeshMaterialShaderParameter &&other);
 	~StdMeshMaterialShaderParameter();
 
 	StdMeshMaterialShaderParameter& operator=(const StdMeshMaterialShaderParameter& other);
-	StdMeshMaterialShaderParameter& operator=(StdMeshMaterialShaderParameter RREF other);
+	StdMeshMaterialShaderParameter& operator=(StdMeshMaterialShaderParameter &&other);
 
 	Type GetType() const { return type; }
 	void SetType(Type type); // changes type, new value is uninitialized
 
 	// Getters
 	Auto GetAuto() const { assert(type == AUTO); return a; }
-	int GetInt() const { assert(type == INT); return i; }
+	int GetInt() const { assert(type == INT || type == AUTO_TEXTURE_MATRIX); return i; }
 	float GetFloat() const { assert(type == FLOAT); return f[0]; }
 	const float* GetFloatv() const { assert(type == FLOAT2 || type == FLOAT3 || type == FLOAT4); return f; }
 	const float* GetMatrix() const { assert(type == MATRIX_4X4); return matrix; }
 
 	// Setters
 	Auto& GetAuto() { assert(type == AUTO); return a; }
-	int& GetInt() { assert(type == INT); return i; }
+	int& GetInt() { assert(type == INT || type == AUTO_TEXTURE_MATRIX); return i; }
 	float& GetFloat() { assert(type == FLOAT); return f[0]; }
 	float* GetFloatv() { assert(type == FLOAT2 || type == FLOAT3 || type == FLOAT4); return f; }
 	float* GetMatrix() { assert(type == MATRIX_4X4); return matrix; }
 private:
 	void CopyShallow(const StdMeshMaterialShaderParameter& other);
 	void CopyDeep(const StdMeshMaterialShaderParameter& other);
-	void Move(StdMeshMaterialShaderParameter RREF other);
+	void Move(StdMeshMaterialShaderParameter &&other);
 
 	Type type;
 
@@ -393,6 +394,18 @@ public:
 		SB_OneMinusSrcAlpha
 	};
 
+	enum DepthFunctionType
+	{
+		DF_AlwaysFail,
+		DF_AlwaysPass,
+		DF_Less,
+		DF_LessEqual,
+		DF_Equal,
+		DF_NotEqual,
+		DF_GreaterEqual,
+		DF_Greater
+	};
+
 	StdMeshMaterialPass();
 	void Load(StdMeshMaterialParserCtx& ctx);
 
@@ -412,6 +425,8 @@ public:
 
 	CullHardwareType CullHardware;
 	SceneBlendType SceneBlendFactors[2];
+	DepthFunctionType AlphaRejectionFunction;
+	float AlphaRejectionValue;
 	bool AlphaToCoverage;
 
 	struct ShaderInstance

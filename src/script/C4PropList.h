@@ -44,15 +44,13 @@ class C4Property
 public:
 	C4Property() : Key(0) {}
 	C4Property(C4String *Key, const C4Value &Value) : Key(Key), Value(Value)
-	{ assert(Key); Key->IncRef(); /*assert(Strings.Set.Has(Key));*/ }
+	{ assert(Key); Key->IncRef(); }
 	C4Property(const C4Property &o) : Key(o.Key), Value(o.Value) { if (Key) Key->IncRef(); }
 	C4Property & operator = (const C4Property &o)
 	{ if(o.Key) o.Key->IncRef(); if (Key) Key->DecRef(); Key = o.Key; Value = o.Value; return *this; }
-#ifdef HAVE_RVALUE_REF
 	C4Property(C4Property && o) : Key(o.Key), Value(std::move(o.Value)) { o.Key = 0; }
 	C4Property & operator = (C4Property && o)
 	{ if (Key) Key->DecRef(); Key = o.Key; o.Key = 0; Value = std::move(o.Value); return *this; }
-#endif
 	~C4Property() { if (Key) Key->DecRef(); }
 	void CompileFunc(StdCompiler *pComp, C4ValueNumbers *);
 	C4String * Key;
@@ -113,7 +111,7 @@ public:
 	C4Value Call(C4String * k, C4AulParSet *pPars=0, bool fPassErrors=false);
 	C4Value Call(const char * k, C4AulParSet *pPars=0, bool fPassErrors=false);
 	C4PropertyName GetPropertyP(C4PropertyName k) const;
-	int32_t GetPropertyInt(C4PropertyName k) const;
+	int32_t GetPropertyInt(C4PropertyName k, int32_t default_val = 0) const;
 	C4PropList *GetPropertyPropList(C4PropertyName k) const;
 	bool HasProperty(C4String * k) const { return Properties.Has(k); }
 	// not allowed on frozen proplists
@@ -216,6 +214,7 @@ public:
 	static void ShelveNumberedPropLists(); // unnumber all proplists and put them on the shelve. To be used on remaining objects before a savegame load.
 	static void UnshelveNumberedPropLists(); // re-insert shelved proplists into main list
 	static void ClearShelve();
+	static void ClearNumberedPropLists(); // empty all properties in numbered prop lists. Used on game clear to ensure prop lists with circular references get cleared.
 protected:
 	C4PropListNumbered(C4PropList * prototype = 0);
 	void AcquireNumber(); // acquire a number and add to internal list
@@ -232,8 +231,14 @@ protected:
 class C4PropListScript: public C4PropList
 {
 public:
-	C4PropListScript(C4PropList * prototype = 0): C4PropList(prototype) { }
+	C4PropListScript(C4PropList * prototype = 0) : C4PropList(prototype) { PropLists.Add(this);  }
+	virtual ~C4PropListScript() { PropLists.Remove(this); }
 	bool Delete() { return true; }
+
+	static void ClearScriptPropLists(); // empty all properties in script-created prop lists. Used on game clear to ensure prop lists with circular references get cleared.
+
+protected:
+	static C4Set<C4PropListScript *> PropLists;
 };
 
 // PropLists declared in the game data

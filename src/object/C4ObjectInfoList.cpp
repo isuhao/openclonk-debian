@@ -70,13 +70,6 @@ int32_t C4ObjectInfoList::Load(C4Group &hGroup)
 			else delete ninf;
 		}
 
-	// Search all c4o files
-	/*hGroup.ResetSearch();
-	while (hGroup.FindNextEntry("*.c4o",entryname))
-	  if (ninf=new C4ObjectInfo)
-	    if (ninf->Load(hGroup,entryname)) { Add(ninf); infn++; }
-	    else delete ninf;*/
-
 	// Search subfolders
 	hGroup.ResetSearch();
 	while (hGroup.FindNextEntry("*", entryname))
@@ -100,11 +93,12 @@ bool C4ObjectInfoList::Add(C4ObjectInfo *pInfo)
 void C4ObjectInfoList::MakeValidName(char *sName)
 {
 	char tstr[_MAX_PATH];
-	int32_t iname,namelen=SLen(sName);
+	int32_t iname;
+	size_t namelen = SLen(sName);
 	for (iname=2; NameExists(sName); iname++)
 	{
 		sprintf(tstr," %d",iname);
-		SCopy(tstr,sName+Min<int32_t>(namelen,C4MaxName-SLen(tstr)));
+		SCopy(tstr, sName + std::min(namelen, C4MaxName - SLen(tstr)));
 	}
 }
 

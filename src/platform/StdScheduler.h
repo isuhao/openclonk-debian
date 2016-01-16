@@ -40,6 +40,9 @@ struct pollfd;
 #ifdef HAVE_PTHREAD
 #include <pthread.h>
 #endif // HAVE_PTHREAD
+#ifdef __APPLE__
+#include <sched.h>
+#endif
 #endif // _WIN32
 
 
@@ -111,7 +114,7 @@ public:
 		if (tTime < tLastTimer + iDelay) return false;
 		// Compensate light drifting
 		int32_t iDrift = tTime - (tLastTimer + iDelay); // a positive time difference because of above check
-		tLastTimer = tTime - Min(iDrift, (int32_t) iDelay / 2);
+		tLastTimer = tTime - std::min(iDrift, (int32_t) iDelay / 2);
 		return true;
 	}
 
@@ -283,7 +286,7 @@ private:
 
 	bool fThread;
 #ifdef HAVE_WINTHREAD
-	unsigned long iThread;
+	uintptr_t iThread;
 #elif defined(HAVE_PTHREAD)
 	pthread_t Thread;
 #endif
@@ -316,7 +319,7 @@ private:
 	bool fStopSignaled;
 
 #ifdef HAVE_WINTHREAD
-	unsigned long iThread;
+	uintptr_t iThread;
 #elif defined(HAVE_PTHREAD)
 	pthread_t Thread;
 #endif
@@ -335,6 +338,7 @@ protected:
 	virtual void Execute() = 0;
 
 	bool IsStopSignaled();
+	virtual bool IsSelfDestruct() { return false; } // whether thread should delete itself after execution finished
 
 private:
 	// thread func

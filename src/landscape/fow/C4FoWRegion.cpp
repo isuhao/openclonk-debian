@@ -15,45 +15,115 @@
 
 #include "C4Include.h"
 #include "C4FoWRegion.h"
+#include "C4DrawGL.h"
 
-bool glCheck() {
-	if (int err = glGetError()) {
-		LogF("GL error %d: %s", err, gluErrorString(err));
-		return false;
-	}
-	return true;
+C4FoWRegion::C4FoWRegion(C4FoW *pFoW, C4Player *pPlayer)
+	: pFoW(pFoW)
+	, pPlayer(pPlayer)
+#ifndef USE_CONSOLE
+	, hFrameBufDraw(0), hFrameBufRead(0), hVBO(0)
+#endif
+	, Region(0,0,0,0), OldRegion(0,0,0,0)
+	, pSurface(new C4Surface), pBackSurface(new C4Surface)
+{
+	ViewportRegion.left = ViewportRegion.right = ViewportRegion.top = ViewportRegion.bottom = 0.0f;
 }
 
 C4FoWRegion::~C4FoWRegion()
 {
-	Clear();
+#ifndef USE_CONSOLE
+	if (hFrameBufDraw) {
+		glDeleteFramebuffersEXT(1, &hFrameBufDraw);
+		glDeleteFramebuffersEXT(1, &hFrameBufRead);
+	}
+
+	if (hVBO) {
+		glDeleteBuffers(1, &hVBO);
+	}
+#endif
 }
 
 bool C4FoWRegion::BindFramebuf()
 {
-
+#ifndef USE_CONSOLE
 	// Flip texture
-	C4Surface *pSfc = pSurface;
-	pSurface = pBackSurface;
-	pBackSurface = pSfc;
+	pSurface.swap(pBackSurface);
 
 	// Can simply reuse old texture?
-	if (!pSurface || pSurface->Wdt < Region.Wdt || pSurface->Hgt < Region.Hgt)
+	if (pSurface->Wdt < Region.Wdt || (pSurface->Hgt / 2) < Region.Hgt)
 	{
-		// Create texture. Round up to next power of two in order to
+		// Determine texture size. Round up to next power of two in order to
 		// prevent rounding errors, as well as preventing lots of
 		// re-allocations when region size changes quickly (think zoom).
-		if (!pSurface)
-			pSurface = new C4Surface();
 		int iWdt = 1, iHgt = 1;
 		while (iWdt < Region.Wdt) iWdt *= 2;
 		while (iHgt < Region.Hgt) iHgt *= 2;
-		if (!pSurface->Create(iWdt, iHgt))
+
+		// Double the texture size. The second half of the texture
+		// will contain the light color information, while the
+		// first half contains the brightness and direction information
+		iHgt *= 2;
+
+		// Create the new surfaces
+		std::unique_ptr<C4Surface> pNewSurface(new C4Surface);
+		std::unique_ptr<C4Surface> pNewBackSurface(new C4Surface);
+		if (!pNewSurface->Create(iWdt, iHgt, false, 0, 0))
 			return false;
+		if (!pNewBackSurface->Create(iWdt, iHgt, false, 0, 0))
+			return false;
+
+		// Copy over old content. This avoids flicker in already
+		// explored regions that might get temporarily dark and
+		// re-faded-in with the surface swap. New area in the surface
+		// is initialized with darkness (black).
+		pSurface->Lock();
+		pBackSurface->Lock();
+		pNewSurface->Lock();
+		pNewBackSurface->Lock();
+
+		// Take into account that the texture
+		// is split for normals/intensity and colors, and also that
+		// OpenGL textures are upside down.
+		for (int y = 0; y < iHgt / 2; ++y)
+		{
+			for (int x = 0; x < iWdt; ++x)
+			{
+				if (y < pSurface->Hgt / 2 && x < pSurface->Wdt)
+				{
+					// Normals and intensity
+					pNewSurface->SetPixDw(x, pNewSurface->Hgt/2 - y, pSurface->GetPixDw(x, pSurface->Hgt/2 - y, false));
+					pNewBackSurface->SetPixDw(x, pNewBackSurface->Hgt/2 - y, pBackSurface->GetPixDw(x, pBackSurface->Hgt/2 - y, false));
+
+					// Color
+					pNewSurface->SetPixDw(x, pNewSurface->Hgt/2 - y + iHgt / 2, pSurface->GetPixDw(x, pSurface->Hgt/2 - y + pSurface->Hgt / 2, false));
+					pNewBackSurface->SetPixDw(x, pNewBackSurface->Hgt/2 - y + iHgt / 2, pBackSurface->GetPixDw(x, pBackSurface->Hgt/2 - y + pBackSurface->Hgt / 2, false));
+				}
+				else
+				{
+					// Normals and intensity
+					pNewSurface->SetPixDw(x, pNewSurface->Hgt/2 - y, 0x000000ff);
+					pNewBackSurface->SetPixDw(x, pNewBackSurface->Hgt/2 - y, 0x000000ff);
+
+					// Color
+					pNewSurface->SetPixDw(x, pNewSurface->Hgt/2 - y + iHgt / 2, 0x000000ff);
+					pNewBackSurface->SetPixDw(x, pNewBackSurface->Hgt/2 - y + iHgt / 2, 0x000000ff);
+				}
+			}
+		}
+
+		pSurface = std::move(pNewSurface);
+		pBackSurface = std::move(pNewBackSurface);
+
+		pSurface->Unlock();
+		pBackSurface->Unlock();
 	}
 
+	// Cannot bind empty surface
+	if (!pSurface->iTexSize) return false;
+
 	// Generate frame buffer object
-	if (!hFrameBufDraw) {
+	if (!hFrameBufDraw)
+	{
 		glGenFramebuffersEXT(1, &hFrameBufDraw);
 		glGenFramebuffersEXT(1, &hFrameBufRead);
 	}
@@ -64,7 +134,7 @@ bool C4FoWRegion::BindFramebuf()
 	glFramebufferTexture2DEXT(GL_DRAW_FRAMEBUFFER_EXT,
 		GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D,
 		pSurface->textures[0].texName, 0);
-	if (pBackSurface)
+	if (!pBackSurface->textures.empty())
 		glFramebufferTexture2DEXT(GL_READ_FRAMEBUFFER_EXT,
 			GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D,
 			pBackSurface->textures[0].texName, 0);
@@ -73,27 +143,36 @@ bool C4FoWRegion::BindFramebuf()
 	GLenum status1 = glCheckFramebufferStatusEXT(GL_READ_FRAMEBUFFER_EXT),
 		   status2 = glCheckFramebufferStatusEXT(GL_DRAW_FRAMEBUFFER_EXT);
 	if (status1 != GL_FRAMEBUFFER_COMPLETE_EXT ||
-		(pBackSurface && status2 != GL_FRAMEBUFFER_COMPLETE_EXT) ||
-		!glCheck())
+	   (pBackSurface && status2 != GL_FRAMEBUFFER_COMPLETE_EXT))
 	{
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 		return false;
 	}
+#endif
 
 	// Worked!
 	return true;
 }
 
-void C4FoWRegion::Clear()
+int32_t C4FoWRegion::getSurfaceHeight() const
 {
-	if (hFrameBufDraw) {
-		glDeleteFramebuffersEXT(1, &hFrameBufDraw);
-		glDeleteFramebuffersEXT(1, &hFrameBufRead);
-	}
-	hFrameBufDraw = hFrameBufRead = 0;
-	delete pSurface; pSurface = NULL;
-	delete pBackSurface; pBackSurface = NULL;
+	return pSurface->Hgt;
 }
+
+int32_t C4FoWRegion::getSurfaceWidth() const
+{
+	return pSurface->Wdt;
+}
+
+#ifndef USE_CONSOLE
+GLuint C4FoWRegion::getSurfaceName() const
+{
+	assert(!pSurface->textures.empty());
+	if (pSurface->textures.empty())
+		return 0;
+	return pSurface->textures[0].texName;
+}
+#endif
 
 void C4FoWRegion::Update(C4Rect r, const FLOAT_RECT& vp)
 {
@@ -102,55 +181,59 @@ void C4FoWRegion::Update(C4Rect r, const FLOAT_RECT& vp)
 	ViewportRegion = vp;
 }
 
-void C4FoWRegion::Render(const C4TargetFacet *pOnScreen)
+bool C4FoWRegion::Render(const C4TargetFacet *pOnScreen)
 {
+#ifndef USE_CONSOLE
 	// Update FoW at interesting location
 	pFoW->Update(Region, pPlayer);
 
 	// On screen? No need to set up frame buffer - simply shortcut
 	if (pOnScreen)
 	{
-		pFoW->Render(this, pOnScreen, pPlayer);
-		return;
+		pFoW->Render(this, pOnScreen, pPlayer, pGL->GetProjectionMatrix());
+		return true;
 	}
 
 	// Set up shader. If this one doesn't work, we're really in trouble.
 	C4Shader *pShader = pFoW->GetFramebufShader();
 	assert(pShader);
-	if (!pShader) return;
+	if (!pShader) return false;
 
 	// Create & bind the frame buffer
 	pDraw->StorePrimaryClipper();
 	if(!BindFramebuf())
 	{
 		pDraw->RestorePrimaryClipper();
-		return;
+		return false;
 	}
 	assert(pSurface && hFrameBufDraw);
 	if (!pSurface || !hFrameBufDraw)
-		return;
+		return false;
 
 	// Set up a clean context
-	glViewport(0, 0, getSurface()->Wdt, getSurface()->Hgt);
-	glMatrixMode(GL_PROJECTION);
-	glPushMatrix();
-	glLoadIdentity();
-	gluOrtho2D(0, getSurface()->Wdt, getSurface()->Hgt, 0);
+	glViewport(0, 0, pSurface->Wdt, pSurface->Hgt);
+	const StdProjectionMatrix projectionMatrix = StdProjectionMatrix::Orthographic(0.0f, pSurface->Wdt, pSurface->Hgt, 0.0f);
 
 	// Clear texture contents
-	glClearColor(0.0f, 0.5f/1.5f, 0.5f/1.5f, 1.0f);
+	assert(pSurface->Hgt % 2 == 0);
+	glScissor(0, pSurface->Hgt / 2, pSurface->Wdt, pSurface->Hgt / 2);
+	glClearColor(0.0f, 0.5f / 1.5f, 0.5f / 1.5f, 0.0f);
+	glEnable(GL_SCISSOR_TEST);
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	// clear lower half of texture
+	glScissor(0, 0, pSurface->Wdt, pSurface->Hgt / 2);
+	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDisable(GL_SCISSOR_TEST);
 
 	// Render FoW to frame buffer object
 	glBlendFunc(GL_ONE, GL_ONE);
-	pFoW->Render(this, NULL, pPlayer);
+	pFoW->Render(this, NULL, pPlayer, projectionMatrix);
 
 	// Copy over the old state
-	if (OldRegion.Wdt > 0) {
-
-		// Set up shader. If this one doesn't work, we're really in trouble.
-		C4Shader *pShader = pFoW->GetFramebufShader();
-		assert(pShader);
+	if (OldRegion.Wdt > 0)
+	{
 
 		// How much the borders have moved
 		int dx0 = Region.x - OldRegion.x,
@@ -159,47 +242,86 @@ void C4FoWRegion::Render(const C4TargetFacet *pOnScreen)
 			dy1 = Region.y + Region.Hgt - OldRegion.y - OldRegion.Hgt;
 
 		// Source and target rect coordinates (landscape coordinate system)
-		int sx0 = Max(0, dx0),                  sy0 = Max(0, dy0),
-			sx1 = OldRegion.Wdt - Max(0, -dx1), sy1 = OldRegion.Hgt - Max(0, -dy1),
-			tx0 = Max(0, -dx0),                 ty0 = Max(0, -dy0),
-			tx1 = Region.Wdt - Max(0, dx1),     ty1 = Region.Hgt - Max(0, dy1);
+		int sx0 = std::max(0, dx0),                  sy0 = std::max(0, dy0),
+			sx1 = OldRegion.Wdt - std::max(0, -dx1), sy1 = OldRegion.Hgt - std::max(0, -dy1),
+			tx0 = std::max(0, -dx0),                 ty0 = std::max(0, -dy0),
+			tx1 = Region.Wdt - std::max(0, dx1),     ty1 = Region.Hgt - std::max(0, dy1);
 
 		// Quad coordinates
-		float squad[8] = { float(sx0), float(sy0),  float(sx0), float(sy1),
-			               float(sx1), float(sy1),  float(sx1), float(sy0) };
-		int tquad[8] = { sx0, ty0,  tx0, ty1,  tx1, ty1, tx1, ty0, };
+		float vtxData[16];
+		float* squad = &vtxData[0];
+		float* tquad = &vtxData[8];
+
+		squad[0] = float(sx0);
+		squad[1] = float(sy0);
+		squad[2] = float(sx0);
+		squad[3] = float(sy1);
+		squad[4] = float(sx1);
+		squad[5] = float(sy0);
+		squad[6] = float(sx1);
+		squad[7] = float(sy1);
+
+		tquad[0] = float(tx0);
+		tquad[1] = float(ty0);
+		tquad[2] = float(tx0);
+		tquad[3] = float(ty1);
+		tquad[4] = float(tx1);
+		tquad[5] = float(ty0);
+		tquad[6] = float(tx1);
+		tquad[7] = float(ty1);
 
 		// Transform into texture coordinates
-		for (int i = 0; i < 4; i++) {
-			squad[i*2] = squad[i*2] / getBackSurface()->Wdt;
-			squad[i*2+1] = 1.0 - squad[i*2+1] / getBackSurface()->Hgt;
+		for (int i = 0; i < 4; i++)
+		{
+			squad[i*2] = squad[i*2] / pBackSurface->Wdt;
+			squad[i*2+1] = 1.0 - squad[i*2+1] / pBackSurface->Hgt;
+		}
+
+		// Load coordinates into vertex buffer
+		if (hVBO == 0)
+		{
+			glGenBuffers(1, &hVBO);
+			glBindBuffer(GL_ARRAY_BUFFER, hVBO);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(vtxData), vtxData, GL_STREAM_DRAW);
+		}
+		else
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, hVBO);
+			glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vtxData), vtxData);
 		}
 
 		// Copy using shader
 		C4ShaderCall Call(pShader);
 		Call.Start();
-		if (Call.AllocTexUnit(0, GL_TEXTURE_2D))
-			glBindTexture(GL_TEXTURE_2D, getBackSurface()->textures[0].texName);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glBegin(GL_QUADS);
-		for (int i = 0; i < 4; i++)
-		{
-			glTexCoord2f(squad[i*2], squad[i*2+1]);
-			glVertex2i(tquad[i*2], tquad[i*2+1]);
-		}
-		glEnd();
+		if (Call.AllocTexUnit(C4FoWFSU_Texture))
+			glBindTexture(GL_TEXTURE_2D, pBackSurface->textures[0].texName);
+		Call.SetUniformMatrix4x4(C4FoWFSU_ProjectionMatrix, projectionMatrix);
+		glBlendFunc(GL_ONE_MINUS_CONSTANT_COLOR, GL_CONSTANT_COLOR);
+		float normalBlend = 1.0f / 4.0f, // Normals change quickly
+		      brightBlend = 1.0f / 16.0f; // Intensity more slowly
+		glBlendColor(0.0f,normalBlend,normalBlend,brightBlend);
+
+		glEnableVertexAttribArray(pShader->GetAttribute(C4FoWFSA_Position));
+		glEnableVertexAttribArray(pShader->GetAttribute(C4FoWFSA_TexCoord));
+		glVertexAttribPointer(pShader->GetAttribute(C4FoWFSA_Position), 2, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<const uint8_t*>(8 * sizeof(float)));
+		glVertexAttribPointer(pShader->GetAttribute(C4FoWFSA_TexCoord), 2, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<const uint8_t*>(0));
+
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+		glDisableVertexAttribArray(pShader->GetAttribute(C4FoWFSA_Position));
+		glDisableVertexAttribArray(pShader->GetAttribute(C4FoWFSA_TexCoord));
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
 		Call.Finish();
-    }
+	}
 
 	// Done!
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-	glMatrixMode(GL_PROJECTION);
-	glPopMatrix();
 	pDraw->RestorePrimaryClipper();
-	glCheck();
 
 	OldRegion = Region;
-
+#endif
+	return true;
 }
 
 void C4FoWRegion::GetFragTransform(const C4Rect& clipRect, const C4Rect& outRect, float lightTransform[6]) const
@@ -218,20 +340,10 @@ void C4FoWRegion::GetFragTransform(const C4Rect& clipRect, const C4Rect& outRect
 	// Offset between viewport and light texture
 	trans.Translate(vpRect.left - lightRect.x, vpRect.top - lightRect.y);
 	// Light surface normalization
-	trans.Scale(1.0f / getSurface()->Wdt, 1.0f / getSurface()->Hgt);
+	trans.Scale(1.0f / pSurface->Wdt, 1.0f / pSurface->Hgt);
 	// Light surface Y offset
-	trans.Translate(0.0f, 1.0f - (float)(lightRect.Hgt) / (float)getSurface()->Hgt);
+	trans.Translate(0.0f, 1.0f - (float)(lightRect.Hgt) / (float)pSurface->Hgt);
 
 	// Extract matrix
 	trans.Get2x3(lightTransform);
-}
-
-C4FoWRegion::C4FoWRegion(C4FoW *pFoW, C4Player *pPlayer)
-	: pFoW(pFoW)
-	, pPlayer(pPlayer)
-	, hFrameBufDraw(0), hFrameBufRead(0)
-	, Region(0,0,0,0), OldRegion(0,0,0,0)
-	, pSurface(NULL), pBackSurface(NULL)
-{
-	ViewportRegion.left = ViewportRegion.right = ViewportRegion.top = ViewportRegion.bottom = 0.0f;
 }

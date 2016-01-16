@@ -55,10 +55,24 @@ static const Stackable_Infinite_Count = 50;
 public func IsStackable() { return true; }
 public func GetStackCount() { return Max(1, count); }
 public func MaxStackCount() { return 20; }
+public func IsFullStack() { return IsInfiniteStackCount() || (GetStackCount() >= MaxStackCount()); }
+public func IsInfiniteStackCount() { return count_is_infinite; }
 
 protected func Construction()
 {
 	count = MaxStackCount();
+	return _inherited(...);
+}
+
+func Destruction()
+{
+	var container = Contained();
+	if (container)
+	{
+		// has an extra slot
+		if (container->~HasExtraSlot())
+			container->~NotifyHUD();
+	}
 	return _inherited(...);
 }
 
@@ -77,7 +91,7 @@ public func Stack(object obj)
 	
 	var howmany = Min(obj->GetStackCount(), MaxStackCount() - GetStackCount());
 	
-	if (count + howmany > Stackable_Max_Count)
+	if (howmany <= 0 || count + howmany > Stackable_Max_Count)
 		return 0;
 	
 	SetStackCount(count + howmany);
@@ -93,7 +107,12 @@ public func SetStackCount(int amount)
 	return true;
 }
 
-public func IsInfiniteStackCount() { return count_is_infinite; }
+public func DoStackCount(int change)
+{
+	count += change;
+	if (count <= 0) RemoveObject();
+	else UpdateStackDisplay();
+}
 
 public func SetInfiniteStackCount()
 {
@@ -131,57 +150,20 @@ public func UpdateStackDisplay()
 	{
 		// has an extra slot
 		if (container->~HasExtraSlot())
-			container->~NotifyHUD();
-		// is a clonk with new inventory system
-		else if (container->~GetSelected())
 		{
-			var pos = container->GetItemPos(this);
-			container->~OnSlotFull(pos);
+			container->~NotifyHUD();
+		}
+		// is a clonk with new inventory system
+		else
+		{
+			container->~OnInventoryChange();
 		}
 	}
 }
 
 private func UpdatePicture()
 {
-	// Put a small number showing the stack count in the bottom right 
-	// corner of the picture
-	var s = 400;
-	var yoffs = 14000;
-	var xoffs = 22000;
-	var spacing = 14000;
-
-	if  (count_is_infinite)
-	{
-		SetGraphics(nil, nil, 10);
-		SetGraphics(nil, nil, 11);
-		SetGraphics("Inf", Icon_Number, 12, GFXOV_MODE_Picture);
-		SetObjDrawTransform(s, 0, xoffs, 0, s, yoffs, 12);
-	}
-	else
-	{
-		var one = GetStackCount() % 10;
-		var ten = (GetStackCount() / 10) % 10;
-		var hun = (GetStackCount() / 100) % 10;
-		
-		if (hun > 0)
-		{
-			SetGraphics(Format("%d", hun), Icon_Number, 10, GFXOV_MODE_Picture);
-			SetObjDrawTransform(s, 0, xoffs - 2 * spacing, 0, s, yoffs, 10);
-		}
-		else
-			SetGraphics(nil, nil, 10);
-
-		if (ten > 0 || hun > 0)
-		{
-			SetGraphics(Format("%d", ten), Icon_Number, 11, GFXOV_MODE_Picture);
-			SetObjDrawTransform(s, 0, xoffs - spacing, 0, s, yoffs, 11);
-		}
-		else
-			SetGraphics(nil, nil, 11);
-			
-		SetGraphics(Format("%d", one), Icon_Number, 12, GFXOV_MODE_Picture);
-		SetObjDrawTransform(s, 0, xoffs, 0, s, yoffs, 12);
-	}
+	// Allow other objects to adjust their picture.
 	return _inherited(...);
 }
 
@@ -198,6 +180,11 @@ private func UpdateMass()
 	SetMass(GetID()->GetMass() * Max(GetStackCount(), 1) / MaxStackCount());
 }
 
+/*
+	Try to merge packs BEFORE entering the container.
+	That means that a container can not prevent objects stacking into it.
+	However, the other way round (after the object has entered) presents more issues.
+*/
 protected func RejectEntrance(object into)
 {
 	if (TryPutInto(into))
@@ -212,41 +199,76 @@ public func CalcValue(object in_base, int for_plr)
 	return GetID()->GetValue() * Max(GetStackCount(), 1) / MaxStackCount();
 }
 
-private func TryPutInto(object into)
+/* Tries to add this object to another stack. Returns true if successful.
+	This call might remove this item. */
+public func TryAddToStack(object other)
 {
+	if (other == this) return false;
+	
+	// Is a stack possible in theory?
+	if (other->~IsStackable() && other->GetID() == GetID())
+	{
+			var howmany = other->Stack(this);
+			if (howmany > 0)
+			{
+				count -= howmany;
+				if(count <= 0) RemoveObject();
+				// Stack succesful! No matter how many items were transfered.
+				return true;
+			}
+		}
+	return false;
+}
+
+/* Attempts to add this stack either to existing stacks in an object or
+	if only_add_to_existing_stacks is not set, also recursively into HasExtraSlot containers in that object.*/
+public func TryPutInto(object into, bool only_add_to_existing_stacks)
+{
+	only_add_to_existing_stacks = only_add_to_existing_stacks ?? false;
+	var before = count;
 	var contents = FindObjects(Find_Container(into));
 
-	// first check if stackable can be put into object with extra slot
-	for (var content in contents)
+	if (!only_add_to_existing_stacks)
 	{
-		if (!content)
-			continue;
-		if (content->~HasExtraSlot())
-			if (TryPutInto(content))
-				return true;
+		// first check if stackable can be put into object with extra slot
+		for (var content in contents)
+		{
+			if (!content)
+				continue;
+			if (content->~HasExtraSlot())
+				if (TryPutInto(content))
+					return true;
+		}
 	}
-
+	
 	// then check this object
 	for (var content in contents)
 	{
 		var howmany = 0;
 		if (!content)
 			continue;
-		if (content->~IsStackable())
-			if (content->GetID() == GetID())
-				if (howmany = content->Stack(this))
-				{
-					count -= howmany;
-					if(count <= 0)
-					{
-						RemoveObject();
-						return true;
-					}
-				}
+		TryAddToStack(content);
+		if (!this) return true;
 	}
 	
-	UpdateStackDisplay();
+	// IFF anything changed, we need to update the display.
+	if (before != count)
+		UpdateStackDisplay();
 	return false;
+}
+
+// Infinite stacks can only be stacked on top of others.
+public func CanBeStackedWith(object other)
+{
+	if (other.count_is_infinite != this.count_is_infinite) return false;
+	return _inherited(other, ...);
+}
+
+// Infinite stacks show a little symbol in their corner.
+public func GetInventoryIconOverlay()
+{
+	if (!count_is_infinite) return nil;
+	return {Left = "50%", Bottom="50%", Symbol=Icon_Number, GraphicsName="Inf"};
 }
 
 // Save stack counts in saved scenarios

@@ -85,6 +85,8 @@ public:
 	int32_t ExtraWarnings;
 	char TodoFilename[CFG_MaxString + 1];
 	char AltTodoFilename[CFG_MaxString + 1];
+	int32_t MaxScriptMRU; // maximum number of remembered elements in recently used scripts
+	int32_t DebugShapeTextures; // if nonzero, show messages about loaded shape textures
 	void CompileFunc(StdCompiler *pComp);
 };
 
@@ -94,9 +96,7 @@ public:
 	int32_t SplitscreenDividers;
 	int32_t ShowStartupMessages;
 	int32_t VerboseObjectLoading;
-	int32_t ColorAnimation;
 	int32_t HighResLandscape;
-	int32_t VideoModule;
 	int32_t MenuTransparency;
 	int32_t UpperBoard;
 	int32_t ShowClock;
@@ -108,10 +108,9 @@ public:
 	int32_t ShowCrewCNames; // show clonk names above clonks?
 	int32_t BitDepth; // used bit depth for newgfx
 	int32_t PXSGfx;     // show PXS-graphics (instead of sole pixels)
-	int32_t Gamma1, Gamma2, Gamma3; // gamma ramps
+	int32_t Gamma; // gamma value
 	int32_t Currency;   // default wealth symbolseb
 	int32_t RenderInactiveEM; // draw vieports even if inactive in CPEM
-	int32_t DisableGamma;
 	int32_t Monitor;    // monitor index to play on
 	int32_t FireParticles; // draw extended fire particles if enabled (default on)
 	int32_t MaxRefreshDelay; // minimum time after which graphics should be refreshed (ms)
@@ -160,7 +159,6 @@ public:
 	int32_t MaxLoadFileSize;
 	char LastPassword[CFG_MaxString+1];
 	char AlternateServerAddress[CFG_MaxString+1];
-	char PuncherAddress[CFG_MaxString+1];
 	StdCopyStrBuf LastLeagueServer, LastLeaguePlayerName, LastLeagueAccount, LastLeagueLoginToken;
 #ifdef WITH_AUTOMATIC_UPDATE
 	char UpdateServerAddress[CFG_MaxString+1];

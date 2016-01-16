@@ -63,12 +63,12 @@ void C4PXS::Execute()
 	if (GBackDensity(iX, iY + 1) < ::MaterialMap.Map[Mat].Density)
 	{
 		// Air speed: Wind plus some random
-		int32_t iWind = GBackWind(iX, iY);
+		int32_t iWind = Weather.GetWind(iX, iY);
 		C4Real txdir = itofix(iWind, 15) + C4REAL256(Random(1200) - 600);
 		C4Real tydir = C4REAL256(Random(1200) - 600);
 
 		// Air friction, based on WindDrift. MaxSpeed is ignored.
-		int32_t iWindDrift = Max(::MaterialMap.Map[Mat].WindDrift - 20, 0);
+		int32_t iWindDrift = std::max(::MaterialMap.Map[Mat].WindDrift - 20, 0);
 		xdir += ((txdir - xdir) * iWindDrift) * WindDrift_Factor;
 		ydir += ((tydir - ydir) * iWindDrift) * WindDrift_Factor;
 	}
@@ -88,6 +88,7 @@ void C4PXS::Execute()
 		}
 
 	// Test path to target position
+	int32_t iX0 = iX, iY0 = iY;
 	bool fStopMovement = false;
 	do
 	{
@@ -109,7 +110,9 @@ void C4PXS::Execute()
 				// no destructive contact, but speed or position changed: Stop moving for now
 				if (fStopMovement)
 				{
-					x = itofix(iX); y = itofix(iY);
+					// But keep fractional positions to allow proper movement on moving ground
+					if (iX != iX0) x = itofix(iX);
+					if (iY != iY0) y = itofix(iY);
 					return;
 				}
 				// there was a reaction func, but it didn't do anything - continue movement
@@ -280,12 +283,12 @@ void C4PXSSystem::Draw(C4TargetFacet &cgo)
 						const float w = z;
 						const float h = z * fcHgt / fcWdt;
 						const float x1 = fixtof(pxp->x) + cgox + z * pMat->PXSGfxRt.tx / fcWdt;
-						const float y1 = fixtof(pxp->y) + cgoy + z * pMat->PXSGfxRt.ty / fcWdt;
+						const float y1 = fixtof(pxp->y) + cgoy + z * pMat->PXSGfxRt.ty / fcHgt;
 						const float x2 = x1 + w;
 						const float y2 = y1 + h;
 
-						int32_t sfcWdt = pMat->PXSFace.Surface->Wdt;
-						int32_t sfcHgt = pMat->PXSFace.Surface->Hgt;
+						const float sfcWdt = pMat->PXSFace.Surface->Wdt;
+						const float sfcHgt = pMat->PXSFace.Surface->Hgt;
 
 						C4BltVertex vtx[6];
 						vtx[0].tx = (pnx + 0.f) * fcWdt / sfcWdt; vtx[0].ty = (pny + 0.f) * fcHgt / sfcHgt;
@@ -318,7 +321,7 @@ void C4PXSSystem::Draw(C4TargetFacet &cgo)
 						{
 							// lines for stuff that goes whooosh!
 							int len = fixtoi(Abs(pxp->xdir) + Abs(pxp->ydir));
-							const DWORD dwMatClrLen = uint32_t(Max<int>(dwMatClr >> 24, 195 - (195 - (dwMatClr >> 24)) / len)) << 24 | (dwMatClr & 0xffffff);
+							const DWORD dwMatClrLen = uint32_t(std::max<int>(dwMatClr >> 24, 195 - (195 - (dwMatClr >> 24)) / len)) << 24 | (dwMatClr & 0xffffff);
 							C4BltVertex begin, end;
 							begin.ftx = fixtof(pxp->x - pxp->xdir) + cgox; begin.fty = fixtof(pxp->y - pxp->ydir) + cgoy;
 							end.ftx = fixtof(pxp->x) + cgox; end.fty = fixtof(pxp->y) + cgoy;
@@ -330,7 +333,6 @@ void C4PXSSystem::Draw(C4TargetFacet &cgo)
 						else
 						{
 							// single pixels for slow stuff
-							//pDraw->DrawPix(cgo.Surface, fixtof(pxp->x) + cgox, fixtof(pxp->y) + cgoy, dwMatClr);
 							C4BltVertex vtx;
 							vtx.ftx = fixtof(pxp->x) + cgox;
 							vtx.fty = fixtof(pxp->y) + cgoy;
@@ -342,8 +344,8 @@ void C4PXSSystem::Draw(C4TargetFacet &cgo)
 		}
 	}
 
-	if(!pixVtx.empty()) pDraw->PerformMultiPix(cgo.Surface, &pixVtx[0], pixVtx.size());
-	if(!lineVtx.empty()) pDraw->PerformMultiLines(cgo.Surface, &lineVtx[0], lineVtx.size(), 1.0f);
+	if(!pixVtx.empty()) pDraw->PerformMultiPix(cgo.Surface, &pixVtx[0], pixVtx.size(), NULL);
+	if(!lineVtx.empty()) pDraw->PerformMultiLines(cgo.Surface, &lineVtx[0], lineVtx.size(), 1.0f, NULL);
 
 	// PXS graphics disabled?
 	if (!Config.Graphics.PXSGfx)
@@ -352,7 +354,7 @@ void C4PXSSystem::Draw(C4TargetFacet &cgo)
 	for(std::map<int, std::vector<C4BltVertex> >::const_iterator iter = bltVtx.begin(); iter != bltVtx.end(); ++iter)
 	{
 		C4Material *pMat = &::MaterialMap.Map[iter->first];
-		pDraw->PerformMultiTris(cgo.Surface, &iter->second[0], iter->second.size(), NULL, &pMat->PXSFace.Surface->textures[0], NULL, NULL, 0);
+		pDraw->PerformMultiTris(cgo.Surface, &iter->second[0], iter->second.size(), NULL, &pMat->PXSFace.Surface->textures[0], NULL, NULL, 0, NULL);
 	}
 }
 
@@ -375,8 +377,6 @@ void C4PXSSystem::Cast(int32_t mat, int32_t num, int32_t tx, int32_t ty, int32_t
 bool C4PXSSystem::Save(C4Group &hGroup)
 {
 	unsigned int cnt;
-
-	//Log("Save PXS");
 
 	// Check used chunk count
 	int32_t iChunks=0;

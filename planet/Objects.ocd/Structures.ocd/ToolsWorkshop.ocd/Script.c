@@ -3,9 +3,11 @@
 #include Library_Structure
 #include Library_Ownable
 #include Library_Producer
-
+#include Library_LampPost
 
 local hold_production;
+
+public func LampPosition(id def) { return [GetCalcDir()*14,-6]; }
 
 public func Construction(object creator)
 {
@@ -28,11 +30,6 @@ public func IsProduct(id product_id)
 
 private func ProductionTime(id toProduce) { return 150; }
 public func PowerNeed() { return 40; }
-
-public func NeedRawMaterial(id rawmat_id)
-{
-	return true;
-}
 
 public func OnProductionStart(id product)
 {

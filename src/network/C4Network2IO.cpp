@@ -56,7 +56,6 @@ C4Network2IO::C4Network2IO()
 		iTCPIRate(0), iTCPORate(0), iTCPBCRate(0),
 		iUDPIRate(0), iUDPORate(0), iUDPBCRate(0)
 {
-	ZeroMem(&PuncherAddr, sizeof(PuncherAddr));
 }
 
 C4Network2IO::~C4Network2IO()
@@ -455,30 +454,9 @@ bool C4Network2IO::BroadcastMsg(const C4NetIOPacket &rPkt) // by both
 	return fSuccess;
 }
 
-bool C4Network2IO::Punch(C4NetIO::addr_t nPuncherAddr)
-{
-	// UDP must be initialized
-	if (!pNetIO_UDP)
-		return false;
-	// save address
-	PuncherAddr = nPuncherAddr;
-	// let's punch
-	return pNetIO_UDP->Connect(PuncherAddr);
-}
-
 // C4NetIO interface
 bool C4Network2IO::OnConn(const C4NetIO::addr_t &PeerAddr, const C4NetIO::addr_t &ConnectAddr, const C4NetIO::addr_t *pOwnAddr, C4NetIO *pNetIO)
 {
-	// puncher answer? We just make sure here a connection /can/ be established, so close it instantly.
-	if (pNetIO == pNetIO_UDP)
-		if (PuncherAddr.sin_addr.s_addr && AddrEqual(PuncherAddr, ConnectAddr))
-		{
-			// got an address?
-			if (pOwnAddr)
-				OnPunch(*pOwnAddr);
-			// this is only a test connection - close it instantly
-			return false;
-		}
 #if(C4NET2IO_DUMP_LEVEL > 1)
 	Application.InteractiveThread.ThreadLogS("OnConn: %s %s",
 	           C4TimeMilliseconds::Now().AsString().getData(),
@@ -526,13 +504,6 @@ bool C4Network2IO::OnConn(const C4NetIO::addr_t &PeerAddr, const C4NetIO::addr_t
 
 void C4Network2IO::OnDisconn(const C4NetIO::addr_t &addr, C4NetIO *pNetIO, const char *szReason)
 {
-	// punch?
-	if (pNetIO == pNetIO_UDP)
-		if (PuncherAddr.sin_addr.s_addr && AddrEqual(PuncherAddr, addr))
-		{
-			ZeroMem(&PuncherAddr, sizeof(PuncherAddr));
-			return;
-		}
 #if(C4NET2IO_DUMP_LEVEL > 1)
 	Application.InteractiveThread.ThreadLogS("OnDisconn: %s %s",
 	           C4TimeMilliseconds::Now().AsString().getData(),
@@ -945,7 +916,7 @@ void C4Network2IO::HandlePacket(char cStatus, const C4PacketBase *pPacket, C4Net
 
 #define GETPKT(type, name) \
     assert(pPacket); const type &name = \
-      /*dynamic_cast*/ static_cast<const type &>(*pPacket);
+     static_cast<const type &>(*pPacket);
 
 	switch (cStatus)
 	{
@@ -1237,20 +1208,6 @@ void C4Network2IO::SendConnPackets()
 
 }
 
-void C4Network2IO::OnPunch(C4NetIO::addr_t addr)
-{
-	// Sanity check
-	assert (addr.sin_family == AF_INET);
-	if (addr.sin_family != AF_INET)
-		return;
-	ZeroMem(addr.sin_zero, sizeof(addr.sin_zero));
-	// Add for local client
-	C4Network2Client *pLocal = ::Network.Clients.GetLocal();
-	if (pLocal)
-		if (pLocal->AddAddr(C4Network2Address(addr, P_UDP), true))
-			::Network.InvalidateReference();
-}
-
 // *** C4Network2IOConnection
 
 C4Network2IOConnection::C4Network2IOConnection()
@@ -1290,7 +1247,7 @@ int C4Network2IOConnection::getLag() const
 			int iPingLag = C4TimeMilliseconds::Now() - tLastPing;
 			// Use it for lag measurement once it's larger then the last ping time
 			// (the ping time won't be better than this anyway once the pong's here)
-			return Max(iPingLag, iPingTime);
+			return std::max(iPingLag, iPingTime);
 		}
 	}
 	// Last ping result

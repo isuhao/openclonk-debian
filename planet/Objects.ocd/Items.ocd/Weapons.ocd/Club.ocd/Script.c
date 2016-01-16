@@ -4,7 +4,7 @@
 
 private func Hit()
 {
-	Sound("WoodHit?");
+	Sound("Hits::Materials::Wood::WoodHit?");
 }
 
 public func GetCarryMode() { return CARRY_HandBack; }
@@ -65,19 +65,17 @@ public func HoldingEnabled() { return true; }
 
 local fAiming;
 
+public func RejectUse(object clonk)
+{
+	return !CanStrikeWithWeapon(clonk) || !clonk->HasHandAction();
+}
+
 public func ControlUseStart(object clonk, int x, int y)
 {
 	if(clonk->GetHandPosByItemPos(clonk->GetItemPos(this)) == 0)
 		ClubChangeHandAnims("R");
 	else
 		ClubChangeHandAnims("L");
-
-	// cooldown?
-	if(!CanStrikeWithWeapon(clonk)) return true;
-	
-	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction())
-		return true;
 
 	fAiming = true;
 
@@ -112,6 +110,8 @@ public func FinishedAiming(object clonk, int angle)
 	
 	// aaaand, a cooldown
 	AddEffect("ClubWeaponCooldown", clonk, 1, 5, this);
+	
+	Sound("Objects::Weapons::WeaponSwing?", nil, nil, nil, nil, nil, -50);
 	return true;
 }
 
@@ -200,7 +200,7 @@ func DoStrike(clonk, angle)
 		if (obj->GetOCF() & OCF_Alive)
 		{
 			var damage=5*1000;
-			ApplyWeaponBash(obj, 400, angle);
+			ApplyWeaponBash(obj, 400, angle, clonk);
 			obj->DoEnergy(-damage, true, FX_Call_EngGetPunched, clonk->GetOwner());
 		}
 		else
@@ -212,11 +212,14 @@ func DoStrike(clonk, angle)
 			var precision = BoundBy(Distance(obj->GetX(), obj->GetY(), GetX() + x, GetY() + y), 1, 15);
 			
 			// mass/size factor
-			var fac1 = 10000/Max(2, obj->GetMass());
+			var fac1 = 10000 / Max(5, obj->GetMass());
 			var fac2 = BoundBy(10-Abs(obj->GetDefCoreVal("Width", "DefCore")-obj->GetDefCoreVal("Height", "DefCore")), 1, 10);
 			var speed = (3000 * fac1 * fac2) / 2 / 1000 / precision;
+			speed = BoundBy(speed, 500, 1500);
+			
 			obj->SetXDir((obj->GetXDir(100) + Sin(angle, speed)) / 2, div);
 			obj->SetYDir((obj->GetYDir(100) - Cos(angle, speed)) / 2, div);
+			obj->SetController(clonk->GetController());
 		}
 		AddEffect(en, obj, 1, 15, nil);
 		found=true;
@@ -224,18 +227,21 @@ func DoStrike(clonk, angle)
 	}
 	
 	if (found)
+	{
 		RemoveEffect("DuringClubShoot", clonk);
+		Sound("Hits::Materials::Wood::WoodHit?", nil, nil, nil, nil, nil, -10);
+	}
 }
 
 public func IsWeapon() { return true; }
 public func IsArmoryProduct() { return true; }
 
-func Definition(def) {
-	SetProperty("PictureTransformation",Trans_Rotate(-30,0,0,1),def);
+func Definition(def)
+{
+	def.PictureTransformation = Trans_Mul(Trans_Translate(-4500, -2000, 2000), Trans_Rotate(45,0,0,1));
 }
 
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
-local Rebuy = true;

@@ -492,16 +492,18 @@ void C4Effect::SetPropertyByS(C4String * k, const C4Value & to)
 		{
 			case P_Name:
 				if (!to.getStr() || !*to.getStr()->GetCStr())
-					throw new C4AulExecError("effect: Name has to be a nonempty string");
+					throw C4AulExecError("effect: Name has to be a nonempty string");
 				C4PropListNumbered::SetPropertyByS(k, to);
 				ReAssignCallbackFunctions();
 				return;
 			case P_Priority:
-				throw new C4AulExecError("effect: Priority is readonly");
+				throw C4AulExecError("effect: Priority is readonly");
 			case P_Interval: iInterval = to.getInt(); return;
 			case P_CommandTarget:
-				throw new C4AulExecError("effect: CommandTarget is readonly");
+				throw C4AulExecError("effect: CommandTarget is readonly");
 			case P_Time: iTime = to.getInt(); return;
+			case P_Prototype:
+				throw new C4AulExecError("effect: Prototype is readonly");
 		}
 	}
 	C4PropListNumbered::SetPropertyByS(k, to);
@@ -514,13 +516,15 @@ void C4Effect::ResetProperty(C4String * k)
 		switch(k - &Strings.P[0])
 		{
 			case P_Name:
-				throw new C4AulExecError("effect: Name has to be a nonempty string");
+				throw C4AulExecError("effect: Name has to be a nonempty string");
 			case P_Priority:
-				throw new C4AulExecError("effect: Priority is readonly");
+				throw C4AulExecError("effect: Priority is readonly");
 			case P_Interval: iInterval = 0; return;
 			case P_CommandTarget:
-				throw new C4AulExecError("effect: CommandTarget is readonly");
+				throw C4AulExecError("effect: CommandTarget is readonly");
 			case P_Time: iTime = 0; return;
+			case P_Prototype:
+				throw new C4AulExecError("effect: Prototype is readonly");
 		}
 	}
 	C4PropListNumbered::ResetProperty(k);
@@ -616,8 +620,8 @@ void Splash(int32_t tx, int32_t ty, int32_t amt, C4Object *pByObj)
 		}
 	// Splash sound
 	if (amt>=20)
-		StartSoundEffect("Splash2",false,100,pByObj);
-	else if (amt>1) StartSoundEffect("Splash1",false,100,pByObj);
+		StartSoundEffect("Liquids::Splash2", false, 50, pByObj);
+	else if (amt>1) StartSoundEffect("Liquids::Splash1", false, 50, pByObj);
 }
 
 void Smoke(int32_t tx, int32_t ty, int32_t level, DWORD dwClr)

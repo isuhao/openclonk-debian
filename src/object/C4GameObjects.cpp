@@ -96,10 +96,8 @@ void C4GameObjects::CrossCheck() // Every Tick1 by ExecObjects
 	focf = tocf = OCF_None;
 	// High level: Collection, Hit
 	if (!::Game.iTick3)
-	{
-		focf |= OCF_Collection; tocf |= OCF_Carryable;
-	}
-	focf |= OCF_Alive; tocf |= OCF_HitSpeed2;
+		tocf |= OCF_Carryable;
+	focf |= OCF_Collection; focf |= OCF_Alive; tocf |= OCF_HitSpeed2;
 
 	for (C4Object* obj1 : *this)
 		if (obj1->Status && !obj1->Contained && (obj1->OCF & focf))
@@ -127,9 +125,9 @@ void C4GameObjects::CrossCheck() // Every Tick1 by ExecObjects
 							{
 								int32_t iHitEnergy = fixtoi(speed * obj2->Mass / 5);
 								// Hit energy reduced to 1/3rd, but do not drop to zero because of this division
-								iHitEnergy = Max<int32_t>(iHitEnergy/3, !!iHitEnergy);
+								iHitEnergy = std::max<int32_t>(iHitEnergy/3, !!iHitEnergy);
 								obj1->DoEnergy(-iHitEnergy / 5, false, C4FxCall_EngObjHit, obj2->Controller);
-								int tmass = Max<int32_t>(obj1->Mass, 50);
+								int tmass = std::max<int32_t>(obj1->Mass, 50);
 								C4PropList* pActionDef = obj1->GetAction();
 								if (!::Game.iTick3 || (pActionDef && pActionDef->GetPropertyP(P_Procedure) != DFA_FLIGHT))
 									obj1->Fling(obj2->xdir * 50 / tmass, -Abs(obj2->ydir / 2) * 50 / tmass, false);
@@ -226,7 +224,7 @@ int C4GameObjects::PostLoad(bool fKeepInactive, C4ValueNumbers * numbers)
 	for (C4Object *pObj : reverse())
 	{
 		// keep track of numbers
-		iMaxObjectNumber = Max<long>(iMaxObjectNumber, pObj->Number);
+		iMaxObjectNumber = std::max(iMaxObjectNumber, pObj->Number);
 		// add to list of foreobjects
 		if (pObj->Category & C4D_Foreground)
 			ForeObjects.Add(pObj, C4ObjectList::stMain, this);
@@ -320,8 +318,6 @@ int C4GameObjects::PostLoad(bool fKeepInactive, C4ValueNumbers * numbers)
 
 	// make sure list is sorted by category - after sorting out inactives, because inactives aren't sorted into the main list
 	FixObjectOrder();
-
-	//Sectors.Dump();
 
 	// misc updates
 	for (C4Object *pObj : *this)
@@ -512,7 +508,10 @@ void C4GameObjects::ResetAudibility()
 {
 	for (C4Object *obj : *this)
 		if (obj)
+		{
 			obj->Audible = obj->AudiblePan = 0;
+			obj->AudiblePlayer = NO_OWNER;
+		}
 }
 
 void C4GameObjects::SetOCF()

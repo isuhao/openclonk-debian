@@ -281,7 +281,7 @@ bool C4Network2ResChunkData::MergeRanges(ChunkRange *pRange)
 	ChunkRange *pNext = pRange->Next;
 	if (pRange->Start + pRange->Length < pNext->Start) return false;
 	// get overlap
-	int32_t iOverlap = Min((pRange->Start + pRange->Length) - pNext->Start, pNext->Length);
+	int32_t iOverlap = std::min((pRange->Start + pRange->Length) - pNext->Start, pNext->Length);
 	// set new chunk range
 	pRange->Length += pNext->Length - iOverlap;
 	// remove range
@@ -976,12 +976,10 @@ void C4Network2Res::Clear()
 	if (fTempFile)
 		if (FileExists(szFile))
 			if (!EraseFile(szFile))
-				//Log(_strerror("Network: Could not delete temporary resource file"));
 				LogSilentF("Network: Could not delete temporary resource file (%s)", strerror(errno));
 	if (szStandalone[0] && !SEqual(szFile, szStandalone))
 		if (FileExists(szStandalone))
 			if (!EraseFile(szStandalone))
-				//Log(_strerror("Network: Could not delete temporary resource file"));
 				LogSilentF("Network: Could not delete temporary resource file (%s)", strerror(errno));
 	szFile[0] = szStandalone[0] = '\0';
 	fDirty = false;
@@ -1207,7 +1205,7 @@ bool C4Network2ResChunk::Set(C4Network2Res *pRes, uint32_t inChunk)
 	iChunk = inChunk;
 	// calculate offset and size
 	int32_t iOffset = iChunk * Core.getChunkSize(),
-	                  iSize = Min<int32_t>(Core.getFileSize() - iOffset, C4NetResChunkSize);
+	                  iSize = std::min<int32_t>(Core.getFileSize() - iOffset, C4NetResChunkSize);
 	if (iSize < 0) { LogF("Network: could not get chunk from offset %d from resource file %s: File size is only %d!", iOffset, pRes->getFile(), Core.getFileSize()); return false; }
 	// open file
 	int32_t f = pRes->OpenFileRead();
@@ -1345,7 +1343,7 @@ int32_t C4Network2ResList::nextResID() // by main thread
 	CStdLock ResIDLock(&ResIDCSec);
 	assert(iNextResID >= (iClientID << 16));
 	if (iNextResID >= ((iClientID+1) << 16) - 1)
-		iNextResID = Max<int32_t>(0, iClientID) << 16;
+		iNextResID = std::max<int32_t>(0, iClientID) << 16;
 	// find free
 	while (getRes(iNextResID))
 		iNextResID++;
@@ -1537,7 +1535,7 @@ void C4Network2ResList::HandlePacket(char cStatus, const C4PacketBase *pPacket, 
 
 #define GETPKT(type, name) \
     assert(pPacket); const type &name = \
-      /*dynamic_cast*/ static_cast<const type &>(*pPacket);
+     static_cast<const type &>(*pPacket);
 
 	switch (cStatus)
 	{

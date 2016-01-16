@@ -1,0 +1,2 @@
+Name=Chippie
+Description=Kleine, knuffige Kreaturen. Saugen Blut.

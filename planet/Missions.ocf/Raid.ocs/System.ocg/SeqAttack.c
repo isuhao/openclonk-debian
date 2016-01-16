@@ -21,7 +21,7 @@ func Attack_1()
 	this.planes = CreateArray(n_planes);
 	for (var i=0; i<n_planes; ++i)
 	{
-		var plane = CreateObjectAbove(Plane, plane_x[i], plane_y[i]);
+		var plane = CreateObjectAbove(Airplane, plane_x[i], plane_y[i]);
 		var pilot = CreateObjectAbove(Clonk, plane_x[i], plane_y[i]);
 		pilot->SetSkin(2);
 		pilot->Enter(plane);
@@ -29,7 +29,7 @@ func Attack_1()
 		pilot->SetColor(0xff101010);
 		pilot->SetDir(DIR_Left);
 		//plane->FaceLeft();
-		plane->StartInstantFlight(270, 15);
+		plane->StartInstantFlight(260, 15);
 		plane->SetXDir(-15);
 		plane->MakeInvincible();
 		this.planes[i] = plane;
@@ -64,8 +64,9 @@ func Attack_5()
 	MessageBoxAll("$Attack3$", npc_lara, true); // oh god!
 	for (var i=0; i<3; ++i)
 	{
-		this.planes[i]->StartInstantFlight(280, 15);
+		this.planes[i]->StartInstantFlight(270, 15);
 		this.planes[i]->SetXDir(-15);
+		this.planes[i]->SetYDir(0);
 	}
 	SetViewTarget(g_flagpole);
 	// NPCs go nuts
@@ -99,7 +100,7 @@ func FxAttack_PanicStart(object c, proplist fx, int temp)
 	c->SetAction("Walk");
 	// drop heavy stuff
 	var item = c->Contents();
-	if (item && item->~IsBarrel()) item->Drop();
+	if (item && item->~IsBarrel()) item->Exit();
 	// start running
 	FxAttack_PanicTimer(c, fx, 0);
 	return FX_OK;
@@ -143,7 +144,7 @@ func Attack_DropBomb(int plane_idx, int delay)
 		bomb->SetXDir(plane->GetXDir() + (i-2) * 10);
 		bomb->Fuse(true); // fuse and explode on hit
 	}
-	plane->Sound("BombDrop");
+	plane->Sound("Goal_Raid::BombDrop");
 	return true;
 }
 

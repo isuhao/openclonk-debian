@@ -1,3 +1,13 @@
+/**
+	Acid Rift
+	Mine the rubies before it's too late
+	
+	@author Sven2
+*/
+
+
+#include Library_Map
+
 //static const SCENPAR_MapSize = 2;
 //static const SCENPAR_Difficulty = 2;
 
@@ -18,6 +28,9 @@ func InitializeMap(proplist map)
 	// Map size
 	var map_size = [[100, 200],[120, 250],[130, 400]][s];
 	Resize(map_size[0], map_size[1]);
+	
+	// Background sky to ensure "^*" can be used to place materials
+	Draw("Sky");
 	
 	// Parameters by map size and difficulty
 	var acid_level = [10, 30, 40][d];	 // filling (in %) of basin with acid
@@ -105,7 +118,7 @@ func InitializeMap(proplist map)
 	
 	// Alternate rock textures
 	var rock_area = Duplicate("Rock");
-	DrawMaterial("Rock-rock_cracked", rock_area, [3, 3], 50);
+	DrawMaterial("Rock", rock_area, [3, 3], 50);
 	
 	// Patches of earth
 	DrawPatches(num_earth, "Earth", "^*", size_earth, true, 20, [0, top_off_earth, this.Wdt, this.Hgt - top_off_earth - bottom_off_earth]);
@@ -122,7 +135,7 @@ func InitializeMap(proplist map)
 	
 	// Materials
 	DrawPatches(num_water, "Water", "Earth", size_water, false, 10);
-	Draw("Earth-earth_topSoil", {Algo=MAPALGO_Border, Op=Duplicate("Water")});
+	Draw("Earth-earth", {Algo=MAPALGO_Border, Op=Duplicate("Water")});
 	DrawPatches(num_firestone, "Firestone", "Earth", size_firestone, false, 10);
 	DrawPatches(num_coal, "Coal", "Earth", size_coal, false, 7);
 	DrawPatches(num_ore, "Ore", "Earth", size_ore, true, 6);	
@@ -139,11 +152,11 @@ func InitializeMap(proplist map)
 	
 	// Alternations in earth texture
 	var earth_area = Duplicate("Earth");
-	DrawMaterial("Earth-earth_dry", earth_area, [10, 4], 30);
-	DrawMaterial("Earth-earth_midSoil", earth_area, [10, 4], 30);
+	DrawMaterial("Earth-earth_root", earth_area, [10, 4], 30);
+	DrawMaterial("Earth-earth", earth_area, [10, 4], 30);
 	
 	// Start area is always dark
-	Draw("Earth-earth_topSoil", algo);
+	Draw("Earth-earth", algo);
 	
 	// Return true to tell the engine a map has been successfully created.
 	return true;
@@ -151,21 +164,6 @@ func InitializeMap(proplist map)
 
 
 /*-- Helper Functions --*/
-
-// Draws some material inside an existing mask.
-private func DrawMaterial(string mat, proplist onto_mask, speck_size, int ratio)
-{
-	if (!speck_size)
-		speck_size = [4,4];
-	if (!ratio)
-		ratio = 15;
-	if (GetType(speck_size) != C4V_Array) speck_size = [speck_size, speck_size];
-	// Use random checker algorithm to draw patches of the material. 
-	var rnd_checker = {Algo = MAPALGO_RndChecker, Ratio = ratio, Wdt = speck_size[0], Hgt = speck_size[1]};
-	rnd_checker = {Algo = MAPALGO_Turbulence, Iterations = 4, Op = rnd_checker};
-	var algo = {Algo = MAPALGO_And, Op = [onto_mask, rnd_checker]};
-	return Draw(mat, algo);
-}
 
 // Find places matching mask and draw spots of material on it
 private func DrawPatches(int num, ...)

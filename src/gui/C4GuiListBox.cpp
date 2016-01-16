@@ -115,7 +115,7 @@ namespace C4GUI
 				rcSelArea.Hgt -= GetClientRect().y - rcSelArea.y;
 				rcSelArea.y = GetClientRect().y;
 			}
-			rcSelArea.Hgt = Min(rcSelArea.Hgt, GetClientRect().y + GetClientRect().Hgt - rcSelArea.y);
+			rcSelArea.Hgt = std::min(rcSelArea.Hgt, GetClientRect().y + GetClientRect().Hgt - rcSelArea.y);
 			// draw
 			if (rcSelArea.Hgt>=0)
 				pDraw->DrawBoxDw(cgo.Surface, rcSelArea.x+cgo.TargetX, rcSelArea.y+cgo.TargetY,
@@ -174,7 +174,7 @@ namespace C4GUI
 		if (iMultiColItemWidth && pClientWindow)
 		{
 			// multicoloumn-listbox
-			iColCount = Max<int32_t>(pClientWindow->GetClientRect().Wdt / iMultiColItemWidth, 1);
+			iColCount = std::max<int32_t>(pClientWindow->GetClientRect().Wdt / iMultiColItemWidth, 1);
 		}
 		else
 		{
@@ -442,7 +442,7 @@ namespace C4GUI
 				for (; pCurr; pCurr=pCurr->GetNext())
 				{
 					const C4Rect &rcCurrBounds = pCurr->GetBounds();
-					iLineHgt = Max<int32_t>(rcCurrBounds.Hgt, iLineHgt);
+					iLineHgt = std::max<int32_t>(rcCurrBounds.Hgt, iLineHgt);
 					int32_t x = col * iMultiColItemWidth;
 					if (rcCurrBounds.x != x || rcCurrBounds.y != y || rcCurrBounds.Wdt != iMultiColItemWidth)
 						pCurr->SetBounds(C4Rect(x,y,iMultiColItemWidth,rcCurrBounds.Hgt));
@@ -510,7 +510,7 @@ namespace C4GUI
 					Element *pPrevChild = pChild->GetPrev();
 					while (cnt-- && pPrevChild)
 					{
-						iPrevLineHgt = Max<int32_t>(iPrevLineHgt, pPrevChild->GetBounds().Hgt);
+						iPrevLineHgt = std::max<int32_t>(iPrevLineHgt, pPrevChild->GetBounds().Hgt);
 						pPrevChild = pPrevChild->GetPrev();
 					}
 					rcChildBounds.y += iPrevLineHgt;
@@ -527,8 +527,6 @@ namespace C4GUI
 		pChild->UpdateOwnPos();
 		// update scrolling
 		pClientWindow->SetClientHeight(rcChildBounds.y+rcChildBounds.Hgt);
-		// first element: select it?
-		//if (pChild == pClientWindow->GetFirstContained()) pSelectedItem = pChild;
 		// success
 		return true;
 	}
@@ -580,7 +578,7 @@ namespace C4GUI
 		if (pSelectedItem)
 		{
 			// effect
-			if (fByUser) GUISound("Command");
+			if (fByUser) GUISound("UI::Select");
 		}
 		// callback (caution: May do periluous things...)
 		if (pSelectionChangeHandler) pSelectionChangeHandler->DoCall(pSelectedItem);

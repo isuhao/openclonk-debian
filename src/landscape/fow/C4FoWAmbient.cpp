@@ -73,7 +73,7 @@ struct LightMapZoom {
 		const int lx = Clamp(static_cast<int>((x + 0.5) * sx), 0, Landscape.Width - 1);
 		const int ly = Clamp(static_cast<int>((y + 0.5) * sy), 0, Landscape.Height - 1);
 		// LightMap check
-		return ::Landscape.GetPixLight(::Landscape._GetPix(lx, ly));
+		return ::Landscape._GetLight(lx, ly);
 	}
 
 	const C4Landscape& Landscape;
@@ -84,7 +84,10 @@ struct LightMapZoom {
 } // anonymous namespace
 
 C4FoWAmbient::C4FoWAmbient() :
-	Tex(0), Resolution(0.), Radius(0.), FullCoverage(0.),
+#ifndef USE_CONSOLE
+	Tex(0),
+#endif
+	Resolution(0.), Radius(0.), FullCoverage(0.),
 	SizeX(0), LandscapeX(0), SizeY(0), LandscapeY(0),
 	Brightness(1.)
 {
@@ -97,8 +100,10 @@ C4FoWAmbient::~C4FoWAmbient()
 
 void C4FoWAmbient::Clear()
 {
+#ifndef USE_CONSOLE
 	if(Tex != 0) glDeleteTextures(1, &Tex);
 	Tex = 0;
+#endif
 	Resolution = Radius = FullCoverage = 0.;
 	SizeX = SizeY = 0;
 	LandscapeX = LandscapeY = 0;
@@ -112,7 +117,7 @@ void C4FoWAmbient::CreateFromLandscape(const C4Landscape& landscape, double reso
 	assert(full_coverage > 0 && full_coverage <= 1.);
 
 	// Clear old map
-	if(Tex != 0) Clear();
+	Clear();
 
 	Resolution = resolution;
 	Radius = radius;
@@ -121,9 +126,10 @@ void C4FoWAmbient::CreateFromLandscape(const C4Landscape& landscape, double reso
 	// Number of zoomed pixels
 	LandscapeX = landscape.Width;
 	LandscapeY = landscape.Height;
-	SizeX = Min<unsigned int>(static_cast<unsigned int>(ceil(LandscapeX / resolution)), pDraw->MaxTexSize);
-	SizeY = Min<unsigned int>(static_cast<unsigned int>(ceil(LandscapeY / resolution)), pDraw->MaxTexSize);
+	SizeX = std::min<unsigned int>(static_cast<unsigned int>(ceil(LandscapeX / resolution)), pDraw->MaxTexSize);
+	SizeY = std::min<unsigned int>(static_cast<unsigned int>(ceil(LandscapeY / resolution)), pDraw->MaxTexSize);
 
+#ifndef USE_CONSOLE
 	glGenTextures(1, &Tex);
 	glBindTexture(GL_TEXTURE_2D, Tex);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -136,10 +142,12 @@ void C4FoWAmbient::CreateFromLandscape(const C4Landscape& landscape, double reso
 	UpdateFromLandscape(landscape, C4Rect(0, 0, landscape.Width, landscape.Height));
 	uint32_t dt = C4TimeMilliseconds::Now() - begin;
 	LogF("Created %ux%u ambient map in %g secs", SizeX, SizeY, dt / 1000.);
+#endif
 }
 
 void C4FoWAmbient::UpdateFromLandscape(const C4Landscape& landscape, const C4Rect& update)
 {
+#ifndef USE_CONSOLE
 	// Nothing to do?
 	if(update.Wdt == 0 || update.Hgt == 0) return;
 
@@ -149,10 +157,10 @@ void C4FoWAmbient::UpdateFromLandscape(const C4Landscape& landscape, const C4Rec
 	const double zoom_x = static_cast<double>(landscape.Width) / SizeX;
 	const double zoom_y = static_cast<double>(landscape.Height) / SizeY;
 	// Update region in zoomed coordinates
-	const unsigned int left = Max(static_cast<int>( (update.x - Radius) / zoom_x), 0);
-	const unsigned int right = Min(static_cast<unsigned int>( (update.x + update.Wdt + Radius) / zoom_x), SizeX - 1) + 1;
-	const unsigned int top = Max(static_cast<int>( (update.y - Radius) / zoom_y), 0);
-	const unsigned int bottom = Min(static_cast<unsigned int>( (update.y + update.Hgt + Radius) / zoom_y), SizeY - 1) + 1;
+	const unsigned int left = std::max(static_cast<int>( (update.x - Radius) / zoom_x), 0);
+	const unsigned int right = std::min(static_cast<unsigned int>( (update.x + update.Wdt + Radius) / zoom_x), SizeX - 1) + 1;
+	const unsigned int top = std::max(static_cast<int>( (update.y - Radius) / zoom_y), 0);
+	const unsigned int bottom = std::min(static_cast<unsigned int>( (update.y + update.Hgt + Radius) / zoom_y), SizeY - 1) + 1;
 	assert(right > left);
 	assert(bottom > top);
 	// Zoomed radius
@@ -167,7 +175,7 @@ void C4FoWAmbient::UpdateFromLandscape(const C4Landscape& landscape, const C4Rec
 	{
 		for(unsigned int x = left; x < right; ++x)
 		{
-			ambient[(y - top) * (right - left) + (x - left)] = Min(AmbientForPix(x, y, R, light_mapZoom) / norm, 1.0);
+			ambient[(y - top) * (right - left) + (x - left)] = std::min(AmbientForPix(x, y, R, light_mapZoom) / norm, 1.0);
 		}
 	}
 
@@ -191,6 +199,7 @@ void C4FoWAmbient::UpdateFromLandscape(const C4Landscape& landscape, const C4Rec
 	glBindTexture(GL_TEXTURE_2D, Tex);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, (right - left), (bottom - top), GL_RED, GL_FLOAT, ambient);
 	delete[] ambient;
+#endif
 }
 
 void C4FoWAmbient::GetFragTransform(const FLOAT_RECT& vpRect, const C4Rect& clipRect, const C4Rect& outRect, float ambientTransform[6]) const

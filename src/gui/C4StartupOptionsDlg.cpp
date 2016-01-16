@@ -42,17 +42,17 @@ void C4StartupOptionsDlg::SmallButton::DrawElement(C4TargetFacet &cgo)
 	int32_t iTextHgt = rUseFont.GetLineHeight();
 	// draw frame
 	uint32_t dwClrHigh = C4StartupBtnBorderColor1, dwClrLow = C4StartupBtnBorderColor2;
-	if (fDown) Swap<uint32_t>(dwClrHigh, dwClrLow);
+	if (fDown) std::swap(dwClrHigh, dwClrLow);
 	int32_t iIndent = Clamp<int32_t>((rcBounds.Hgt-iTextHgt)/3, 2, 5);
 	float iDrawQuadTop[8] = { x0,y0, x1,y0, x1-iIndent,y0+iIndent, x0,y0+iIndent };
 	float iDrawQuadLeft[8] = { x0,y0, x0+iIndent,y0, x0+iIndent,y1-iIndent, x0,y1 };
 	float iDrawQuadRight[8] = { x1,y0, x1,y1, x1-iIndent,y1, x1-iIndent,y0+iIndent };
 	float iDrawQuadBottom[8] = { x1,y1, x0,y1, x0+iIndent,y1-iIndent, x1,y1-iIndent };
-	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadTop, dwClrHigh,dwClrHigh,dwClrHigh,dwClrHigh);
-	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadLeft, dwClrHigh,dwClrHigh,dwClrHigh,dwClrHigh);
-	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadRight, dwClrLow,dwClrLow,dwClrLow,dwClrLow);
-	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadBottom, dwClrLow,dwClrLow,dwClrLow,dwClrLow);
-	//pDraw->DrawFrameDw(cgo.Surface, x0+1, y0+1, x1-1, y1-1, aC4StartupBtnBorderColor2);
+	// TODO: Switch to PerformMultiTris
+	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadTop, dwClrHigh,dwClrHigh,dwClrHigh,dwClrHigh, NULL);
+	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadLeft, dwClrHigh,dwClrHigh,dwClrHigh,dwClrHigh, NULL);
+	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadRight, dwClrLow,dwClrLow,dwClrLow,dwClrLow, NULL);
+	pDraw->DrawQuadDw(cgo.Surface, iDrawQuadBottom, dwClrLow,dwClrLow,dwClrLow,dwClrLow, NULL);
 	// draw selection highlight
 	int32_t iTxtOff = fDown ? iIndent : 0;
 	if (fEnabled) if (HasDrawFocus() || (fMouseOver && IsInActiveDlg(false)))
@@ -110,11 +110,11 @@ C4StartupOptionsDlg::ResChangeConfirmDlg::ResChangeConfirmDlg()
 	rcBtn.Wdt = C4GUI_DefButton2Wdt;
 	// Yes
 	C4GUI::Button *pBtnYes = new C4GUI::YesButton(rcBtn);
-	AddElement(pBtnYes); //pBtnYes->SetToolTip(LoadResStr("IDS_DLGTIP_OK2"));
+	AddElement(pBtnYes);
 	rcBtn.x += C4GUI_DefButton2Wdt+C4GUI_DefButton2HSpace;
 	// No
 	C4GUI::Button *pBtnNo = new C4GUI::NoButton(rcBtn);
-	AddElement(pBtnNo); //pBtnNo->SetToolTip(LoadResStr("IDS_DLGTIP_CANCEL"));
+	AddElement(pBtnNo);
 	// initial focus on abort button, to prevent accidental acceptance of setting by "blind" users
 	SetFocus(pBtnNo, false);
 	// resize to actually needed size
@@ -367,6 +367,23 @@ void C4StartupOptionsDlg::ControlConfigListBox::SetUserKey(class C4PlayerControl
 		C4PlayerControlAssignment *config_assignment = config_set->GetAssignmentByControlName(assignment->GetControlName());
 		if (!config_assignment) config_assignment = config_set->CreateAssignmentForControl(assignment->GetControlName());
 		config_assignment->SetKey(key);
+		// check for duplicates. Allow them in principle because they can be used with priorities
+		// however, do warn because usually it may be unintended
+		// Just deleting the old assignments is also usually undesirable, because half of the time a newbi changes a control and creates a conflict,
+		// they may want to change the key they just assigned to something else instead
+		C4PlayerControlAssignment *other_assignment;
+		for (int32_t i = 0; (other_assignment = assignment_set->GetAssignmentByIndex(i)); ++i)
+			if (other_assignment != assignment)
+				if (other_assignment->GetTriggerKey() == key)
+				{
+					const char *gui_name = other_assignment->GetGUIName(Game.PlayerControlDefs);
+					// only warn for assignable keys, because other keys are typically derived from the settable keys
+					if (gui_name && *gui_name)
+					{
+						C4GUI::TheScreen.ShowMessage(FormatString(LoadResStr("IDS_MSG_DEFINEKEYDUPLICATE"), key.ToString(true, false).getData(), gui_name).getData(), LoadResStr("IDS_MSG_DEFINEKEY"), C4GUI::Ico_Error);
+					}
+				}
+
 	}
 }
 
@@ -376,13 +393,12 @@ void C4StartupOptionsDlg::ControlConfigListBox::SetUserKey(class C4PlayerControl
 C4StartupOptionsDlg::ControlConfigArea::ControlConfigArea(const C4Rect &rcArea, int32_t iHMargin, int32_t iVMargin, bool fGamepad, C4StartupOptionsDlg *pOptionsDlg)
 		: C4GUI::Window(), fGamepad(fGamepad), pGamepadOpener(NULL), pOptionsDlg(pOptionsDlg), pGUICtrl(NULL)
 {
-	CStdFont *pUseFont = &(C4Startup::Get()->Graphics.BookFont);
 	CStdFont *pUseFontSmall = &(C4Startup::Get()->Graphics.BookSmallFont);
 	SetBounds(rcArea);
 	C4GUI::ComponentAligner caArea(rcArea, iHMargin, iVMargin, true);
 	// get number of control sets to be configured
 	C4PlayerControlAssignmentSets &assignment_sets = Game.PlayerControlUserAssignmentSets;
-	iMaxControlSets = Max<size_t>(assignment_sets.GetSetCount(),1u); // do not devide by zero
+	iMaxControlSets = std::max<size_t>(assignment_sets.GetSetCount(),1u); // do not devide by zero
 	ppKeyControlSetBtns = new C4GUI::IconButton *[iMaxControlSets];
 	// top line buttons to select control configuration
 	C4Facet fctCtrlDefPic = ::GraphicsResource.fctKeyboard; // 
@@ -445,21 +461,6 @@ void C4StartupOptionsDlg::ControlConfigArea::UpdateCtrlSet()
 		ppKeyControlSetBtns[i]->SetHighlight(i == iSelectedCtrlSet);
 	// update list
 	control_list->SetAssignmentSet(Game.PlayerControlUserAssignmentSets.GetSetByIndex(iSelectedCtrlSet));
-	// update keys by config
-	/*if (fGamepad)
-	{
-		for (i = 0; i < C4MaxKey; ++i)
-			KeyControlBtns[i]->SetKey(Config.Gamepads[iSelectedCtrlSet].Button[i]);
-	}
-	// open gamepad
-	if (fGamepad && Config.General.GamepadEnabled)
-	{
-		if (!pGamepadOpener) pGamepadOpener = new C4GamePadOpener(iSelectedCtrlSet);
-		else pGamepadOpener->SetGamePad(iSelectedCtrlSet);
-	}
-	// show/hide gamepad-gui-control checkbox
-	if (fGamepad && pGUICtrl)
-		pGUICtrl->SetVisibility(iSelectedCtrlSet == 0);*/
 }
 
 void C4StartupOptionsDlg::ControlConfigArea::OnResetKeysBtn(C4GUI::Control *btn)
@@ -509,7 +510,6 @@ C4StartupOptionsDlg::NetworkPortConfig::NetworkPortConfig(const C4Rect &rcBounds
 	pPortEdit->InsertText(FormatString("%d", fEnabled ? ((int) *pConfigValue) : (int) iDefault).getData(), false);
 	pPortEdit->SetMaxText(10); // 65535 is five characters long - but allow some more for easier editing
 	pPortEdit->SetVisibility(fEnabled);
-	//pPortEdit->SetEnabled(fEnabled);
 	AddElement(pPortEdit);
 }
 
@@ -690,7 +690,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	else
 	{
 		iIndentY1 = GetClientRect().Hgt/200;
-		iIndentY2 = Max<int32_t>(1, iIndentY1/2);
+		iIndentY2 = std::max<int32_t>(1, iIndentY1/2);
 	}
 	C4GUI::ComponentAligner caMain(GetClientRect(), 0,0, true);
 	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(caMain.GetHeight()/(fSmall ? 20 : 7)),0,0);
@@ -730,7 +730,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pLbl->SetToolTip(szLangTip);
 	pSheetGeneral->AddElement(pLbl);
 	pUseFont->GetTextExtent("XX: Top Secret Language", w,q,true);
-	pLangCombo = new C4GUI::ComboBox(caLanguageBox.GetFromLeft(Min(w, caLanguageBox.GetWidth())));
+	pLangCombo = new C4GUI::ComboBox(caLanguageBox.GetFromLeft(std::min(w, caLanguageBox.GetWidth())));
 	pLangCombo->SetToolTip(szLangTip);
 	pLangCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnLangComboFill, &C4StartupOptionsDlg::OnLangComboSelChange));
 	pLangCombo->SetColors(C4StartupFontClr, C4StartupEditBGColor, C4StartupEditBorderColor);
@@ -750,7 +750,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pLbl->SetToolTip(szFontTip);
 	pSheetGeneral->AddElement(pLbl);
 	pUseFont->GetTextExtent("Comic Sans MS", w,q,true);
-	pFontFaceCombo = new C4GUI::ComboBox(caFontBox.GetFromLeft(Min<int32_t>(caFontBox.GetInnerWidth()*3/4, w*3)));
+	pFontFaceCombo = new C4GUI::ComboBox(caFontBox.GetFromLeft(std::min<int32_t>(caFontBox.GetInnerWidth()*3/4, w*3)));
 	pFontFaceCombo->SetToolTip(szFontTip);
 	pFontFaceCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnFontFaceComboFill, &C4StartupOptionsDlg::OnFontComboSelChange));
 	pFontFaceCombo->SetColors(C4StartupFontClr, C4StartupEditBGColor, C4StartupEditBorderColor);
@@ -758,7 +758,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	pFontFaceCombo->SetDecoration(&(C4Startup::Get()->Graphics.fctContext));
 	caFontBox.ExpandLeft(-C4GUI_DefDlgSmallIndent);
 	pSheetGeneral->AddElement(pFontFaceCombo);
-	pFontSizeCombo = new C4GUI::ComboBox(caFontBox.GetFromLeft(Min<int32_t>(caFontBox.GetInnerWidth(), w)));
+	pFontSizeCombo = new C4GUI::ComboBox(caFontBox.GetFromLeft(std::min<int32_t>(caFontBox.GetInnerWidth(), w)));
 	pFontSizeCombo->SetToolTip(LoadResStr("IDS_DESC_FONTSIZE"));
 	pFontSizeCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnFontSizeComboFill, &C4StartupOptionsDlg::OnFontComboSelChange));
 	pFontSizeCombo->SetColors(C4StartupFontClr, C4StartupEditBGColor, C4StartupEditBorderColor);
@@ -775,7 +775,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	const char *szBtnText = LoadResStr("IDS_BTN_RESETCONFIG");
 	C4GUI::CallbackButton<C4StartupOptionsDlg, SmallButton> *pSmallBtn;
 	::GraphicsResource.CaptionFont.GetTextExtent(szBtnText, iButtonWidth, iButtonHeight, true);
-	C4Rect rcResetBtn = caSheetProgram.GetGridCell(1,2,6,7, Min<int32_t>(iButtonWidth+iButtonHeight*4, caSheetProgram.GetInnerWidth()*2/5), SmallButton::GetDefaultButtonHeight(), true);
+	C4Rect rcResetBtn = caSheetProgram.GetGridCell(1,2,6,7, std::min<int32_t>(iButtonWidth+iButtonHeight*4, caSheetProgram.GetInnerWidth()*2/5), SmallButton::GetDefaultButtonHeight(), true);
 	pSmallBtn = new C4GUI::CallbackButton<C4StartupOptionsDlg, SmallButton>(szBtnText, rcResetBtn, &C4StartupOptionsDlg::OnResetConfigBtn, this);
 	pSheetGeneral->AddElement(pSmallBtn);
 	pSmallBtn->SetToolTip(LoadResStr("IDS_DESC_RESETCONFIG"));
@@ -794,7 +794,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	C4GUI::ComponentAligner resBox(caGroupResolution.GetGridCell(0,1,iOpt++,iNumGfxOptions), 0, 0, false);
 	w=20; q=12; pUseFont->GetTextExtent(LoadResStr("IDS_CTL_RESOLUTION"), w,q, true);
 	pGroupResolution->AddElement(new C4GUI::Label(LoadResStr("IDS_CTL_RESOLUTION"), resBox.GetFromLeft(w+C4GUI_DefDlgSmallIndent,q), ALeft, C4StartupFontClr, pUseFont, false, false));
-	pUseFont->GetTextExtent("1600 x 1200", w,q,true); w = Min<int32_t>(caGroupResolution.GetInnerWidth(), w+40);
+	pUseFont->GetTextExtent("1600 x 1200", w,q,true); w = std::min<int32_t>(caGroupResolution.GetInnerWidth(), w+40);
 	C4GUI::ComboBox *pGfxResCombo = new C4GUI::ComboBox(resBox.GetFromLeft(w+40,C4GUI::ComboBox::GetDefaultHeight()));
 	pGfxResCombo->SetToolTip(LoadResStr("IDS_MSG_RESOLUTION_DESC"));
 	pGfxResCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnGfxResComboFill, &C4StartupOptionsDlg::OnGfxResComboSelChange));
@@ -807,7 +807,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	C4GUI::ComponentAligner cdBox(caGroupResolution.GetGridCell(0,1,iOpt++,iNumGfxOptions), 0, 0, false);
 	w=20; q=12; pUseFont->GetTextExtent(LoadResStr("IDS_CTL_BITDEPTH"), w,q, true);
 	pGroupResolution->AddElement(new C4GUI::Label(LoadResStr("IDS_CTL_BITDEPTH"), cdBox.GetFromLeft(w+C4GUI_DefDlgSmallIndent,q), ALeft, C4StartupFontClr, pUseFont, false, false));
-	pUseFont->GetTextExtent("32bit", w,q,true); w = Min<int32_t>(caGroupResolution.GetInnerWidth(), w+40);
+	pUseFont->GetTextExtent("32bit", w,q,true); w = std::min<int32_t>(caGroupResolution.GetInnerWidth(), w+40);
 	C4GUI::ComboBox *pGfxClrDepthCombo = new C4GUI::ComboBox(cdBox.GetFromLeft(w+40,C4GUI::ComboBox::GetDefaultHeight()));
 	pGfxClrDepthCombo->SetToolTip(LoadResStr("IDS_CTL_BITDEPTHC"));
 	pGfxClrDepthCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnGfxClrDepthComboFill, &C4StartupOptionsDlg::OnGfxClrDepthComboSelChange));
@@ -824,7 +824,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	for(int i = 0; i < 3; ++i)
 	{
 		pUseFont->GetTextExtent(GetWindowedName(i),w,q,true);
-		wmax = Max<int32_t>(w, wmax);
+		wmax = std::max<int32_t>(w, wmax);
 	}
 	C4GUI::ComboBox * pCombo = new C4GUI::ComboBox(fsBox.GetFromLeft(w+40,C4GUI::ComboBox::GetDefaultHeight()));
 	pCombo->SetComboCB(new C4GUI::ComboBox_FillCallback<C4StartupOptionsDlg>(this, &C4StartupOptionsDlg::OnWindowedModeComboFill, &C4StartupOptionsDlg::OnWindowedModeComboSelChange));
@@ -957,7 +957,7 @@ C4StartupOptionsDlg::C4StartupOptionsDlg() : C4StartupDlg(LoadResStrNoAmp("IDS_D
 	StdStrBuf sServerText; sServerText.Copy(LoadResStr("IDS_CTL_USEOTHERSERVER"));
 	NetworkServerAddressConfig::GetControlSize(&iServerCfgWdt, &iServerCfgHgt, &iServerCfgWdtMid, sServerText.getData());
 	int32_t net_component_hgt = iPortCfgHgt * 4 + iServerCfgHgt + 3 * pUseFont->GetLineHeight();
-	C4GUI::ComponentAligner caSheetNetwork(pSheetNetwork->GetClientRect(), caMain.GetWidth() / 20, Max<int32_t>(0, (caMain.GetHeight() - net_component_hgt)/10), true);
+	C4GUI::ComponentAligner caSheetNetwork(pSheetNetwork->GetClientRect(), caMain.GetWidth() / 20, std::max<int32_t>(0, (caMain.GetHeight() - net_component_hgt)/10), true);
 	pPortCfgTCP = new NetworkPortConfig(caSheetNetwork.GetGridCell(0,2,0,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_TCP"), &(Config.Network.PortTCP), C4NetStdPortTCP);
 	pPortCfgUDP = new NetworkPortConfig(caSheetNetwork.GetGridCell(1,2,0,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_UDP"), &(Config.Network.PortUDP), C4NetStdPortUDP);
 	pPortCfgRef = new NetworkPortConfig(caSheetNetwork.GetGridCell(0,2,1,2, iPortCfgWdt, iPortCfgHgt), LoadResStr("IDS_NET_PORT_REFERENCE"), &(Config.Network.PortRefServer), C4NetStdPortRefServer);
@@ -1065,6 +1065,7 @@ bool C4StartupOptionsDlg::OnGfxMSComboSelChange(C4GUI::ComboBox *pForCombo, int3
 #ifndef USE_CONSOLE
 	if(pGL) pGL->pMainCtx->Init(Application.pWindow, &Application);
 	pDraw->RestoreDeviceObjects();
+	if(pGL) pGL->InitShaders(&::GraphicsResource.Files);
 #endif
 	if(pTexMgr) pTexMgr->IntUnlock();
 	if(!success) Config.Graphics.MultiSampling = PrevMultiSampling;
@@ -1345,7 +1346,11 @@ void C4StartupOptionsDlg::UpdateFontControls()
 	pFontSizeCombo->SetText(sSize.getData());
 }
 
+#ifdef _WIN32
 const char *DefaultFonts[] = { "Arial Unicode MS", "Comic Sans MS", C4DEFAULT_FONT_NAME, "Verdana", NULL };
+#else
+const char *DefaultFonts[] = { C4DEFAULT_FONT_NAME, NULL };
+#endif
 
 void C4StartupOptionsDlg::OnFontFaceComboFill(C4GUI::ComboBox_FillCB *pFiller)
 {
@@ -1357,17 +1362,12 @@ void C4StartupOptionsDlg::OnFontSizeComboFill(C4GUI::ComboBox_FillCB *pFiller)
 {
 	// 2do: enumerate possible font sizes by the font here
 	// 2do: Hide font sizes that would be too large for the selected resolution
-	//pFiller->AddEntry("8", 8);
 	pFiller->AddEntry("10", 10);
 	pFiller->AddEntry("12", 12);
 	pFiller->AddEntry("14", 14);
 	pFiller->AddEntry("16", 16);
 	pFiller->AddEntry("18", 18);
 	pFiller->AddEntry("20", 20);
-	//pFiller->AddEntry("24", 24);
-	//pFiller->AddEntry("28", 28);
-	//pFiller->AddEntry("32", 32);
-	//pFiller->AddEntry("48", 48);
 }
 
 bool C4StartupOptionsDlg::OnFontComboSelChange(C4GUI::ComboBox *pForCombo, int32_t idNewSelection)
@@ -1417,7 +1417,8 @@ void C4StartupOptionsDlg::OnFEMusicCheck(C4GUI::Element *pCheckBox)
 void C4StartupOptionsDlg::OnMusicVolumeSliderChange(int32_t iNewVal)
 {
 	// option change is reflected immediately;
-	Application.MusicSystem.SetVolume(Config.Sound.MusicVolume = iNewVal);
+	Config.Sound.MusicVolume = iNewVal;
+	Application.MusicSystem.UpdateVolume();
 }
 
 void C4StartupOptionsDlg::OnSoundVolumeSliderChange(int32_t iNewVal)
@@ -1425,7 +1426,7 @@ void C4StartupOptionsDlg::OnSoundVolumeSliderChange(int32_t iNewVal)
 	// sound system reads this value directly
 	Config.Sound.SoundVolume = iNewVal;
 	// test sound
-	StartSoundEffect("ArrowHit", false, 100, NULL);
+	StartSoundEffect("Objects::Arrow::HitGround", false, 100, NULL);
 }
 
 void C4StartupOptionsDlg::OnRXSoundCheck(C4GUI::Element *pCheckBox)

@@ -34,7 +34,7 @@ func Outro_4()
 {
 	this.communicator->StopCommunication();
 	MessageBoxAll("$Outro3$", this.hero, true); // i wonder if anyone has heard us
-	this.plane = CreateObjectAbove(Plane, 100, main_island_y-100);
+	this.plane = CreateObjectAbove(Airplane, 100, main_island_y-100);
 	this.plane->SetContactDensity(85); // only collision with brick for proper landing
 	this.pilot = CreateObjectAbove(Clonk, 100, 100);
 	this.pilot->MakeInvincible();
@@ -43,7 +43,9 @@ func Outro_4()
 	this.pilot->SetAction("Walk");
 	this.pilot->SetName("Pyrit");
 	this.pilot->SetColor(0xff0000);
+	this.pilot->SetAlternativeSkin("MaleBrownHair");
 	this.pilot->SetDir(DIR_Right);
+	this.pilot->AttachMesh(Hat, "skeleton_head", "main", Trans_Translate(5500, 0, 0));
 	this.plane->FaceRight();
 	this.plane->StartInstantFlight(90, 15);
 	return ScheduleNext(5);
@@ -94,7 +96,7 @@ func Outro_10()
 
 func Outro_11()
 {
-	Sound("Fanfare");
+	Sound("UI::Fanfare");
 	return GameOver();
 }
 

@@ -67,15 +67,15 @@
 #pragma warning(disable: 4521) // multiple copy constructors specified
 // Get non-standard <cmath> constants (M_PI etc.)
 #	define _USE_MATH_DEFINES
+// Use IPv4 functions (inet_ntoa) since we don't support IPv6 yet.
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #endif
 
 
 
 // C++0x nullptr
-#ifdef HAVE_NULLPTR
 #undef NULL
 #define NULL nullptr
-#endif
 
 
 
@@ -88,18 +88,6 @@
 #else
 typedef ptrdiff_t ssize_t;
 #endif
-
-
-
-#ifndef HAVE_STATIC_ASSERT
-#include <boost/static_assert.hpp>
-#ifndef BOOST_HAS_STATIC_ASSERT
-#define static_assert(x, y) BOOST_STATIC_ASSERT(x)
-#endif
-#endif
-
-// std::make_unique
-#include "platform/make_unique.h"
 
 #if defined(__GNUC__)
 // Allow checks for correct printf-usage
@@ -116,22 +104,6 @@ typedef ptrdiff_t ssize_t;
 
 
 
-// Temporary-To-Reference-Fix
-#if !defined(__clang__) && defined(__GNUC__) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 3))
-#define ALLOW_TEMP_TO_REF(ClassName) operator ClassName & () { return *this; }
-#else
-#define ALLOW_TEMP_TO_REF(ClassName)
-#endif
-
-#ifdef HAVE_RVALUE_REF
-# define RREF &&
-#else
-# define RREF &
-namespace std { template<typename T> inline T &move (T &t) { return t; } }
-#endif
-
-
-
 #if defined(_DEBUG) && defined(_MSC_VER)
 // use inline assembler to invoke the "breakpoint exception"
 #  define BREAKPOINT_HERE __debugbreak()
@@ -142,10 +114,10 @@ namespace std { template<typename T> inline T &move (T &t) { return t; } }
 #  if defined(SIGTRAP)
 #    define BREAKPOINT_HERE raise(SIGTRAP);
 #  else
-#    define BREAKPOINT_HERE
+#    define BREAKPOINT_HERE ((void)0)
 #  endif
 #else
-#  define BREAKPOINT_HERE
+#  define BREAKPOINT_HERE ((void)0)
 #endif
 
 

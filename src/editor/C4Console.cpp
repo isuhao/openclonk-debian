@@ -176,7 +176,7 @@ bool C4Console::SaveScenario(const char * path)
 	}
 
 	// Can't save to child groups
-	if (Game.ScenarioFile.GetMother())
+	if (Game.ScenarioFile.GetMother() && Game.ScenarioFile.GetMother()->IsPacked())
 	{
 		StdStrBuf str;
 		str.Format(LoadResStr("IDS_CNS_NOCHILDSAVE"),
@@ -395,9 +395,8 @@ void C4Console::ClearViewportMenu()
 
 void C4Console::UpdateInputCtrl()
 {
-	ClearInput();
 	// add global and standard functions
-	std::list <const char*> functions = ::ScriptEngine.GetFunctionNames(::GameScript.ScenPropList._getPropList());
+	std::list <const char*> functions = ::Console.GetScriptSuggestions(::GameScript.ScenPropList._getPropList(), C4Console::MRU_Scenario);
 	SetInputFunctions(functions);
 }
 
@@ -529,6 +528,35 @@ bool C4Console::TogglePause()
 	return Game.TogglePause();
 }
 
+std::list<const char *> C4Console::GetScriptSuggestions(C4PropList *target, RecentScriptInputLists section) const
+{
+	// Functions for this object
+	std::list<const char *> functions = ::ScriptEngine.GetFunctionNames(target);
+	// Prepend most recently used script calls in reverse order
+	const std::list<StdCopyStrBuf> &mru = recent_script_input[section];
+	if (!mru.empty())
+	{
+		functions.insert(functions.begin(), NULL);
+		// add pointers into string buffer list
+		// do not iterate with for (auto i : mru) because this would copy the buffer and add stack pointers
+		for (auto i = mru.begin(); i != mru.end(); ++i)
+			functions.insert(functions.begin(), i->getData());
+	}
+	return functions;
+}
+
+void C4Console::RegisterRecentInput(const char *input, RecentScriptInputLists section)
+{
+	std::list<StdCopyStrBuf> &mru = recent_script_input[section];
+	// remove previous copy (i.e.: Same input just gets pushed to top)
+	mru.remove(StdCopyStrBuf(input));
+	// register to list
+	mru.push_back(StdCopyStrBuf(input));
+	// limit history length
+	if (static_cast<int32_t>(mru.size()) > ::Config.Developer.MaxScriptMRU)
+		mru.erase(mru.begin());
+}
+
 #if !(defined(USE_WIN32_WINDOWS) || defined(USE_COCOA) || defined(WITH_DEVELOPER_MODE))
 class C4ConsoleGUI::State: public C4ConsoleGUI::InternalState<class C4ConsoleGUI>
 {
@@ -545,7 +573,6 @@ void C4ConsoleGUI::AddMenuItemForPlayer(C4Player*, StdStrBuf&) {}
 void C4ConsoleGUI::AddNetMenuItemForPlayer(int, StdStrBuf&) {}
 void C4ConsoleGUI::AddNetMenu() {}
 void C4ConsoleGUI::ToolsDlgClose() {}
-void C4ConsoleGUI::ClearInput() {}
 bool C4ConsoleGUI::ClearLog() {return 0;}
 void C4ConsoleGUI::ClearNetMenu() {}
 void C4ConsoleGUI::ClearPlayerMenu() {}
@@ -559,7 +586,7 @@ bool C4ConsoleGUI::Message(char const*, bool) {return 0;}
 void C4ConsoleGUI::Out(char const*) {}
 bool C4ConsoleGUI::PropertyDlgOpen() {return 0;}
 void C4ConsoleGUI::PropertyDlgClose() {}
-void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection) {}
+void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &, bool) {}
 void C4ConsoleGUI::RecordingEnabled() {}
 void C4ConsoleGUI::SetCaptionToFileName(char const*) {}
 void C4ConsoleGUI::SetCursor(C4ConsoleGUI::Cursor) {}
@@ -567,9 +594,10 @@ void C4ConsoleGUI::SetInputFunctions(std::list<const char*>&) {}
 void C4ConsoleGUI::ShowAboutWithCopyright(StdStrBuf&) {}
 void C4ConsoleGUI::ToolsDlgInitMaterialCtrls(C4ToolsDlg*) {}
 bool C4ConsoleGUI::ToolsDlgOpen(C4ToolsDlg*) {return 0;}
+void C4ConsoleGUI::ToolsDlgSelectMaterial(C4ToolsDlg*, char const*) {}
 void C4ConsoleGUI::ToolsDlgSelectTexture(C4ToolsDlg*, char const*) {}
-void C4ConsoleGUI::ToolsDlgSetMaterial(C4ToolsDlg*, char const*) {}
-void C4ConsoleGUI::ToolsDlgSetTexture(C4ToolsDlg*, char const*) {}
+void C4ConsoleGUI::ToolsDlgSelectBackMaterial(C4ToolsDlg*, char const*) {}
+void C4ConsoleGUI::ToolsDlgSelectBackTexture(C4ToolsDlg*, char const*) {}
 bool C4ConsoleGUI::UpdateModeCtrls(int) {return 0;}
 void C4ToolsDlg::EnableControls() {}
 void C4ToolsDlg::InitGradeCtrl() {}

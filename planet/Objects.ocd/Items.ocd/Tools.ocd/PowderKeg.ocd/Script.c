@@ -12,9 +12,9 @@ local count;
 public func GetCarryTransform(clonk)
 {
 	if(GetCarrySpecial(clonk))
-		return Trans_Translate(0, 1000, -6500);
+		return Trans_Translate(1000, -6500, 0);
 		
-	return Trans_Mul(Trans_Translate(-1500,1500,0),Trans_Rotate(180,0,1,0));
+	return Trans_Mul(Trans_Translate(1500, 0, -1500),Trans_Rotate(180,1,0,0));
 }
 public func GetCarryPhase() { return 900; }
 
@@ -30,7 +30,7 @@ protected func Construction()
 	effect.oldcount = count;
 }
 
-protected func MaxContentsCount() {	return 12;	}
+local MaxContentsCount = 12;
 
 public func GetPowderCount()
 {
@@ -92,9 +92,10 @@ public func UpdatePicture()
 	SetObjDrawTransform(s, 0, xoffs, 0, s, yoffs, 12);
 }
 
-public func Incineration()
+public func Incineration(int caused_by)
 {
-	AddEffect("Fuse",this,1,1,this);
+	SetController(caused_by);
+	AddEffect("Fuse", this, 1, 1, this);
 }
 
 public func FxFuseTimer(object target, effect, int timer)
@@ -113,19 +114,19 @@ public func IsProjectileTarget()
 	return true;
 }
 
-public func Damage()
+public func Damage(int change, int cause, int by_player)
 {
-	Incinerate();
+	Incinerate(100, by_player);
 }
 
-public func OnProjectileHit()
+public func OnProjectileHit(object projectile)
 {
-	Incinerate();
+	Incinerate(100, projectile->GetController());
 }
 
 func Hit()
 {
-	Sound("DullWoodHit?");
+	Sound("Hits::Materials::Wood::DullWoodHit?");
 }
 
 public func SaveScenarioObject(props)
@@ -142,11 +143,9 @@ func AlchemyProcessTime() { return 100; }
 
 /*-- Properties --*/
 
-local Collectible = false;
-local Touchable = 2;
+local Collectible = true;
 local Name = "$Name$";
 local Description = "$Description$";
-local Rebuy = true;
 local BlastIncinerate = 1;
 local NoBurnDecay = 1;
 local ContactIncinerate = 2;

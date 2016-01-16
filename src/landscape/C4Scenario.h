@@ -69,10 +69,10 @@ public:
 	bool  SaveGame;
 	bool  Replay;
 	int32_t  Film;
-	int32_t  StartupPlayerCount; // set for Frame0-replay!
 	int32_t  RandomSeed;
 	char Engine[C4MaxTitle+1]; // Relative filename of engine to be used for this scenario
 	char MissionAccess[C4MaxTitle+1];
+	bool Secret; // if true, scenario is invisible if MissionAccess has not been granted
 	bool NetworkGame;
 	bool NetworkRuntimeJoin;
 	StdCopyStrBuf Origin; // original oath and filename to scenario (for records and savegames)
@@ -234,7 +234,7 @@ public:
 	void SetExactLandscape();
 	void Clear();
 	void Default();
-	bool Load(C4Group &hGroup, bool fLoadSection=false);
+	bool Load(C4Group &hGroup, bool fLoadSection = false, bool suppress_errors = false);
 	bool Save(C4Group &hGroup, bool fSaveSection=false);
 	void CompileFunc(StdCompiler *pComp, bool fSection);
 	int32_t GetMinPlayer(); // will try to determine the minimum player count for this scenario

@@ -14,6 +14,9 @@
  */
 
 #include "C4Include.h"
+
+#ifndef USE_CONSOLE
+
 #include "C4FoWLight.h"
 #include "C4FoWLightSection.h"
 #include "C4FoWBeamTriangle.h"
@@ -28,7 +31,8 @@ C4FoWLight::C4FoWLight(C4Object *pObj)
 	  iY(fixtoi(pObj->fix_y)),
 	  iReach(pObj->lightRange),
 	  iFadeout(pObj->lightFadeoutRange),
-	  iSize(20), gBright(0.5),
+	  iSize(20), gBright(0.5), colorR(1.0), colorG(1.0), colorB(1.0),
+	  colorV(1.0), colorL(1.0),
 	  pNext(NULL),
 	  pObj(pObj),
 	  sections(4)
@@ -74,10 +78,34 @@ void C4FoWLight::SetReach(int32_t iReach2, int32_t iFadeout2)
 	}
 }
 
+void C4FoWLight::SetColor(uint32_t iValue)
+{
+	colorR = GetRedValue(iValue) / 255.0f;
+	colorG = GetGreenValue(iValue) / 255.0f;
+	colorB = GetBlueValue(iValue) / 255.0f;
+
+	float min = std::min(colorR, std::min(colorG, colorB));
+	colorV = std::max(std::max(colorR, std::max(colorG, colorB)), 1e-3f); // prevent division by 0
+	colorL = (min + colorV) / 2.0f;
+
+	// maximize color, so that dark colors will not be desaturated after normalization
+	colorR = std::min(colorR / colorV, 1.0f);
+	colorG = std::min(colorG / colorV, 1.0f);
+	colorB = std::min(colorB / colorV, 1.0f);
+}
+
 void C4FoWLight::Update(C4Rect Rec)
 {
-	// Update position from object. Clear if we moved in any way
+	// Update position from object.
 	int32_t iNX = fixtoi(pObj->fix_x), iNY = fixtoi(pObj->fix_y);
+	// position may be affected by LightOffset property
+	C4ValueArray *light_offset = pObj->GetPropertyArray(P_LightOffset);
+	if (light_offset)
+	{
+		iNX += light_offset->GetItem(0).getInt();
+		iNY += light_offset->GetItem(1).getInt();
+	}
+	// Clear if we moved in any way
 	if (iNX != iX || iNY != iY)
 	{
 		for(size_t i = 0; i < sections.size(); ++i )
@@ -89,7 +117,7 @@ void C4FoWLight::Update(C4Rect Rec)
 		sections[i]->Update(Rec);
 }
 
-void C4FoWLight::Render(C4FoWRegion *region, const C4TargetFacet *onScreen)
+void C4FoWLight::Render(C4FoWRegion *region, const C4TargetFacet *onScreen, C4ShaderCall& call)
 {
 	TriangleList triangles;
 
@@ -111,23 +139,23 @@ void C4FoWLight::Render(C4FoWRegion *region, const C4TargetFacet *onScreen)
 	CalculateFanMaxed(triangles);
 	CalculateIntermediateFadeTriangles(triangles);
 
-	C4FoWDrawStrategy* pen;
-	if (onScreen) pen = new C4FoWDrawWireframeStrategy(this, onScreen);
-	else          pen = new C4FoWDrawLightTextureStrategy(this, region);
-
-	for(int pass = 0; pass < pen->GetRequestedPasses(); pass++)
-	{  
-		pen->Begin(pass);
-
-		DrawFan(pen, triangles);
-		DrawFanMaxed(pen, triangles);
-		DrawFade(pen, triangles);
-		DrawIntermediateFadeTriangles(pen, triangles);
-
-		pen->End(pass);
+	std::unique_ptr<C4FoWDrawStrategy>& strategy = onScreen ? OnScreenStrategy : OffScreenStrategy;
+	if (!strategy.get())
+	{
+		if (onScreen)
+			strategy.reset(new C4FoWDrawWireframeStrategy(this, onScreen));
+		else
+			strategy.reset(new C4FoWDrawLightTextureStrategy(this));
 	}
 
-	delete pen;
+	strategy->Begin(region);
+
+	DrawFan(strategy.get(), triangles);
+	DrawFanMaxed(strategy.get(), triangles);
+	DrawFade(strategy.get(), triangles);
+	DrawIntermediateFadeTriangles(strategy.get(), triangles);
+
+	strategy->End(call);
 }
 
 void C4FoWLight::CalculateFanMaxed(TriangleList &triangles) const
@@ -164,7 +192,7 @@ void C4FoWLight::CalculateFanMaxed(TriangleList &triangles) const
 
 void C4FoWLight::ProjectPointOutward(float &x, float &y, float maxDistance) const
 {
-	float distanceDifference = Min(maxDistance, (float) getTotalReach()) / sqrt((x - getX()) * (x - getX()) + (y - getY()) * (y - getY()));
+	float distanceDifference = std::min(maxDistance, (float) getTotalReach()) / sqrt((x - getX()) * (x - getX()) + (y - getY()) * (y - getY()));
 
 	x = getX() + distanceDifference * (x-getX());
 	y = getY() + distanceDifference * (y-getY());
@@ -217,7 +245,6 @@ void C4FoWLight::CalculateIntermediateFadeTriangles(TriangleList &triangles) con
 				ProjectPointOutward(tri.fadeIX, tri.fadeIY, sqrt(distNextFadeL));
 			}
 		}
-		
 	}
 }
 
@@ -225,7 +252,7 @@ void C4FoWLight::CalculateIntermediateFadeTriangles(TriangleList &triangles) con
 void C4FoWLight::DrawFan(C4FoWDrawStrategy* pen, TriangleList &triangles) const
 {
 	pen->BeginFan();
-	pen->DrawLightVertex(getX(), getY());
+	if (!triangles.empty()) pen->DrawLightVertex(getX(), getY());
 
 	for (TriangleList::iterator it = triangles.begin(), nextIt = it; it != triangles.end(); ++it)
 	{
@@ -344,3 +371,5 @@ bool C4FoWLight::IsVisibleForPlayer(C4Player *player) const
 	if (!pObj || !player) return true;
 	return !::Hostile(pObj->Owner,player->Number);
 }
+
+#endif

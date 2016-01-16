@@ -21,14 +21,9 @@
 #include <Bitmap256.h>
 #include <StdColors.h>
 
-C4BMPInfo::C4BMPInfo()
-{
-	Default();
-}
-
 void C4BMPInfo::Default()
 {
-	ZeroMem(this,sizeof(C4BMPInfo));
+	InplaceReconstruct(this);
 }
 
 int C4BMPInfo::FileBitsOffset()
@@ -40,7 +35,7 @@ void C4BMPInfo::Set(int iWdt, int iHgt, int iBitDepth)
 {
 	Default();
 	// Set header
-	Head.bfType=*((WORD*)"BM");
+	Head.bfType=*((const WORD*)"BM");
 	Head.bfSize=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+DWordAligned(iWdt)*iHgt;
 	Head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
 	// Set bitmap info
@@ -55,14 +50,9 @@ void C4BMPInfo::Set(int iWdt, int iHgt, int iBitDepth)
 }
 
 
-C4BMP256Info::C4BMP256Info()
-{
-	Default();
-}
-
 bool C4BMP256Info::Valid()
 {
-	if (Head.bfType != *((WORD*)"BM") ) return false;
+	if (Head.bfType != *((const WORD*)"BM") ) return false;
 	if ((Info.biBitCount!=8) || (Info.biCompression!=0)) return false;
 	return true;
 }
@@ -76,7 +66,7 @@ void C4BMP256Info::Set(int iWdt, int iHgt, CStdPalette *Palette)
 {
 	Default();
 	// Set header
-	Head.bfType=*((WORD*)"BM");
+	Head.bfType=*((const WORD*)"BM");
 	Head.bfSize=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+256*sizeof(RGBQUAD)+DWordAligned(iWdt)*iHgt;
 	Head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER)+256*sizeof(RGBQUAD);
 	// Set bitmap info
@@ -99,6 +89,6 @@ void C4BMP256Info::Set(int iWdt, int iHgt, CStdPalette *Palette)
 
 void C4BMP256Info::Default()
 {
-	ZeroMem(this,sizeof(C4BMP256Info));
+	InplaceReconstruct(this);
 }
 

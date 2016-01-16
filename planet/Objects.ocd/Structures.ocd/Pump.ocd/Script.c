@@ -26,8 +26,14 @@ local stored_material_amount;
 local source_pipe;
 local drain_pipe;
 
+local clog_count; // increased when the pump doesn't find liquid or can't insert it. When it reaches max_clog_count, it will put the pump into temporary idle mode.
+local max_clog_count = 5; // note that even when max_clog_count is reached, the pump will search through offsets (but in idle mode)
+
 /** This object is a liquid pump, thus pipes can be connected. */
 public func IsLiquidPump() { return true; }
+
+// The pump is rather complex for players. If anything happened, tell it to the player via the interaction menu.
+local last_status_message;
 
 func Construction()
 {
@@ -49,51 +55,122 @@ func Initialize()
 
 /*-- Interaction --*/
 
-public func IsInteractable() { return GetCon() >= 100; }
+public func HasInteractionMenu() { return true; }
 
-public func GetInteractionCount() 
+public func GetPumpControlMenuEntries(object clonk)
 {
-	var cnt = 1;
+	var menu_entries = [];
+	// default design of a control menu item
+	var custom_entry = 
+	{
+		Right = "100%", Bottom = "2em",
+		BackgroundColor = {Std = 0, OnHover = 0x50ff0000},
+		image = {Right = "2em"},
+		text = {Left = "2em"}
+	};
+	
+	// Add info message about what is going on with the pump.
+	var status = "$StateOk$";
+	var lightbulb_graphics = "Green";
+	if (last_status_message != nil)
+	{
+		status = last_status_message;
+		lightbulb_graphics = "Red";
+	}
+	PushBack(menu_entries, {symbol = this, extra_data = "description",
+			custom =
+			{
+				Prototype = custom_entry,
+				Bottom = "1.2em",
+				Priority = -1,
+				BackgroundColor = RGB(25, 100, 100),
+				text = {Prototype = custom_entry.text, Text = status},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Lightbulb, GraphicsName = lightbulb_graphics}
+			}});
+	
+	if (!switched_on)
+		PushBack(menu_entries, {symbol = Icon_Play, extra_data = "on", 
+			custom =
+			{
+				Prototype = custom_entry,
+				Priority = 1,
+				text = {Prototype = custom_entry.text, Text = "$MsgTurnOn$"},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Play}
+			}});
+	else
+		PushBack(menu_entries, {symbol = Icon_Stop, extra_data = "off", 
+			custom =
+			{
+				Prototype = custom_entry,
+				Priority = 1,
+				text = {Prototype = custom_entry.text, Text = "$MsgTurnOff$"},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Stop}
+			}});
 	if (source_pipe)
-		cnt++;
+		PushBack(menu_entries, {symbol = Icon_Cancel, extra_data = "cutsource", 
+			custom =
+			{
+				Prototype = custom_entry,
+				Priority = 2,
+				text = {Prototype = custom_entry.text, Text = "$MsgCutSource$"},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Cancel}
+			}});
 	if (drain_pipe)
-		cnt++;
-	return cnt;
+		PushBack(menu_entries, {symbol = Icon_Cancel, extra_data = "cutdrain", 
+			custom =
+			{
+				Prototype = custom_entry,
+				Priority = 3,
+				text = {Prototype = custom_entry.text, Text = "$MsgCutDrain$"},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Cancel}
+			}});
+	return menu_entries;
 }
 
-public func GetInteractionMetaInfo(object clonk, int num)
+public func GetInteractionMenus(object clonk)
 {
-	// Turning on/off.
-	if (num == 0)
+	var menus = _inherited() ?? [];		
+	var prod_menu =
 	{
-		if (switched_on)
-			return { Description = "$MsgTurnOff$", IconName = nil, IconID = Icon_Stop };
-		else
-			return { Description = "$MsgTurnOn$", IconName = nil, IconID = Icon_Play };
-	}
-	// Cutting the source pipe.
-	if (num == 1 && source_pipe)
-		return { Description = "$MsgCutSource$", IconName = nil, IconID = Icon_Cancel };
-	// Cutting the drain pipe.
-	if ((num == 2 || (num == 1 && !source_pipe)) && drain_pipe)
-		return { Description = "$MsgCutDrain$", IconName = nil, IconID = Icon_Cancel };
+		title = "$Control$",
+		entries_callback = this.GetPumpControlMenuEntries,
+		callback = "OnPumpControl",
+		callback_hover = "OnPumpControlHover",
+		callback_target = this,
+		BackgroundColor = RGB(0, 50, 50),
+		Priority = 20
+	};
+	PushBack(menus, prod_menu);
+	return menus;
 }
 
-public func Interact(object clonk, int num)
+public func OnPumpControlHover(id symbol, string action, desc_menu_target, menu_id)
 {
-	// Turning on/off.
-	if (num == 0)
-	{
-		switched_on = !switched_on;
-		CheckState();
-	}
-	// Cutting the source pipe.
-	else if (num == 1 && source_pipe)
+	var text = "";
+	if (action == "on") text = "$DescTurnOn$";
+	else if (action == "off") text = "$DescTurnOff$";
+	else if (action == "cutdrain") text = "$DescCutDrain$";
+	else if (action == "cutsource") text = "$DescCutSource$";
+	else if (action == "description") text = this.Description;
+	GuiUpdateText(text, menu_id, 1, desc_menu_target);
+}
+
+public func OnPumpControl(id symbol, string action, bool alt)
+{
+	if (action == "on" || action == "off")
+		ToggleOnOff(true);
+	else if (action == "cutsource" && source_pipe)
 		source_pipe->RemoveObject();
-	// Cutting the drain pipe.
-	else if ((num == 2 || (num == 1 && !source_pipe)) && drain_pipe)
+	else if (action == "cutdrain" && drain_pipe)
 		drain_pipe->RemoveObject();
-	return true;
+	UpdateInteractionMenus(this.GetPumpControlMenuEntries);	
+}
+
+private func SetInfoMessage(string msg)
+{
+	if (last_status_message == msg) return;
+	last_status_message = msg;
+	UpdateInteractionMenus(this.GetPumpControlMenuEntries);
 }
 
 /*-- Pipe connection --*/
@@ -178,6 +255,7 @@ protected func Pumping()
 		}
 		else
 		{
+			source_obj->~CycleApertureOffset(this); // try different offsets, so we don't stop pumping just because 1px of earth was dropped on the source pipe
 			pump_ok = false;
 		}
 	}
@@ -194,6 +272,7 @@ protected func Pumping()
 			// Drain is stuck.
 			else
 			{
+				drain_obj->~CycleApertureOffset(this); // try different offsets, so we don't stop pumping just because 1px of earth was dropped on the drain pipe
 				pump_ok = false;
 				break;
 			}
@@ -204,8 +283,18 @@ protected func Pumping()
 			stored_material_index = nil;
 	}
 	
-	if (!pump_ok)
-		SetState("WaitForLiquid");
+	if (pump_ok)
+	{
+		clog_count = 0;
+	}
+	else
+	{
+		// Put into wait state if no liquid could be pumped for a while
+		if (++clog_count >= max_clog_count)
+		{
+			SetState("WaitForLiquid");
+		}
+	}
 	return;
 }
 
@@ -218,13 +307,21 @@ func CheckState()
 	// can't pump at all -> wait
 	if (!can_pump)
 	{
+		if (!source_pipe && switched_on)
+			SetInfoMessage("$StateNoSource$");
 		SetState("Wait");
 	}
 	else
 	{
 		// can pump but has no liquid -> wait for liquid
-		if (!HasLiquidToPump())
+		var source_ok = IsLiquidSourceOk();
+		var drain_ok  = IsLiquidDrainOk();
+		if (!source_ok || !drain_ok)
 		{
+			if (!source_ok)
+				SetInfoMessage("$StateNoInput$");
+			else if (!drain_ok)
+				SetInfoMessage("$StateNoOutput$");
 			SetState("WaitForLiquid");
 		}
 		else
@@ -232,11 +329,14 @@ func CheckState()
 			// can pump, has liquid but has no power -> wait for power
 			if (!powered)
 			{
+				SetInfoMessage("$StateNoPower$");
 				SetState("WaitForPower");
 			}
 			// otherwise, pump! :-)
 			else
 			{
+				SetInfoMessage();
+				clog_count = 0;
 				SetState("Pump");
 			}
 			
@@ -343,18 +443,28 @@ private func PumpHeight2Power(int pump_height)
 }
 
 // Returns whether there is liquid at the source pipe to pump.
-private func HasLiquidToPump()
+private func IsLiquidSourceOk()
 {
 	// source
 	var source_obj = GetSourceObject();
 	if(!source_obj->GBackLiquid(source_obj.ApertureOffsetX, source_obj.ApertureOffsetY))
+	{
+		source_obj->~CycleApertureOffset(this); // try different offsets, so we can resume pumping after clog because 1px of earth was dropped on the source pipe
 		return false;
-	
+	}
+	return true;
+}
+
+// Returns whether the drain pipe is free.
+private func IsLiquidDrainOk()
+{
 	// target (test with the very popular liquid "water")
 	var drain_obj = GetDrainObject();
 	if(!drain_obj->CanInsertMaterial(Material("Water"),drain_obj.ApertureOffsetX, drain_obj.ApertureOffsetY))
+	{
+		drain_obj->~CycleApertureOffset(this); // try different offsets, so we can resume pumping after clog because 1px of earth was dropped on the source pipe
 		return false;
-	
+	}
 	return true;
 }
 
@@ -394,9 +504,18 @@ private func SetState(string act)
 	}
 	// Finally, set the action.
 	SetAction(act);
-	return;
 }
 
+/* Deactivates a running pump or vice-versa. */
+func ToggleOnOff(bool no_menu_refresh)
+{
+	switched_on = !switched_on;
+	CheckState();
+	if (!switched_on)
+		SetInfoMessage("$StateTurnedOff$");
+	if (!no_menu_refresh)
+		UpdateInteractionMenus(this.GetPumpControlMenuEntries);
+}
 
 /*-- Properties --*/
 
@@ -421,7 +540,7 @@ local ActMap = {
 		Name = "Pump",
 		Length = 30,
 		Delay = 3,
-		Sound = "Pumpjack",
+		Sound = "Structures::Pumpjack",
 		NextAction = "Pump",
 		StartCall = "CheckState",
 		PhaseCall = "Pumping"

@@ -49,6 +49,7 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 /* Engine-Calls */
 
 #define PSF_Initialize          "~Initialize"
+#define PSF_InitializeAmbience  "~InitializeAmbience"
 #define PSF_Construction        "~Construction"
 #define PSF_Destruction         "~Destruction"
 #define PSF_ContentsDestruction "~ContentsDestruction" // C4Object *pContents
@@ -114,6 +115,7 @@ bool C4ValueToMatrix(const C4ValueArray& array, StdMeshMatrix* matrix);
 #define PSF_DigOutObject        "~DigOutObject" // C4Object *obj
 #define PSF_OnDugOut            "~DugOut" //C4Object *by_obj
 #define PSF_SaveScenarioObjects "~SaveScenarioObjects" // int file_handle
+#define PSF_CommandFailure      "~CommandFailure" // string command, pTarget, iTx, iTy, pTarget2, iData
 
 // Effect callbacks
 

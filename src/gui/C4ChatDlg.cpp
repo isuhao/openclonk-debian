@@ -93,7 +93,6 @@ C4ChatControl::ChatSheet::ChatSheet(C4ChatControl *pChatControl, const char *szT
 	// create elements - positioned later
 	C4Rect rcDefault(0,0,10,10);
 	pChatBox = new C4GUI::TextWindow(rcDefault,0,0,0,100,4096,"  ",false,0,0,true);
-	//pChatBox->SetToolTip(LoadResStr("IDS_DLGTIP_CHATWIN")); tooltip doesn't really help, only makes things cluttered
 	pChatBox->SetDecoration(false, false, NULL, false);
 	AddElement(pChatBox);
 	if (eType == CS_Channel)
@@ -133,7 +132,7 @@ void C4ChatControl::ChatSheet::UpdateSize()
 	// position child elements
 	C4GUI::ComponentAligner caMain(GetContainedClientRect(), 0,0);
 	C4GUI::ComponentAligner caChat(caMain.GetFromBottom(C4GUI::Edit::GetDefaultEditHeight()), 0,0);
-	if (pNickList) pNickList->SetBounds(caMain.GetFromRight(Max<int32_t>(caMain.GetInnerWidth()/5, 100)));
+	if (pNickList) pNickList->SetBounds(caMain.GetFromRight(std::max<int32_t>(caMain.GetInnerWidth()/5, 100)));
 	pChatBox->SetBounds(caMain.GetAll());
 	if (pInputLbl) pInputLbl->SetBounds(caChat.GetFromLeft(40));
 	pInputEdit->SetBounds(caChat.GetAll());
@@ -234,7 +233,7 @@ void C4ChatControl::ChatSheet::DoError(const char *szError)
 	{
 		AddTextLine(szError, C4GUI_ErrorFontClr);
 	}
-	C4GUI::GUISound("Error");
+	C4GUI::GUISound("UI::Error");
 }
 
 void C4ChatControl::ChatSheet::Update(bool fLock)
@@ -403,7 +402,7 @@ void C4ChatControl::UpdateSize()
 	int32_t iIndent1 = C4GUI_DefDlgSmallIndent/2, iIndent2 = C4GUI_DefDlgIndent/2;
 	int32_t iLoginHgt = pUseFont->GetLineHeight() * 8 + iIndent1*10 + iIndent2*10 + C4GUI_ButtonHgt + 20;
 	int32_t iLoginWdt = iLoginHgt*2/3;
-	C4GUI::ComponentAligner caLogin(caLoginSheet.GetCentered(Min<int32_t>(iLoginWdt, caLoginSheet.GetInnerWidth()), Min<int32_t>(iLoginHgt, caLoginSheet.GetInnerHeight())), iIndent1, iIndent1);
+	C4GUI::ComponentAligner caLogin(caLoginSheet.GetCentered(std::min<int32_t>(iLoginWdt, caLoginSheet.GetInnerWidth()), std::min<int32_t>(iLoginHgt, caLoginSheet.GetInnerHeight())), iIndent1, iIndent1);
 	pLblLoginNick->SetBounds(caLogin.GetFromTop(pUseFont->GetLineHeight()));
 	pEdtLoginNick->SetBounds(caLogin.GetFromTop(C4GUI::Edit::GetDefaultEditHeight()));
 	caLogin.ExpandTop(2*(iIndent1-iIndent2));
@@ -954,9 +953,6 @@ C4ChatDlg::C4ChatDlg() : C4GUI::Dialog(100, 100, "IRC", false)
 	pChatCtrl = new C4ChatControl(&Application.IRCClient);
 	pChatCtrl->SetTitleChangeCB(new C4GUI::InputCallback<C4ChatDlg>(this, &C4ChatDlg::OnChatTitleChange));
 	AddElement(pChatCtrl);
-	C4Rect rcDefault(0,0,10,10);
-	//pBtnClose = new C4GUI::CallbackButton<C4ChatDlg>(LoadResStr("IDS_DLG_EXIT"), rcDefault, &C4ChatDlg::OnExitBtn);
-	//AddElement(pBtnClose);
 	// del dlg when closed
 	SetDelOnClose();
 	// set initial element positions
@@ -1050,9 +1046,7 @@ void C4ChatDlg::UpdateSize()
 	ParentClass::UpdateSize();
 	// position child elements
 	C4GUI::ComponentAligner caMain(GetContainedClientRect(), 0,0);
-	//C4GUI::ComponentAligner caBottom(caMain.GetFromBottom(C4GUI_ButtonHgt+C4GUI_DefDlgIndent*2), C4GUI_DefDlgIndent,C4GUI_DefDlgIndent);
 	pChatCtrl->SetBounds(caMain.GetAll());
-	//pBtnClose->SetBounds(caBottom.GetFromLeft(100));
 }
 
 void C4ChatDlg::OnExitBtn(C4GUI::Control *btn)

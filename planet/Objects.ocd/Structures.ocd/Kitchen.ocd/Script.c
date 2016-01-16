@@ -3,8 +3,11 @@
 #include Library_Structure
 #include Library_Ownable
 #include Library_Producer
+#include Library_LampPost
 
 local hold_production;
+
+public func LanternPosition(id def) { return [GetCalcDir()*19,-1]; }
 
 func Construction(object creator)
 {
@@ -21,13 +24,6 @@ func IsProduct(id product_id)
 
 private func ProductionTime(id toProduce) { return 500; }
 public func PowerNeed() { return 0; }
-
-public func NeedRawMaterial(id rawmat_id)
-{
-	if (rawmat_id->~IsFuel() || rawmat_id == Flour)
-		return true;
-	return false;
-}
 
 public func OnProductionStart(id product)
 {

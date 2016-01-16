@@ -1,12 +1,13 @@
-/*
+/**
 	Chest
-	Author: Maikel
-
 	Storage for items.
+	
+	@author Maikel
 */
 
 
 #include Library_Structure
+#include Library_Ownable
 
 local is_open;
 
@@ -21,43 +22,26 @@ protected func Construction()
 /*-- Contents --*/
 
 public func IsContainer() { return true; }
-public func IsInteractable() { return true; }
 
-private func MaxContentsCount()
-{
-	return 50;
-}
+local MaxContentsCount = 50;
 
-public func GetInteractionMetaInfo(object clonk, int num)
-{
-	if (!is_open) 
-		return { Description = "$MsgOpen$" };
-	return { Description = "$MsgClose$" };
-}
-
-// Open contentsmenu via interaction
-public func Interact(object clonk, int mode)
-{
-	// Interaction does the same as the content control.
-	clonk->ObjectControl(clonk->GetOwner(), CON_Contents);
-}
-	
 protected func RejectCollect()
 {
-	if (ContentsCount() >= this->MaxContentsCount())
+	if (ContentsCount() >= MaxContentsCount)
 		return true;
 	return false;
 }
 
-public func OnContentMenuOpened()
+public func OnShownInInteractionMenuStart(bool first)
 {
-	return Open();
+	if (first)
+		Open();
 }
 
-
-public func OnContentMenuClosed()
+public func OnShownInInteractionMenuStop(bool last)
 {
-	return Close();
+	if (last)
+		Close();
 }
 
 private func Open()
@@ -66,7 +50,7 @@ private func Open()
 		return;
 	is_open = true;	
 	PlayAnimation("Open", 5, Anim_Linear(0, 0, GetAnimationLength("Open"), 22, ANIM_Hold), Anim_Const(1000));
-	Sound("ChestOpen");
+	Sound("Structures::Chest::Open");
 }
 
 private func Close()
@@ -75,7 +59,7 @@ private func Close()
 		return;
 	is_open = false;	
 	PlayAnimation("Close", 5, Anim_Linear(0, 0, GetAnimationLength("Close"), 15, ANIM_Hold), Anim_Const(1000));
-	Sound("ChestClose");
+	Sound("Structures::Chest::Close");
 }
 
 public func NoConstructionFlip() { return true; }

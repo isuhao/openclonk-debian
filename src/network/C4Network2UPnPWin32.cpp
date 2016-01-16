@@ -19,8 +19,6 @@
 #include "network/C4Network2UPnP.h"
 #include "C4Version.h"
 
-#include <boost/foreach.hpp>
-
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
@@ -124,7 +122,7 @@ void C4Network2UPnPP::ClearNatMappings()
 {
 	if (!mappings)
 		return;
-	BOOST_FOREACH(IStaticPortMapping *mapping, added_mappings)
+	for(IStaticPortMapping *mapping: added_mappings)
 	{
 		BSTR proto, client;
 		long intport, extport;
@@ -133,7 +131,7 @@ void C4Network2UPnPP::ClearNatMappings()
 		mapping->get_InternalClient(&client);
 		mapping->get_Protocol(&proto);
 		if (SUCCEEDED(mappings->Remove(extport, proto)))
-			LogF("UPnP: Closed port %d->%s:%d (%s)", extport, StdStrBuf(client).getData(), intport, StdStrBuf(proto).getData());
+			LogF("UPnP: Closed port %d->%s:%d (%s)", (int)extport, StdStrBuf(client).getData(), (int)intport, StdStrBuf(proto).getData());
 		::SysFreeString(proto);
 		::SysFreeString(client);
 		SafeRelease(mapping);

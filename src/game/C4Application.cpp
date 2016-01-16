@@ -39,6 +39,7 @@
 #include <C4Network2.h>
 #include <C4Network2IRC.h>
 #include <C4Particles.h>
+#include <StdPNG.h>
 
 #include <getopt.h>
 
@@ -101,7 +102,7 @@ bool C4Application::DoInit(int argc, char * argv[])
 	Revision.Ref(C4REVISION);
 
 	// Engine header message
-	Log(C4ENGINEINFOLONG);
+	Log(C4ENGINECAPTION);
 	LogF("Version: %s %s (%s)", C4VERSION, C4_OS, Revision.getData());
 	LogF("ExePath: \"%s\"", Config.General.ExePath.getData());
 	LogF("SystemDataPath: \"%s\"", Config.General.SystemDataPath);
@@ -199,7 +200,6 @@ bool C4Application::DoInit(int argc, char * argv[])
 void C4Application::ClearCommandLine()
 {
 	*Game.PlayerFilenames = 0;
-	Game.StartupPlayerCount = 0;
 }
 
 void C4Application::ParseCommandLine(int argc, char * argv[])
@@ -456,12 +456,19 @@ void C4Application::ParseCommandLine(int argc, char * argv[])
 		}
 	}
 
+#ifdef _WIN32
+	// Clean up some forward/backward slach confusion since many internal OC file functions cannot handle both
+	SReplaceChar(Game.ScenarioFilename, AltDirectorySeparator, DirectorySeparator);
+	SReplaceChar(Game.PlayerFilenames, AltDirectorySeparator, DirectorySeparator);
+	SReplaceChar(Game.DefinitionFilenames, AltDirectorySeparator, DirectorySeparator);
+	Application.IncomingKeyfile.ReplaceChar(AltDirectorySeparator, DirectorySeparator);
+	Application.IncomingUpdate.ReplaceChar(AltDirectorySeparator, DirectorySeparator);
+	Game.RecordStream.ReplaceChar(AltDirectorySeparator, DirectorySeparator);
+#endif
+
 	// Default to editor if scenario given, player mode otherwise
 	if (isEditor == 2)
 		isEditor = !!*Game.ScenarioFilename && !Config.General.OpenScenarioInGameMode;
-
-	// Determine startup player count
-	Game.StartupPlayerCount = SModuleCount(Game.PlayerFilenames);
 
 	// record?
 	Game.Record = Game.Record || (Config.Network.LeagueServerSignUp && Game.NetworkActive);
@@ -523,7 +530,7 @@ bool C4Application::PreInit()
 		if (Config.Graphics.ShowStartupMessages || Game.NetworkActive)
 		{
 			C4Facet cgo; cgo.Set(FullScreen.pSurface,0,0,C4GUI::GetScreenWdt(), C4GUI::GetScreenHgt());
-			GraphicsSystem.MessageBoard.Init(cgo,true);
+			GraphicsSystem.MessageBoard->Init(cgo,true);
 		}
 
 	// init loader: Black screen for first start if a video is to be shown; otherwise default spec
@@ -537,7 +544,7 @@ bool C4Application::PreInit()
 	if (!Game.PreInit()) return false;
 
 	// Music
-	if (!MusicSystem.Init("Frontend.*"))
+	if (!MusicSystem.Init("frontend"))
 		Log(LoadResStr("IDS_PRC_NOMUSIC"));
 
 	Game.SetInitProgress(fUseStartupDialog ? 34.0f : 2.0f);
@@ -607,6 +614,9 @@ void C4Application::Clear()
 	// Close window
 	FullScreen.Clear();
 	Console.Clear();
+	// There might be pending saves - do them after the fullscreen windows got closed
+	// so the app just remains as a lingering process until saving is done
+	CPNGFile::WaitForSaves();
 	// The very final stuff
 	C4AbstractApp::Clear();
 }
@@ -614,7 +624,7 @@ void C4Application::Clear()
 void C4Application::Quit()
 {
 	// Participants should not be cleared for usual startup dialog
-	//Config.General.Participants[0] = 0;
+
 	// Save config if there was no loading error
 	if (Config.fConfigLoaded) Config.Save();
 	// make sure startup data is unloaded
@@ -807,24 +817,8 @@ void C4Application::OnCommand(const char *szCmd)
 void C4Application::Activate()
 {
 #ifdef USE_WIN32_WINDOWS
-	// Activate the application to regain focus if it has been lost during loading.
-	// As this is officially not possible any more in new versions of Windows
-	// (BringWindowTopTop alone won't have any effect if the calling process is
-	// not in the foreground itself), we are using an ugly OS hack.
-	DWORD nForeThread = GetWindowThreadProcessId(GetForegroundWindow(), 0);
-	DWORD nAppThread = GetCurrentThreadId();
-	if (nForeThread != nAppThread)
-	{
-		AttachThreadInput(nForeThread, nAppThread, true);
-		BringWindowToTop(FullScreen.hWindow);
-		ShowWindow(FullScreen.hWindow, SW_SHOW);
-		AttachThreadInput(nForeThread, nAppThread, false);
-	}
-	else
-	{
-		BringWindowToTop(FullScreen.hWindow);
-		ShowWindow(FullScreen.hWindow, SW_SHOW);
-	}
+	BringWindowToTop(FullScreen.hWindow);
+	ShowWindow(FullScreen.hWindow, SW_SHOW);
 #endif
 }
 
