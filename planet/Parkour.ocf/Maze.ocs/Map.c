@@ -6,7 +6,7 @@
 
 #include Library_Map
 
-static g_caves;
+static g_caves, g_end_cave_x, g_end_cave_y;
 
 local caves, n_caves, start_cave, end_cave;
 
@@ -180,7 +180,7 @@ func DrawVariations(string mat, int ratio, int sx, int sy)
 func DrawBackground()
 {
 	Draw("Rock");
-	DrawVariations("Rock-rock_cracked", 50, 5,15);
+	DrawVariations("Rock", 50, 5,15);
 	DrawVariations("Ore", 10, 8,8);
 	DrawVariations("Firestone", 8, 12,3);
 	DrawVariations("Coal", 8, 8,3);
@@ -223,13 +223,15 @@ func DrawTunnels()
 func DrawStart()
 {
 	Draw("Tunnel", nil, [0, start_cave.Y - 8, start_cave.X + 4, 8]);
-	Draw("Brick", nil, [0, start_cave.Y, start_cave.X-2, 1]);
+	Draw("Brick", nil, [0, start_cave.Y, start_cave.X-2, 2]);
 	return true;
 }
 
 func DrawEnd()
 {
 	Draw("Ruby", {Algo=MAPALGO_Ellipsis, X=end_cave.X, Y=end_cave.Y, Wdt=4, Hgt=4});
+	g_end_cave_x = end_cave.X;
+	g_end_cave_y = end_cave.Y;
 	return true;
 }
 

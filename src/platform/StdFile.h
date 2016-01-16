@@ -38,15 +38,15 @@ const char *GetFilename(const char *path);
 const char *GetFilenameWeb(const char *path);
 const char *GetExtension(const char *fname);
 void DefaultExtension(char *szFileName, const char *szExtension);
-void DefaultExtension(class StdStrBuf *sFilename, const char *szExtension);
+void DefaultExtension(StdStrBuf *sFilename, const char *szExtension);
 void EnforceExtension(char *szFileName, const char *szExtension);
-void EnforceExtension(class StdStrBuf *sFilename, const char *szExtension);
+void EnforceExtension(StdStrBuf *sFilename, const char *szExtension);
 void RemoveExtension(char *szFileName);
 void RemoveExtension(StdStrBuf *psFileName);
 void AppendBackslash(char *szFileName);
 void TruncateBackslash(char *szFilename);
 void MakeTempFilename(char *szFileName);
-void MakeTempFilename(class StdStrBuf *sFileName);
+void MakeTempFilename(StdStrBuf *sFileName);
 bool WildcardListMatch(const char *szWildcardList, const char *szString); // match string in list like *.png|*.bmp
 bool IsWildcardString(const char *szString); // does szString contain wildcard characters?
 bool WildcardMatch(const char *szWildcard, const char *szString);
@@ -59,7 +59,6 @@ const char *GetRelativePathS(const char *strPath, const char *strRelativeTo);
 bool IsGlobalPath(const char *szPath);
 
 bool DirectoryExists(const char *szFileName);
-//bool FileExists(const char *szFileName, int *lpAttr=NULL);
 bool FileExists(const char *szFileName);
 size_t FileSize(const char *fname);
 size_t FileSize(int fdes);
@@ -81,7 +80,6 @@ bool CopyItem(const char *szSource, const char *szTarget, bool fResetAttributes=
 bool CreateItem(const char *szItemname);
 bool MoveItem(const char *szSource, const char *szTarget);
 
-//int ForEachFile(const char *szPath, int lAttrib, bool (*fnCallback)(const char *));
 int ForEachFile(const char *szDirName, bool (*fnCallback)(const char *));
 
 struct DirectoryIteratorP;

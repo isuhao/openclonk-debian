@@ -22,15 +22,24 @@ public func Connect(object target1, object target2)
 	SetAction("Connect", target1, target2);
 }
 
-public func StartFusing(object controler)
+public func StartFusing(object controller)
 {
-	if (GetEffect("IntFusing", this)) 
+	var effect;
+	if (effect = GetEffect("IntFusing", this)) 
+	{
+		// Double fuse start scheduled? Ignore.
+		if (effect.fuse_source == controller) return false;
+		// Fuse from both sides not supported
 		return RemoveObject();
+	}
+	
+	// Set a controller for this wire for killtracing, which can be passed to the fusing object.
+	SetController(controller->GetController());	
 		
 	var fuse_dir;	
 	var fuse_call;
 	var fuse_vertex;
-	if (GetActionTarget(0) == controler)
+	if (GetActionTarget(0) == controller)
 	{
 		fuse_dir = +1;
 		fuse_call = GetActionTarget(1);
@@ -42,13 +51,14 @@ public func StartFusing(object controler)
 		fuse_call = GetActionTarget(0);
 		fuse_vertex = GetVertexNum()-1;
 	}
-	var effect = AddEffect("IntFusing", this, 100, 1, this);
+	effect = AddEffect("IntFusing", this, 100, 1, this);
 	effect.fuse_dir = fuse_dir;
+	effect.fuse_source = controller;
 	effect.fuse_call = fuse_call;
 	effect.fuse_vertex = fuse_vertex;
 	effect.fuse_x = GetVertex(fuse_vertex, VTX_X) * 10;
 	effect.fuse_y = GetVertex(fuse_vertex, VTX_Y) * 10;
-	return;
+	return true;
 }
 
 protected func FxIntFusingStart(object target, proplist effect, int temporary)
@@ -56,7 +66,7 @@ protected func FxIntFusingStart(object target, proplist effect, int temporary)
 	if (temporary)
 		return FX_OK;
 	SetAction("Fusing");
-	Sound("FuseLoop", false, 75, nil, 1);
+	Sound("Fire::FuseLoop", false, 75, nil, 1);
 	return FX_OK;
 }
 
@@ -99,7 +109,7 @@ protected func FxIntFusingStop(object target, proplist effect, int reason, bool 
 {
 	if (temporary)
 		return FX_OK;
-	Sound("FuseLoop", false, 75, nil, -1);
+	Sound("Fire::FuseLoop", false, 75, nil, -1);
 	return FX_OK;
 }
 

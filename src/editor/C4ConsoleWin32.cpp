@@ -205,7 +205,12 @@ INT_PTR CALLBACK ConsoleDlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 			wchar_t buffer[16000];
 			GetDlgItemTextW(hDlg,IDC_COMBOINPUT,buffer,16000);
 			if (buffer[0])
-				Console.In(StdStrBuf(buffer).getData());
+			{
+				StdStrBuf in_char(buffer);
+				::Console.RegisterRecentInput(in_char.getData(), C4Console::MRU_Scenario);
+				::Console.In(in_char.getData());
+				::Console.UpdateInputCtrl();
+			}
 			return true;
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 		case IDC_BUTTONHALT:
@@ -312,8 +317,6 @@ public:
 	HBITMAP hbmRect,hbmRect2;
 	HBITMAP hbmFill,hbmFill2;
 	HBITMAP hbmPicker,hbmPicker2;
-	HBITMAP hbmIFT;
-	HBITMAP hbmNoIFT;
 	HBITMAP hbmDynamic;
 	HBITMAP hbmStatic;
 	HBITMAP hbmExact;
@@ -324,8 +327,6 @@ public:
 		hbmRect(0), hbmRect2(0),
 		hbmFill(0), hbmFill2(0),
 		hbmPicker(0), hbmPicker2(0),
-		hbmIFT(0),
-		hbmNoIFT(0),
 		hbmDynamic(0),
 		hbmStatic(0),
 		hbmExact(0)
@@ -345,8 +346,6 @@ public:
 		if (!hbmRect2) hbmRect2=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_RECT2));
 		if (!hbmFill2) hbmFill2=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_FILL2));
 		if (!hbmPicker2) hbmPicker2=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_PICKER2));
-		if (!hbmIFT) hbmIFT=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_IFT));
-		if (!hbmNoIFT) hbmNoIFT=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_NOIFT));
 		if (!hbmDynamic) hbmDynamic=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_DYNAMIC));
 		if (!hbmStatic) hbmStatic=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_STATIC));
 		if (!hbmExact) hbmExact=(HBITMAP)LoadBitmapW(instance,MAKEINTRESOURCEW(IDB_EXACT));
@@ -360,12 +359,19 @@ public:
 	void Clear()
 	{
 		// Unload bitmaps
-		if (hbmBrush) DeleteObject(hbmBrush);
-		if (hbmLine) DeleteObject(hbmLine);
-		if (hbmRect) DeleteObject(hbmRect);
-		if (hbmFill) DeleteObject(hbmFill);
-		if (hbmIFT) DeleteObject(hbmIFT);
-		if (hbmNoIFT) DeleteObject(hbmNoIFT);
+		if (hbmBrush) { DeleteObject(hbmBrush); hbmBrush = 0; }
+		if (hbmLine) { DeleteObject(hbmLine); hbmLine = 0; }
+		if (hbmRect) { DeleteObject(hbmRect); hbmRect = 0; }
+		if (hbmFill) { DeleteObject(hbmFill); hbmFill = 0; }
+		if (hbmPicker) { DeleteObject(hbmPicker); hbmPicker = 0; }
+		if (hbmBrush2) { DeleteObject(hbmBrush2); hbmBrush2 = 0; }
+		if (hbmLine2) { DeleteObject(hbmLine2); hbmLine2 = 0; }
+		if (hbmRect2) { DeleteObject(hbmRect2); hbmRect2 = 0; }
+		if (hbmFill2) { DeleteObject(hbmFill2); hbmFill2 = 0; }
+		if (hbmPicker2) { DeleteObject(hbmPicker2); hbmPicker2 = 0; }
+		if (hbmDynamic) { DeleteObject(hbmDynamic); hbmDynamic = 0; }
+		if (hbmStatic) { DeleteObject(hbmStatic); hbmStatic = 0; }
+		if (hbmExact) { DeleteObject(hbmExact); hbmExact = 0; }
 		if (pPreviewWindow)
 		{
 			delete pPreviewWindow;
@@ -376,6 +382,7 @@ public:
 
 	void Default()
 	{
+		GetOwner()->ModeBack = true;
 	}
 
 };
@@ -461,42 +468,32 @@ INT_PTR CALLBACK ToolsDlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 			Console.ToolsDlg.SetTool(C4TLS_Picker, false);
 			return true;
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-		case IDC_BUTTONIFT:
-			Console.ToolsDlg.SetIFT(true);
-			return true;
-			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-		case IDC_BUTTONNOIFT:
-			Console.ToolsDlg.SetIFT(false);
-			return true;
-			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-		case IDC_COMBOMATERIAL:
+		case IDC_COMBOFGMATERIAL: case IDC_COMBOBGMATERIAL:
+		case IDC_COMBOFGTEXTURE: case IDC_COMBOBGTEXTURE:
 			switch (HIWORD(wParam))
 			{
 			case CBN_SELCHANGE:
 			{
+				// New material or texture selected. Get selection string
 				wchar_t str[100];
-				int32_t cursel = SendDlgItemMessage(hDlg,IDC_COMBOMATERIAL,CB_GETCURSEL,0,0);
-				SendDlgItemMessage(hDlg,IDC_COMBOMATERIAL,CB_GETLBTEXT,cursel,(LPARAM)str);
-				Console.ToolsDlg.SetMaterial(StdStrBuf(str).getData());
-				break;
-			}
+				WORD idCombo = LOWORD(wParam);
+				int32_t cursel = SendDlgItemMessage(hDlg, idCombo, CB_GETCURSEL, 0, 0);
+				SendDlgItemMessage(hDlg, idCombo, CB_GETLBTEXT, cursel, (LPARAM)str);
+				// Convert to ascii
+				StdStrBuf str_buf(str);
+				const char *astr = str_buf.getData();
+				// Update appropriate setting in drawing tool
+				switch (idCombo)
+				{
+				case IDC_COMBOFGMATERIAL: Console.ToolsDlg.SetMaterial(astr); break;
+				case IDC_COMBOFGTEXTURE: Console.ToolsDlg.SetTexture(astr); break;
+				case IDC_COMBOBGMATERIAL: Console.ToolsDlg.SetBackMaterial(astr); break;
+				case IDC_COMBOBGTEXTURE: Console.ToolsDlg.SetBackTexture(astr); break;
+				}
 			}
 			return true;
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-		case IDC_COMBOTEXTURE:
-			switch (HIWORD(wParam))
-			{
-			case CBN_SELCHANGE:
-			{
-				wchar_t str[100];
-				int32_t cursel = SendDlgItemMessage(hDlg,IDC_COMBOTEXTURE,CB_GETCURSEL,0,0);
-				SendDlgItemMessage(hDlg,IDC_COMBOTEXTURE,CB_GETLBTEXT,cursel,(LPARAM)str);
-				Console.ToolsDlg.SetTexture(StdStrBuf(str).getData());
-				break;
-			}
-			}
-			return true;
-			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+		}
 		}
 		return false;
 		//----------------------------------------------------------------------------------------
@@ -682,7 +679,7 @@ void C4ConsoleGUI::Out(const char* message)
 	int len,len2,lines; wchar_t *buffer, *buffer2;
 	len = 65000;//SendDlgItemMessage(hWindow,IDC_EDITOUTPUT,EM_LINELENGTH,(WPARAM)0,(LPARAM)0);
 	StdBuf messageW = GetWideCharBuf(message);
-	len2 = len+Min<int32_t>(messageW.getSize()/sizeof(wchar_t)+2, 5000);
+	len2 = len+std::min<int32_t>(messageW.getSize()/sizeof(wchar_t)+2, 5000);
 	buffer = new wchar_t [len2];
 	buffer[0]=0;
 	GetDlgItemTextW(hWindow,IDC_EDITOUTPUT,buffer,len);
@@ -726,6 +723,7 @@ void C4ConsoleGUI::DisplayInfoText(C4ConsoleGUI::InfoTextType type, StdStrBuf& t
 		break;
 	default:
 		assert(false);
+		return;
 	}
 	SetDlgItemTextW(hWindow,dialog_item,text.GetWideChar());
 	UpdateWindow(GetDlgItem(hWindow,dialog_item));
@@ -828,17 +826,8 @@ void C4ConsoleGUI::ClearViewportMenu()
 
 void C4ConsoleGUI::ToolsDlgClose()
 {
-	::ClearDlg(Console.ToolsDlg.state->hDialog);
-}
-
-void C4ConsoleGUI::ToolsDlgSetTexture(class C4ToolsDlg *dlg, const char *texture)
-{
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOTEXTURE,CB_SELECTSTRING,0,GetWideLPARAM(texture));
-}
-
-void C4ConsoleGUI::ToolsDlgSetMaterial(class C4ToolsDlg *dlg, const char *material)
-{
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOMATERIAL,CB_SELECTSTRING,0,GetWideLPARAM(material));
+	if (Console.ToolsDlg.state)
+		Console.ToolsDlg.state->Clear();
 }
 
 bool C4ConsoleGUI::PropertyDlgOpen()
@@ -873,13 +862,13 @@ static void SetComboItems(HWND hCombo, std::list<const char*> &items)
 	for (std::list<const char*>::iterator it = items.begin(); it != items.end(); it++)
 	{
 		if (!*it)
-			SendMessage(hCombo,CB_INSERTSTRING,0,(LPARAM)L"----------");
+			SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"----------");
 		else
 			SendMessage(hCombo,CB_ADDSTRING,0,GetWideLPARAM(*it));
 	}
 }
 
-void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection)
+void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection, bool force_function_update)
 {
 	HWND hDialog = state->hPropertyDlg;
 	if (!hDialog) return;
@@ -888,10 +877,11 @@ void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection)
 	SendDlgItemMessage(hDialog,IDC_EDITOUTPUT,EM_LINESCROLL,(WPARAM)0,(LPARAM)iLine);
 	UpdateWindow(GetDlgItem(hDialog,IDC_EDITOUTPUT));
 
-	if (PropertyDlgObject == rSelection.GetObject()) return;
+	if (PropertyDlgObject == rSelection.GetObject() && !force_function_update) return;
 	PropertyDlgObject = rSelection.GetObject();
 	
-	std::list<const char *> functions = ::ScriptEngine.GetFunctionNames(PropertyDlgObject);
+	std::list<const char *> functions = ::Console.GetScriptSuggestions(PropertyDlgObject, C4Console::MRU_Object);
+
 	HWND hCombo = GetDlgItem(state->hPropertyDlg, IDC_COMBOINPUT);
 	wchar_t szLastText[500+1];
 	// Remember old window text
@@ -907,7 +897,9 @@ void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection)
 
 void C4ConsoleGUI::SetInputFunctions(std::list<const char*> &functions)
 {
-	SetComboItems(GetDlgItem(hWindow,IDC_COMBOINPUT), functions);
+	HWND hCombo = GetDlgItem(hWindow, IDC_COMBOINPUT);
+	SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+	SetComboItems(hCombo, functions);
 }
 
 void C4ConsoleGUI::ClearPlayerMenu()
@@ -915,13 +907,6 @@ void C4ConsoleGUI::ClearPlayerMenu()
 	if (!Active) return;
 	HMENU hMenu = GetSubMenu(GetMenu(hWindow),state->MenuIndexPlayer);
 	while (DeleteMenu(hMenu,1,MF_BYPOSITION));
-}
-
-void C4ConsoleGUI::ClearInput()
-{
-	HWND hCombo = GetDlgItem(hWindow,IDC_COMBOINPUT);
-	// Clear
-	SendMessage(hCombo,CB_RESETCONTENT,0,0);
 }
 
 /*
@@ -942,6 +927,11 @@ public:
 		pSurface = new C4Surface(&Application, this);
 	}
 
+	~C4ConsoleGUIPreviewWindow()
+	{
+		delete pSurface;
+	}
+
 	virtual void Close() {}
 };
 
@@ -957,6 +947,8 @@ bool C4ConsoleGUI::ToolsDlgOpen(C4ToolsDlg *dlg)
 	SetWindowTextW(dlg->state->hDialog,LoadResStrW("IDS_DLG_TOOLS"));
 	SetDlgItemTextW(dlg->state->hDialog,IDC_STATICMATERIAL,LoadResStrW("IDS_CTL_MATERIAL"));
 	SetDlgItemTextW(dlg->state->hDialog,IDC_STATICTEXTURE,LoadResStrW("IDS_CTL_TEXTURE"));
+	SetDlgItemTextW(dlg->state->hDialog, IDC_STATICFOREGROUND, LoadResStrW("IDS_CTL_FOREGROUND"));
+	SetDlgItemTextW(dlg->state->hDialog, IDC_STATICBACKGROUND, LoadResStrW("IDS_CTL_BACKGROUND"));
 	// Load bitmaps if necessary
 	dlg->state->LoadBitmaps(Application.GetInstance());
 	// create target ctx for OpenGL rendering
@@ -973,10 +965,32 @@ bool C4ConsoleGUI::ToolsDlgOpen(C4ToolsDlg *dlg)
 
 void C4ConsoleGUI::ToolsDlgInitMaterialCtrls(class C4ToolsDlg *dlg)
 {
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOMATERIAL,CB_ADDSTRING,0,GetWideLPARAM(C4TLS_MatSky));
-	for (int32_t cnt=0; cnt< ::MaterialMap.Num; cnt++)
-		SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOMATERIAL,CB_ADDSTRING,0,GetWideLPARAM(::MaterialMap.Map[cnt].Name));
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOMATERIAL,CB_SELECTSTRING,0,GetWideLPARAM(dlg->Material));
+	// All foreground materials
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOFGMATERIAL,CB_ADDSTRING,0,GetWideLPARAM(C4TLS_MatSky));
+	for (int32_t cnt = 0; cnt < ::MaterialMap.Num; cnt++)
+	{
+		SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOFGMATERIAL, CB_ADDSTRING, 0, GetWideLPARAM(::MaterialMap.Map[cnt].Name));
+	}
+	// Background materials: True background materials first; then the "funny" stuff
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_ADDSTRING, 0, GetWideLPARAM(C4TLS_MatSky));
+	for (int32_t cnt = 0; cnt < ::MaterialMap.Num; cnt++)
+	{
+		if (::MaterialMap.Map[cnt].Density == C4M_Background)
+		{
+			SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_ADDSTRING, 0, GetWideLPARAM(::MaterialMap.Map[cnt].Name));
+		}
+	}
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_ADDSTRING, 0, (LPARAM)L"----------");
+	for (int32_t cnt = 0; cnt < ::MaterialMap.Num; cnt++)
+	{
+		if (::MaterialMap.Map[cnt].Density != C4M_Background)
+		{
+			SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_ADDSTRING, 0, GetWideLPARAM(::MaterialMap.Map[cnt].Name));
+		}
+	}
+	// Select current materials
+	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOFGMATERIAL,CB_SELECTSTRING,0,GetWideLPARAM(dlg->Material));
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_SELECTSTRING, 0, GetWideLPARAM(dlg->BackMaterial));
 }
 
 void C4ToolsDlg::UpdateToolCtrls()
@@ -997,51 +1011,71 @@ void C4ToolsDlg::UpdateToolCtrls()
 
 void C4ConsoleGUI::ToolsDlgSelectTexture(C4ToolsDlg *dlg, const char *texture)
 {
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOTEXTURE,CB_SELECTSTRING,0,GetWideLPARAM(texture));
+	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOFGTEXTURE,CB_SELECTSTRING,0,GetWideLPARAM(texture));
 }
 
 void C4ConsoleGUI::ToolsDlgSelectMaterial(C4ToolsDlg *dlg, const char *material)
 {
-	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOMATERIAL,CB_SELECTSTRING,0,GetWideLPARAM(material));
+	SendDlgItemMessage(dlg->state->hDialog,IDC_COMBOFGMATERIAL,CB_SELECTSTRING,0,GetWideLPARAM(material));
+}
+
+void C4ConsoleGUI::ToolsDlgSelectBackTexture(C4ToolsDlg *dlg, const char *texture)
+{
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGTEXTURE, CB_SELECTSTRING, 0, GetWideLPARAM(texture));
+}
+
+void C4ConsoleGUI::ToolsDlgSelectBackMaterial(C4ToolsDlg *dlg, const char *material)
+{
+	SendDlgItemMessage(dlg->state->hDialog, IDC_COMBOBGMATERIAL, CB_SELECTSTRING, 0, GetWideLPARAM(material));
 }
 
 void C4ToolsDlg::UpdateTextures()
 {
-	// Refill dlg
-	SendDlgItemMessage(state->hDialog,IDC_COMBOTEXTURE,CB_RESETCONTENT,0,(LPARAM)0);
-	// bottom-most: any invalid textures
-	bool fAnyEntry = false; int32_t cnt; const char *szTexture;
-	if (::Landscape.Mode!=C4LSC_Exact)
-		for (cnt=0; (szTexture=::TextureMap.GetTexture(cnt)); cnt++)
-		{
-			if (!::TextureMap.GetIndex(Material, szTexture, false))
+	// Refill foreground and background combo boxes in dlg
+	WORD boxes[2] = { IDC_COMBOFGTEXTURE, IDC_COMBOBGTEXTURE };
+	const char *materials[2] = { Material, BackMaterial };
+	const char *textures[2] = { Texture, BackTexture };
+	for (int i = 0; i < 2; ++i)
+	{
+		WORD box = boxes[i];
+		const char *material = materials[i];
+		const char *texture = textures[i];
+		// clear previous
+		SendDlgItemMessage(state->hDialog, box, CB_RESETCONTENT, 0, (LPARAM)0);
+		// bottom-most: any invalid textures
+		bool fAnyEntry = false; int32_t cnt; const char *szTexture;
+		if (::Landscape.Mode != C4LSC_Exact)
+			for (cnt = 0; (szTexture = ::TextureMap.GetTexture(cnt)); cnt++)
 			{
-				// hide normal maps from texture selection
-				// theoretically, they could be used for drawing but they clutter the list and they don't look good
-				if (!WildcardMatch("*_NRM", szTexture))
+				if (!::TextureMap.GetIndex(material, szTexture, false))
 				{
-					fAnyEntry = true;
-					SendDlgItemMessage(state->hDialog, IDC_COMBOTEXTURE, CB_INSERTSTRING, 0, GetWideLPARAM(szTexture));
+					// hide normal maps from texture selection
+					// theoretically, they could be used for drawing but they clutter the list and they don't look good
+					if (!WildcardMatch("*_NRM", szTexture))
+					{
+						fAnyEntry = true;
+						SendDlgItemMessage(state->hDialog, box, CB_INSERTSTRING, 0, GetWideLPARAM(szTexture));
+					}
 				}
 			}
-		}
-	// separator
-	if (fAnyEntry)
-	{
-		SendDlgItemMessage(state->hDialog,IDC_COMBOTEXTURE,CB_INSERTSTRING,0,(LPARAM)L"-------");
-	}
-
-	// atop: valid textures
-	for (cnt=0; (szTexture=::TextureMap.GetTexture(cnt)); cnt++)
-	{
-		// Current material-texture valid? Always valid for exact mode
-		if (::TextureMap.GetIndex(Material,szTexture,false) || ::Landscape.Mode==C4LSC_Exact)
+		// separator
+		if (fAnyEntry)
 		{
-			SendDlgItemMessage(state->hDialog,IDC_COMBOTEXTURE,CB_INSERTSTRING,0,GetWideLPARAM(szTexture));
+			SendDlgItemMessage(state->hDialog, box, CB_INSERTSTRING, 0, (LPARAM)L"-------");
 		}
+
+		// atop: valid textures
+		for (cnt = 0; (szTexture = ::TextureMap.GetTexture(cnt)); cnt++)
+		{
+			// Current material-texture valid? Always valid for exact mode
+			if (::TextureMap.GetIndex(material, szTexture, false) || ::Landscape.Mode == C4LSC_Exact)
+			{
+				SendDlgItemMessage(state->hDialog, box, CB_INSERTSTRING, 0, GetWideLPARAM(szTexture));
+			}
+		}
+		// reselect current
+		SendDlgItemMessage(state->hDialog, box, CB_SELECTSTRING, -1, GetWideLPARAM(texture));
 	}
-	// reselect current
-	SendDlgItemMessage(state->hDialog,IDC_COMBOTEXTURE,CB_SELECTSTRING,0,GetWideLPARAM(Texture));
 }
 
 void C4ToolsDlg::NeedPreviewUpdate()
@@ -1114,27 +1148,22 @@ void C4ToolsDlg::InitGradeCtrl()
 bool C4ToolsDlg::PopMaterial()
 {
 	if (!state->hDialog) return false;
-	SetFocus(GetDlgItem(state->hDialog,IDC_COMBOMATERIAL));
-	SendDlgItemMessage(state->hDialog,IDC_COMBOMATERIAL,CB_SHOWDROPDOWN,true,0);
+	SetFocus(GetDlgItem(state->hDialog,IDC_COMBOFGMATERIAL));
+	SendDlgItemMessage(state->hDialog,IDC_COMBOFGMATERIAL,CB_SHOWDROPDOWN,true,0);
 	return true;
 }
 
 bool C4ToolsDlg::PopTextures()
 {
 	if (!state->hDialog) return false;
-	SetFocus(GetDlgItem(state->hDialog,IDC_COMBOTEXTURE));
-	SendDlgItemMessage(state->hDialog,IDC_COMBOTEXTURE,CB_SHOWDROPDOWN,true,0);
+	SetFocus(GetDlgItem(state->hDialog,IDC_COMBOFGTEXTURE));
+	SendDlgItemMessage(state->hDialog,IDC_COMBOFGTEXTURE,CB_SHOWDROPDOWN,true,0);
 	return true;
 }
 
 void C4ToolsDlg::UpdateIFTControls()
 {
-	if (!state->hDialog)
-		return;
-	SendDlgItemMessage(state->hDialog,IDC_BUTTONNOIFT,BM_SETSTATE,(ModeIFT==0),0);
-	UpdateWindow(GetDlgItem(state->hDialog,IDC_BUTTONNOIFT));
-	SendDlgItemMessage(state->hDialog,IDC_BUTTONIFT,BM_SETSTATE,(ModeIFT==1),0);
-	UpdateWindow(GetDlgItem(state->hDialog,IDC_BUTTONIFT));
+	// not using IFT
 }
 
 void C4ToolsDlg::UpdateLandscapeModeCtrls()
@@ -1146,7 +1175,7 @@ void C4ToolsDlg::UpdateLandscapeModeCtrls()
 	UpdateWindow(GetDlgItem(state->hDialog,IDC_BUTTONMODEDYNAMIC));
 	// Static: enable only if map available
 	SendDlgItemMessage(state->hDialog,IDC_BUTTONMODESTATIC,BM_SETSTATE,(iMode==C4LSC_Static),0);
-	EnableWindow(GetDlgItem(state->hDialog,IDC_BUTTONMODESTATIC),(::Landscape.Map!=NULL));
+	EnableWindow(GetDlgItem(state->hDialog,IDC_BUTTONMODESTATIC),(::Landscape.HasMap()));
 	UpdateWindow(GetDlgItem(state->hDialog,IDC_BUTTONMODESTATIC));
 	// Exact: enable always
 	SendDlgItemMessage(state->hDialog,IDC_BUTTONMODEEXACT,BM_SETSTATE,(iMode==C4LSC_Exact),0);
@@ -1166,8 +1195,6 @@ void C4ToolsDlg::EnableControls()
 	SendDlgItemMessage(hDialog,IDC_BUTTONRECT,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)((iLandscapeMode>=C4LSC_Static) ? state->hbmRect : state->hbmRect2));
 	SendDlgItemMessage(hDialog,IDC_BUTTONFILL,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)((iLandscapeMode>=C4LSC_Exact) ? state->hbmFill : state->hbmFill2));
 	SendDlgItemMessage(hDialog,IDC_BUTTONPICKER,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)((iLandscapeMode>=C4LSC_Static) ? state->hbmPicker : state->hbmPicker2));
-	SendDlgItemMessage(hDialog,IDC_BUTTONIFT,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)state->hbmIFT);
-	SendDlgItemMessage(hDialog,IDC_BUTTONNOIFT,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)state->hbmNoIFT);
 	SendDlgItemMessage(hDialog,IDC_BUTTONMODEDYNAMIC,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)state->hbmDynamic);
 	SendDlgItemMessage(hDialog,IDC_BUTTONMODESTATIC,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)state->hbmStatic);
 	SendDlgItemMessage(hDialog,IDC_BUTTONMODEEXACT,BM_SETIMAGE,IMAGE_BITMAP,(LPARAM)state->hbmExact);
@@ -1177,12 +1204,14 @@ void C4ToolsDlg::EnableControls()
 	EnableWindow(GetDlgItem(hDialog,IDC_BUTTONRECT),(iLandscapeMode>=C4LSC_Static));
 	EnableWindow(GetDlgItem(hDialog,IDC_BUTTONFILL),(iLandscapeMode>=C4LSC_Exact));
 	EnableWindow(GetDlgItem(hDialog,IDC_BUTTONPICKER),(iLandscapeMode>=C4LSC_Static));
-	EnableWindow(GetDlgItem(hDialog,IDC_BUTTONIFT),(iLandscapeMode>=C4LSC_Static));
-	EnableWindow(GetDlgItem(hDialog,IDC_BUTTONNOIFT),(iLandscapeMode>=C4LSC_Static));
-	EnableWindow(GetDlgItem(hDialog,IDC_COMBOMATERIAL),(iLandscapeMode>=C4LSC_Static));
-	EnableWindow(GetDlgItem(hDialog,IDC_COMBOTEXTURE),(iLandscapeMode>=C4LSC_Static) && !SEqual(Material,C4TLS_MatSky));
+	EnableWindow(GetDlgItem(hDialog,IDC_COMBOFGMATERIAL),(iLandscapeMode>=C4LSC_Static));
+	EnableWindow(GetDlgItem(hDialog,IDC_COMBOFGTEXTURE),(iLandscapeMode>=C4LSC_Static) && !SEqual(Material,C4TLS_MatSky));
+	EnableWindow(GetDlgItem(hDialog,IDC_COMBOBGMATERIAL), (iLandscapeMode >= C4LSC_Static) && !SEqual(Material, C4TLS_MatSky));
+	EnableWindow(GetDlgItem(hDialog, IDC_COMBOBGTEXTURE), (iLandscapeMode >= C4LSC_Static) && !SEqual(Material, C4TLS_MatSky) && !SEqual(BackMaterial, C4TLS_MatSky));
 	EnableWindow(GetDlgItem(hDialog,IDC_STATICMATERIAL),(iLandscapeMode>=C4LSC_Static));
 	EnableWindow(GetDlgItem(hDialog,IDC_STATICTEXTURE),(iLandscapeMode>=C4LSC_Static) && !SEqual(Material,C4TLS_MatSky));
+	EnableWindow(GetDlgItem(hDialog,IDC_STATICFOREGROUND), (iLandscapeMode >= C4LSC_Static));
+	EnableWindow(GetDlgItem(hDialog,IDC_STATICBACKGROUND), (iLandscapeMode >= C4LSC_Static));
 	EnableWindow(GetDlgItem(hDialog,IDC_SLIDERGRADE),(iLandscapeMode>=C4LSC_Static));
 	EnableWindow(GetDlgItem(hDialog,IDC_PREVIEW),(iLandscapeMode>=C4LSC_Static));
 

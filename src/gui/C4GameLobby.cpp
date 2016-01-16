@@ -22,13 +22,13 @@
 #include <C4Components.h>
 #include "C4Network2Dialogs.h"
 #include "C4GameOptions.h"
-#include "C4RTF.h"
 #include "C4ChatDlg.h"
 #include "C4PlayerInfoListBox.h"
 #include <C4MessageInput.h>
 #include <C4Game.h>
 #include <C4Network2.h>
 #include "C4GraphicsResource.h"
+#include "C4GameControl.h"
 
 namespace C4GameLobby
 {
@@ -64,13 +64,10 @@ namespace C4GameLobby
 	ScenDesc::ScenDesc(const C4Rect &rcBounds, bool fActive) : C4GUI::Window(), fDescFinished(false)
 	{
 		// build components
-		//CStdFont &rTitleFont = ::GraphicsResource.CaptionFont;
 		SetBounds(rcBounds);
 		C4GUI::ComponentAligner caMain(GetClientRect(), 0,0, true);
-		//AddElement(pTitle = new C4GUI::Label("", caMain.GetFromTop(rTitleFont.GetLineHeight()), ALeft, C4GUI_CaptionFontClr, &rTitleFont, true));
 		AddElement(pDescBox = new C4GUI::TextWindow(caMain.GetAll(), 0, 0, 0, 100, 4096, "", true));
 		pDescBox->SetDecoration(false, false, NULL, true);
-		//pDescBox->SetToolTip(LoadResStr("IDS_MSG_SCENARIODESC")); annoying when scrolling through desc...
 		// initial update to set current data
 		if (fActive) Activate();
 	}
@@ -92,17 +89,10 @@ namespace C4GameLobby
 			}
 			else
 			{
-				StdStrBuf sDesc;
 				// load desc
 				C4ComponentHost DefDesc;
 				if (C4Language::LoadComponentHost(&DefDesc, ScenarioFile, C4CFN_ScenarioDesc, Config.General.LanguageEx))
-				{
-					C4RTFFile rtf;
-					rtf.Load(StdBuf(DefDesc.GetData(), SLen(DefDesc.GetData())));
-					sDesc.Take(rtf.GetPlainText());
-				}
-				if (!!sDesc)
-					pDescBox->AddTextLine(sDesc.getData(), &rTextFont, C4GUI_MessageFontClr, false, true, &rTitleFont);
+					pDescBox->AddTextLine(DefDesc.GetData(), &rTextFont, C4GUI_MessageFontClr, false, true, &rTitleFont);
 				else
 					pDescBox->AddTextLine(Game.ScenarioTitle.getData(), &rTitleFont, C4GUI_CaptionFontClr, false, true);
 			}
@@ -151,7 +141,7 @@ namespace C4GameLobby
 		Application.Add(this);
 		// indents / sizes
 		int32_t iDefBtnHeight = 32;
-		int32_t iIndentX1, iIndentX2, iIndentX3/*, iIndentX4*/;
+		int32_t iIndentX1, iIndentX2, iIndentX3;
 		int32_t iIndentY1, iIndentY2, iIndentY3, iIndentY4;
 		int32_t iClientListWdt;
 		if (GetClientRect().Wdt > 500)
@@ -199,12 +189,17 @@ namespace C4GameLobby
 		C4GUI::CallbackButton<MainDlg> *btnExit;
 		btnExit = new C4GUI::CallbackButton<MainDlg>(LoadResStr("IDS_DLG_EXIT"), caBottom.GetFromLeft(100), &MainDlg::OnExitBtn);
 		if (fHost)
+		{
 			btnRun = new C4GUI::CallbackButton<MainDlg>(LoadResStr("IDS_DLG_GAMEGO"), caBottom.GetFromRight(100), &MainDlg::OnRunBtn);
+			checkReady = NULL;
+		}
 		else
-			// 2do: Ready-checkbox
+		{
+			checkReady = new C4GUI::CheckBox(caBottom.GetFromRight(90), LoadResStr("IDS_DLG_READY"), false);
+			checkReady->SetOnChecked(new C4GUI::CallbackHandler<MainDlg>(this, &MainDlg::OnReadyCheck));
 			caBottom.GetFromRight(90);
-		//C4GUI::CallbackButton<MainDlg> *btnTest = new C4GUI::CallbackButton<MainDlg>("test", caBottom.GetFromRight(90), &MainDlg::OnTestBtn);
-		pGameOptionButtons = new C4GameOptionButtons(caBottom.GetCentered(caBottom.GetInnerWidth(), Min<int32_t>(C4GUI_IconExHgt, caBottom.GetHeight())), true, fHost, true);
+		}
+		pGameOptionButtons = new C4GameOptionButtons(caBottom.GetCentered(caBottom.GetInnerWidth(), std::min<int32_t>(C4GUI_IconExHgt, caBottom.GetHeight())), true, fHost, true);
 
 		// players / resources sidebar
 		C4GUI::ComponentAligner caRight(caMain.GetFromRight(iClientListWdt), iIndentX3,iIndentY4);
@@ -229,15 +224,16 @@ namespace C4GameLobby
 		bool fHasTeams = Game.Teams.IsMultiTeams();
 		bool fHasChat = C4ChatDlg::IsChatActive();
 		int32_t iBtnNum = 4+fHasTeams+fHasChat;
-		//btnAddPlayer = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_AddPlr, pRightTabLbl->GetToprightCornerRect(16,16,4,4,2+fHasTeams), pPlayerSheet->GetHotkey(), &MainDlg::OnTabTeams);
 		if (fHasTeams)
-			btnTeams = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Team, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), pPlayerSheet->GetHotkey(), &MainDlg::OnTabTeams);
-		btnPlayers = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Player, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), pPlayerSheet->GetHotkey(), &MainDlg::OnTabPlayers);
-		btnResources = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Resource, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), pResSheet->GetHotkey(), &MainDlg::OnTabRes);
-		btnOptions = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Options, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), pOptionsSheet->GetHotkey(), &MainDlg::OnTabOptions);
-		btnScenario = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Gfx, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), pOptionsSheet->GetHotkey(), &MainDlg::OnTabScenario);
+		{
+			btnTeams = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Team, pRightTabLbl->GetToprightCornerRect(16, 16, 4, 4, --iBtnNum), LoadResStr("IDS_DLG_PLAYERSBYTEAM"), &MainDlg::OnTabTeams);
+		}
+		btnPlayers = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Player, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), LoadResStr("IDS_DLG_PLAYERS"), &MainDlg::OnTabPlayers);
+		btnResources = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Resource, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), LoadResStr("IDS_DLG_RESOURCES"), &MainDlg::OnTabRes);
+		btnOptions = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Options, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), LoadResStr("IDS_DLG_OPTIONS"), &MainDlg::OnTabOptions);
+		btnScenario = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Gfx, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), LoadResStr("IDS_DLG_SCENARIO"), &MainDlg::OnTabScenario);
 		if (fHasChat)
-			btnChat = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Ex_Chat, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), 0 /* 2do*/, &MainDlg::OnBtnChat);
+			btnChat = new C4GUI::CallbackButton<MainDlg, C4GUI::IconButton>(C4GUI::Ico_Ex_Chat, pRightTabLbl->GetToprightCornerRect(16,16,4,4,--iBtnNum), LoadResStr("IDS_CTL_CHAT"), &MainDlg::OnBtnChat);
 
 		// update labels and tooltips for player list
 		UpdateRightTab();
@@ -252,14 +248,11 @@ namespace C4GameLobby
 		pLbl->SetClickFocusControl(pEdt);
 		// log box
 		pChatBox = new C4GUI::TextWindow(caCenter.GetAll());
-		//pPaintBox = new PaintBox();
 		// add components in tab-order
-		//AddElement(pPaintBox); pPaintBox->SetToolTip("Paintbox :D");
 		AddElement(pChatBox);
 		AddElement(pLbl); AddElement(pEdt); // chat
 
 		AddElement(pRightTabLbl);
-		//(new C4GUI::ContextButton(pRightTabLbl, true))->SetToolTip("[.!] Switches between player and resource view"); // right tab label+ctx menu
 		if (btnTeams) AddElement(btnTeams);
 		AddElement(btnPlayers);
 		AddElement(btnResources);
@@ -277,7 +270,8 @@ namespace C4GameLobby
 		}
 		else
 		{
-			// 2do: Ready-checkbox
+			AddElement(checkReady);
+			checkReady->SetToolTip(LoadResStr("IDS_DLGTIP_READY"));
 		}
 		// set initial focus
 		SetFocus(pEdt, false);
@@ -303,11 +297,10 @@ namespace C4GameLobby
 		Close(false);
 	}
 
-	void MainDlg::OnTestBtn(C4GUI::Control *btn)
+	void MainDlg::OnReadyCheck(C4GUI::Element *pCheckBox)
 	{
-		pPlayerList->SetMode(C4PlayerInfoListBox::PILBM_Evaluation);
-		pPlayerList->SetTeamFilter(1);
-		//pPlayerList->SetCustomFont(&::GraphicsResource.FontTooltip, 0xff000000);
+		bool rIsOn = static_cast<C4GUI::CheckBox *>(pCheckBox)->GetChecked();
+		::Control.DoInput(CID_ClientUpdate, new C4ControlClientUpdate(::Game.Clients.getLocalID(), CUT_SetReady, rIsOn), CDT_Direct);
 	}
 
 	void MainDlg::SetCountdownState(CountdownState eToState, int32_t iTimer)
@@ -317,19 +310,19 @@ namespace C4GameLobby
 		// changing away from countdown?
 		if (eCountdownState == CDS_Countdown)
 		{
-			StopSoundEffect("Elevator", NULL);
-			if (eToState != CDS_Start) StartSoundEffect("Pshshsh");
+			StopSoundEffect("Structures::Elevator::Moving", NULL);
+			if (eToState != CDS_Start) StartSoundEffect("Liquids::Pshshsh");
 		}
 		// change to game start?
 		if (eToState == CDS_Start)
 		{
 			// announce it!
-			StartSoundEffect("Blast3");
+			StartSoundEffect("Fire::Blast3");
 		}
 		else if (eToState == CDS_Countdown)
 		{
-			StartSoundEffect("Fuse");
-			StartSoundEffect("Elevator", true);
+			StartSoundEffect("Fire::Fuse");
+			StartSoundEffect("Structures::Elevator::Moving", true);
 		}
 		if (eToState == CDS_Countdown || eToState == CDS_LongCountdown)
 		{
@@ -380,7 +373,7 @@ namespace C4GameLobby
 		{
 			// first countdown message
 			OnLog(Pkt.GetCountdownMsg(!fWasCountdown).getData(), C4GUI_LogFontClr2);
-			StartSoundEffect("Command");
+			StartSoundEffect("Hits::Materials::Wood::WoodHit*");
 		}
 	}
 
@@ -440,7 +433,7 @@ namespace C4GameLobby
 		if (!szInputText || !*szInputText)
 		{
 			// do some error sound then
-			C4GUI::GUISound("Error");
+			C4GUI::GUISound("UI::Error");
 		}
 		else
 		{
@@ -482,7 +475,7 @@ namespace C4GameLobby
 		// besides, this releases the lobby from doing any host/client-specializations
 #define GETPKT(type, name) \
     assert(pPacket); const type &name = \
-      /*dynamic_cast*/ static_cast<const type &>(*pPacket);
+      static_cast<const type &>(*pPacket);
 		switch (cStatus)
 		{
 		case PID_LobbyCountdown: // initiate or abort countdown
@@ -541,7 +534,7 @@ namespace C4GameLobby
 	{
 		if (pChatBox)
 		{
-			StartSoundEffect("Error");
+			StartSoundEffect("UI::Error");
 			pChatBox->AddTextLine(szErrMsg, &::GraphicsResource.TextFont, C4GUI_ErrorFontClr, true, true);
 			pChatBox->ScrollToBottom();
 		}
@@ -597,7 +590,7 @@ namespace C4GameLobby
 			return;
 		}
 		// join!
-		::Network.Players.JoinLocalPlayer(Config.AtRelativePath(szFilename), true);
+		::Network.Players.JoinLocalPlayer(Config.AtRelativePath(szFilename));
 	}
 
 	void MainDlg::OnTabPlayers(C4GUI::Control *btn)
@@ -751,7 +744,7 @@ namespace C4GameLobby
 	void Countdown::OnSec1Timer()
 	{
 		// count down
-		iStartTimer = Max<int32_t>(iStartTimer - 1, 0);
+		iStartTimer = std::max<int32_t>(iStartTimer - 1, 0);
 		// only send "important" start timer numbers to all clients
 		if (iStartTimer <= AlmostStartCountdownTime || // last seconds
 		    (iStartTimer <= 600 && !(iStartTimer % 10)) || // last minute: 10s interval

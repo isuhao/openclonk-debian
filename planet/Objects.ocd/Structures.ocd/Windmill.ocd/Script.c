@@ -11,8 +11,6 @@
 #include Library_Ownable
 #include Library_Producer
 
-/*-- Initialization --*/
-
 local last_power;
 local wheel;
 
@@ -22,7 +20,7 @@ func MinRevolutionTime() { return 18000; } // in frames
 protected func Construction()
 {
 	SetProperty("MeshTransformation", Trans_Rotate(-30, 0, 1, 0));
-	SetAction("Default");	
+	SetAction("Default");
 	return _inherited(...);
 }
 
@@ -54,7 +52,7 @@ public func CollectionZone()
 
 protected func Collection()
 {
-	Sound("Clonk");
+	Sound("Objects::Clonk");
 	return;
 }
 
@@ -99,7 +97,7 @@ public func Wind2Turn()
 	wheel->SetRDir(current_wind * 90, MinRevolutionTime());
 	// Make some sounds.
 	if (Abs(current_wind) >= 10 && Random(15 - Abs(current_wind / 10)) < 5)
-		Sound(["WoodCreak?","HingeCreak?"][Random(2)], false, nil, nil, nil, 75);
+		Sound(["Hits::Materials::Wood::WoodCreak?","Structures::HingeCreak?"][Random(2)], false, nil, nil, nil, 75);
 	return;
 }
 
@@ -112,8 +110,6 @@ public func PowerNeed()
 
 /*-- Production --*/
 
-public func IsInteractable() { return true; }
-
 private func IgnoreKnowledge() { return true; }
 
 private func IsProduct(id product_id)
@@ -122,13 +118,6 @@ private func IsProduct(id product_id)
 }
 
 private func ProductionTime(id toProduce) { return 290; }
-
-public func NeedRawMaterial(id rawmat_id)
-{
-	if (rawmat_id == Seeds)
-		return true;
-	return false;
-}
 
 public func OnProductionStart(id product)
 {

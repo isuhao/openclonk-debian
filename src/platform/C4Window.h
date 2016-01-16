@@ -225,8 +225,12 @@
 const int CocoaKeycodeOffset = 300;
 extern C4KeyCode K_SHIFT_L;
 extern C4KeyCode K_SHIFT_R;
+extern C4KeyCode K_CONTROL_L;
+extern C4KeyCode K_CONTROL_R;
 extern C4KeyCode K_ALT_L;
 extern C4KeyCode K_ALT_R;
+extern C4KeyCode K_COMMAND_L;
+extern C4KeyCode K_COMMAND_R;
 extern C4KeyCode K_F1;
 extern C4KeyCode K_F2;
 extern C4KeyCode K_F3;
@@ -274,6 +278,7 @@ extern C4KeyCode K_A;
 // Forward declarations because xlib.h is evil
 typedef union _XEvent XEvent;
 typedef struct _XDisplay Display;
+typedef struct __GLXFBConfigRec *GLXFBConfig;
 #endif
 
 class C4Window
@@ -335,13 +340,15 @@ public:
 	// Set by Init to the widget which is used as a
 	// render target, which can be the whole window.
 	/*GtkWidget*/void * render_widget;
+#endif
+#ifdef USE_X11
 protected:
-	bool FindInfo(int samples, void** info);
+	bool FindFBConfig(int samples, GLXFBConfig *info);
 
 	unsigned long wnd;
 	unsigned long renderwnd;
-	// The XVisualInfo the window was created with
-	void * Info;
+	// The GLXFBConfig the window was created with
+	GLXFBConfig Info;
 	unsigned long handlerDestroy;
 
 	friend class C4X11AppImpl;

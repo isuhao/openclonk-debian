@@ -167,6 +167,8 @@ int32_t mouseButtonFromEvent(NSEvent* event, DWORD* modifierFlags)
 			return C4MC_Button_MiddleUp;
 		case NSScrollWheel:
 			return C4MC_Button_Wheel;
+		default:
+			break;
 	}
 	return C4MC_Button_None;
 }
@@ -204,13 +206,22 @@ int32_t mouseButtonFromEvent(NSEvent* event, DWORD* modifierFlags)
 	mouse.y = fmin(fmax(mouse.y, 0), actualSizeY);
 	int x = mouse.x;
 	int y = actualSizeY - mouse.y;
-	
+
 	C4Viewport* viewport = self.controller.viewport;
 	if (::MouseControl.IsViewport(viewport) && Console.EditCursor.GetMode() == C4CNS_ModePlay)
 	{	
 		DWORD keyMask = flags;
 		if ([event type] == NSScrollWheel)
-			keyMask |= (int)[event deltaY] << 16;
+		{
+			// TODO: We could evaluate the full smooth scrolling
+			// information, but zoom and inventory scrolling don't
+			// do very well with that at the moment.
+			if ([event deltaY] > 0)
+				keyMask |= (+32) << 16;
+			else
+				keyMask |= (-32) << 16;
+		}
+
 		::C4GUI::MouseMove(button, x, y, keyMask, Application.isEditor ? viewport : NULL);
 	}
 	else if (viewport)
@@ -292,6 +303,15 @@ int32_t mouseButtonFromEvent(NSEvent* event, DWORD* modifierFlags)
 		[event modifierFlags] & NSShiftKeyMask,
 		false, NULL
 	);
+
+	C4Window* stdWindow = self.controller.stdWindow;
+	if (stdWindow->eKind == C4ConsoleGUI::W_Viewport)
+	{
+		if (type == KEYEV_Down)
+			Console.EditCursor.KeyDown([event keyCode]+CocoaKeycodeOffset, [event modifierFlags]);
+		else
+			Console.EditCursor.KeyUp([event keyCode]+CocoaKeycodeOffset, [event modifierFlags]);
+	}
 }
 
 - (void)keyDown:(NSEvent*)event
@@ -303,6 +323,31 @@ int32_t mouseButtonFromEvent(NSEvent* event, DWORD* modifierFlags)
 - (void)keyUp:(NSEvent*)event
 {
 	[self keyEvent:event withKeyEventType:KEYEV_Up];
+}
+
+- (void)flagsChanged:(NSEvent*)event
+{
+	// Send keypress/release events for relevant modifier keys
+	// keyDown() is not called for modifier keys.
+	C4KeyCode key = (C4KeyCode)([event keyCode] + CocoaKeycodeOffset);
+	int modifier = 0;
+	if (key == K_SHIFT_L || key == K_SHIFT_R)
+		modifier = NSShiftKeyMask;
+	if (key == K_CONTROL_L || key == K_CONTROL_R)
+		modifier = NSControlKeyMask;
+	if (key == K_COMMAND_L || key == K_COMMAND_R)
+		modifier = NSCommandKeyMask;
+	if (key == K_ALT_L || key == K_ALT_R)
+		modifier = NSAlternateKeyMask;
+
+	if (modifier != 0)
+	{
+		int modifierMask = [event modifierFlags];
+		if (modifierMask & modifier)
+			[self keyEvent:event withKeyEventType:KEYEV_Down];
+		else
+			[self keyEvent:event withKeyEventType:KEYEV_Up];
+	}
 }
 
 - (NSDragOperation) draggingEntered:(id<NSDraggingInfo>)sender
@@ -347,22 +392,23 @@ int32_t mouseButtonFromEvent(NSEvent* event, DWORD* modifierFlags)
 
 - (void) scrollWheel:(NSEvent *)event
 {
-	if (!Application.isEditor)
-		[self mouseEvent:event];
+	// Scroll viewport in editor mode
+	C4Viewport* viewport = self.controller.viewport;
+	if (Application.isEditor && viewport && !viewport->GetPlayerLock())
+	{
+		NSScrollView* scrollView = self.controller.scrollView;
+		NSPoint p = NSMakePoint(2*-[event deltaX]/abs(GBackWdt-viewport->ViewWdt), 2*-[event deltaY]/abs(GBackHgt-viewport->ViewHgt));
+		[scrollView.horizontalScroller setDoubleValue:scrollView.horizontalScroller.doubleValue+p.x];
+		[scrollView.verticalScroller setDoubleValue:scrollView.verticalScroller.doubleValue+p.y];
+		viewport->ViewPositionByScrollBars();
+		[self display];
+	}
 	else
 	{
-		C4Viewport* viewport = self.controller.viewport;
-		if (viewport)
-		{
-			NSScrollView* scrollView = self.controller.scrollView;
-			NSPoint p = NSMakePoint(2*-[event deltaX]/abs(GBackWdt-viewport->ViewWdt), 2*-[event deltaY]/abs(GBackHgt-viewport->ViewHgt));
-			[scrollView.horizontalScroller setDoubleValue:scrollView.horizontalScroller.doubleValue+p.x];
-			[scrollView.verticalScroller setDoubleValue:scrollView.verticalScroller.doubleValue+p.y];
-			viewport->ViewPositionByScrollBars();
-			[self display];
-		}
+		// If player lock is enabled or fullscreen: handle scroll
+		// event in-game.
+		[self mouseEvent:event];
 	}
-
 }
 
 - (void) mouseDown:        (NSEvent *)event {[self mouseEvent:event];}

@@ -8,23 +8,31 @@
 
 local grave_inscription;
 
+// Definition call: Get death message for clonk
+public func GetInscriptionForClonk(object dead)
+{
+	var msg = dead->GetObjCoreDeathMessage();
+	if (!msg) msg = dead.SpecialDeathMessage;
+	// Set grave inscription dependent on whether there is a death message.
+	if (msg && GetLength(msg))
+		msg = Format("$Epitaph$ %s.|\"%s\"", dead->GetName(), msg);
+	else 
+		msg = Format("$Epitaph$ %s.", dead->GetName());
+	return msg;
+}
+
 // Set the inscription for a dead clonk.
 public func SetInscription(object dead)
 {
-	var death_message = dead->GetObjCoreDeathMessage();
-	// Set grave inscription dependent on whether there is a death message.
-	if (death_message)
-		grave_inscription = Format("$Epitaph$ %s.|\"%s\"", dead->GetName(), death_message);
-	else 
-		grave_inscription = Format("$Epitaph$ %s.", dead->GetName());
-	return;
+	grave_inscription = GetInscriptionForClonk(dead);
+	return true;
 }
 
 // Set the inscription message directly.
 public func SetInscriptionMessage(string message)
 {
 	grave_inscription = message;
-	return;
+	return true;
 }
  
 public func IsInteractable() { return true; }
@@ -43,3 +51,4 @@ public func Interact(object clonk)
 
 local Name = "$Name$";
 local Description = "$Description$";
+local Plane = 300;

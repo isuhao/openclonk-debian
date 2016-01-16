@@ -6,23 +6,26 @@ static npc_tuesday;
 func Intro_Start()
 {
 	// Intro starts high up in the clouds
+	Music("TheSkylands");
 	LoadScenarioSection("Intro");
 	SetWind(-100);
-	SetSkyParallax(0, 20, 20, -10, 0);
+	this.intro_skyscroll_xdir = -10;
+	SetSkyParallax(0, 20, 20, this.intro_skyscroll_xdir, 0);
 	
-	this.plane = CreateObjectAbove(Plane, 500, 200);
+	this.plane = CreateObjectAbove(Airplane, 500, 200);
 	this.plane->SetColor(0xa04000);
 	this.pilot = CreateObjectAbove(Clonk, 100, 100, NO_OWNER);
 	this.pilot->MakeInvincible();
-	this.pilot->MakeNonFlammable();
 	this.pilot->SetSkin(2);
 	this.pilot->Enter(this.plane);
 	this.pilot->SetAction("Walk");
 
 	this.pilot->SetName("Pyrit");
 	this.pilot->SetColor(0xff0000);
+	this.pilot->SetAlternativeSkin("MaleBrownHair");
 	this.pilot->SetDir(DIR_Left);
 	this.pilot->SetObjectLayer(this.pilot);
+	this.pilot->AttachMesh(Hat, "skeleton_head", "main", Trans_Translate(5500, 0, 0)); // Hat is seen in the cockpit!
 
 	this.plane.FxIntPlaneTimer = this.Intro_PlaneTimer;
 	RemoveEffect("IntPlane", this.plane);
@@ -40,12 +43,20 @@ func Intro_Start()
 func Intro_PlaneTimer(...)
 {
 	// Plane flight overload: Just move sky and have plane do turbulent movement during initial part of intro
-	var rv = Call(Plane.FxIntPlaneTimer, ...);
+	var rv = Call(Airplane.FxIntPlaneTimer, ...);
 	if (g_intro_sky_moving)
 	{
 		if (!Random(4)) this.rdir = BoundBy((80+Random(21)-GetR())/5,-1,1);
 		SetXDir(); SetYDir(GetR()*2-GetY()+Random(5),10);
 	}
+	//propellor
+	var change = GetAnimationPosition(this.propanim) + 15 * 3;
+	if(change > GetAnimationLength("Propellor"))
+		change = (GetAnimationPosition(this.propanim) + 15 * 3) - GetAnimationLength("Propellor");
+	if(change < 0)
+		change = (GetAnimationLength("Propellor") - 15 * 3);
+
+	SetAnimationPosition(this.propanim, Anim_Const(change));
 	return rv;
 }
 
@@ -113,6 +124,8 @@ func Intro_9()
 func Intro_10()
 {
 	g_intro_sky_moving = false;
+	Schedule(this, "SetSkyParallax(0, 20, 20, ++this.intro_skyscroll_xdir, 0)", 10, -this.intro_skyscroll_xdir);
+	GetHero()->~PlaySoundScream();
 	this.plane.rdir = 0;
 	this.plane->StartInstantFlight(this.plane->GetR(), 15);
 	MessageBoxAll("$Intro10$", GetHero(), true); // aaaah

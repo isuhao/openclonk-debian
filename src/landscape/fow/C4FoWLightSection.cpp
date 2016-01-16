@@ -14,6 +14,9 @@
  */
 
 #include "C4Include.h"
+
+#ifndef USE_CONSOLE
+
 #include "C4FoWLightSection.h"
 #include "C4FoWBeamTriangle.h"
 #include "C4FoWBeam.h"
@@ -62,7 +65,7 @@ C4FoWLightSection::~C4FoWLightSection()
 inline void C4FoWLightSection::LightBallExtremePoint(float x, float y, float dir, float &lightX, float &lightY) const
 {
 	float d = sqrt(x * x + y * y);
-	float s = Min(float(pLight->getSize()), d / 5.0f);
+	float s = std::min(float(pLight->getSize()), d / 5.0f);
 	lightX = dir * y * s / d;
 	lightY = dir * -x * s / d;
 }
@@ -109,13 +112,13 @@ void C4FoWLightSection::Dirty(int32_t reach)
 {
 	for (C4FoWBeam *beam = pBeams; beam; beam = beam->getNext())
 		if (beam->getLeftEndY() >= reach || beam->getRightEndY() >= reach)
-			beam->Dirty(Min(beam->getLeftEndY(), beam->getRightEndY()));
+			beam->Dirty(std::min(beam->getLeftEndY(), beam->getRightEndY()));
 }
 
 C4FoWBeam *C4FoWLightSection::FindBeamLeftOf(int32_t x, int32_t y) const
 {
 	// Trivial
-	y = Max(y, 0);
+	y = std::max(y, 0);
 	if (!pBeams || !pBeams->isRight(x, y))
 		return NULL;
 	// Go through list
@@ -181,7 +184,7 @@ void C4FoWLightSection::Update(C4Rect RectIn)
 	while (beam && !beam->isLeft(rx, ry)) {
 		if (beam->isDirty() && beam->getLeftEndY() <= Rect.y + Rect.Hgt) {
 			endBeam = beam;
-			startY = Min(startY, beam->getLeftEndY());
+			startY = std::min(startY, beam->getLeftEndY());
 		}
 		beam = beam->getNext();
 	}
@@ -198,19 +201,14 @@ void C4FoWLightSection::Update(C4Rect RectIn)
 	if (endBeam->isRight(rx, ry)) {
 		rx = endBeam->getRightEndX() + 1;
 		ry = endBeam->getRightEndY();
-		// We want endBeam itself to get scanned
-		//assert(!endBeam->isLeft(rx, ry));
 	}
-#ifdef LIGHT_DEBUG
-	//LogSilentF("Right limit at %d, start line %d", 1000 * (iRX - iX) / (iRY - iY), iStartY);
-#endif
 
 	// Bottom of scan - either bound by rectangle or by light's reach
-	int32_t endY = Min(Rect.GetBottom(), pLight->getReach());
+	int32_t endY = std::min(Rect.GetBottom(), pLight->getReach());
 
 	// Scan lines
 	int32_t y;
-	for(y = Max(0, startY); y < endY; y++) {
+	for(y = std::max(0, startY); y < endY; y++) {
 
 		// We ignore all material up to a certain distance. This is the X
 		// range for that in this scan line
@@ -242,8 +240,8 @@ void C4FoWLightSection::Update(C4Rect RectIn)
 			beam->Dirty(y+1);
 
 			// Do a scan
-			int32_t xl = Max(beam->getLeftX(y), Bounds.x),
-			        xr = Min(beam->getRightX(y), Bounds.x+Bounds.Wdt-1);
+			int32_t xl = std::max(beam->getLeftX(y), Bounds.x),
+			        xr = std::min(beam->getRightX(y), Bounds.x+Bounds.Wdt-1);
 			for(int32_t x = xl; x <= xr; x++)
 			{
 				// Ignore material up to a certain distance (see above)
@@ -488,7 +486,7 @@ std::list<C4FoWBeamTriangle> C4FoWLightSection::CalculateTriangles(C4FoWRegion *
 		for (std::list<C4FoWBeamTriangle>::iterator it = result.begin(), nextIt; it != --result.end(); ++it)
 		{
 			nextIt = it; ++nextIt;
-			float level = Min(it->fanRY, nextIt->fanLY);
+			float level = std::min(it->fanRY, nextIt->fanLY);
 			if (level <= scanLevel || level >= bestLevel)
 				continue;
 			bestLevel = level;
@@ -507,7 +505,7 @@ std::list<C4FoWBeamTriangle> C4FoWLightSection::CalculateTriangles(C4FoWRegion *
 			C4FoWBeamTriangle tri = *it, nextTri = *nextIt;
 
 			// Skip ray pairs that do not match the current level (see above)
-			float level = Min(tri.fanRY, nextTri.fanLY);
+			float level = std::min(tri.fanRY, nextTri.fanLY);
 			if(level != bestLevel)
 				continue;
 
@@ -663,7 +661,7 @@ std::list<C4FoWBeamTriangle> C4FoWLightSection::CalculateTriangles(C4FoWRegion *
 #ifdef FAN_STEP_DEBUG
 				LogSilentF("Descend, b=%.010f, cross=%.010f/%.010f", b, crossX, crossY);
 #endif
-				assert(f);
+				assert(f); (void) f;
 				if (b <= threshold)
 				{
 					if (nextIt == --result.end())
@@ -704,14 +702,14 @@ std::list<C4FoWBeamTriangle> C4FoWLightSection::CalculateTriangles(C4FoWRegion *
 			}
 
 			// We should only reach this place with a descend collision
-			assert(descendCollision);
+			assert(descendCollision); (void) descendCollision;
 
 			// Should never be parallel -- otherwise we wouldn't be here
 			// in the first place.
 			bool f = find_cross(lightLX, lightLY, tri.fanRX, tri.fanRY,
 								lightRX, lightRY, nextTri.fanLX, nextTri.fanLY,
 								&crossX, &crossY);
-			assert(f);
+			assert(f); (void) f;
 #ifdef FAN_STEP_DEBUG
 			LogSilentF("Collision, cross=%.02f/%.02f", crossX, crossY);
 #endif
@@ -724,7 +722,7 @@ std::list<C4FoWBeamTriangle> C4FoWLightSection::CalculateTriangles(C4FoWRegion *
 			  continue;
 
 			// This should always follow an elimination, but better check
-			assert(beamCount > result.size());
+			assert(beamCount > static_cast<int>(result.size()));
 
 			C4FoWBeamTriangle newTriangle;
 			newTriangle.fanLX = crossX;
@@ -856,3 +854,5 @@ void C4FoWLightSection::CompileFunc(StdCompiler *pComp)
 		}
 	}
 }
+
+#endif

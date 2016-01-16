@@ -21,10 +21,14 @@ static g_is_initialized,      // intro started
         g_mave_oil_spoken,     // got the key offer from Mave
         g_got_maves_key,       // got the key from Mave
         g_dora_spoken,         // got rumour about oil lake from Clonko
-        g_clonko_spoken;       // got rumour about oil lake from Dora
+        g_clonko_spoken,       // got rumour about oil lake from Dora
+        g_oil_delivered;       // oil delivered, all done!
 
 func Initialize()
 {
+	npc_newton->SetAlternativeSkin("MaleBlackHair");
+	npc_pyrit->SetAlternativeSkin("MaleBrownHair");
+	npc_woody->SetAlternativeSkin("Youngster");
 	MakeRuinsOnDamage(); // see System.ocg/Ruins.c
 	PlaceGrass(40);
 	return true;
@@ -41,7 +45,7 @@ func DoInit(int first_player)
 		tree.ChopDown = Scenario.Tree_Chopdown;
 		//tree->ChopDown();
 	}
-	//g_attack_done = true; GetCrew()->SetPosition(npc_pyrit->GetX(), npc_pyrit->GetY()); GetCrew()->CreateObjectAbove(Plane); GetCrew()->CreateObjectAbove(MetalBarrel);
+	//g_attack_done = true; GetCrew()->SetPosition(npc_pyrit->GetX(), npc_pyrit->GetY()); GetCrew()->CreateObjectAbove(Airplane); GetCrew()->CreateObjectAbove(MetalBarrel);
 	//GetCrew()->CreateContents(Shovel);
 	return true;
 }
@@ -65,9 +69,9 @@ func InitializePlayer(int plr)
 	// Ensure flag has owner
 	if (g_flagpole && g_flagpole->GetOwner()<0) g_flagpole->SetOwner(plr);
 	// Late join stuff
-	if (g_pyrit_spoken) SetPlrKnowledge(plr, Plane);
+	if (g_pyrit_spoken) SetPlrKnowledge(plr, Airplane);
 	// Join intro listening or regular scenario
-	SetPlayerViewLock(true);
+	SetPlayerViewLock(plr, true);
 	JoinPlayer(plr);
 	// Scenario init
 	if (!g_is_initialized) g_is_initialized = DoInit(plr);
@@ -94,7 +98,8 @@ func JoinPlayer(int plr, object crew, bool no_placement)
 
 func StartAttackSequence(object chopping_clonk)
 {
-	return StartSequence("AttackSequence", 0, chopping_clonk);
+	if (!chopping_clonk) chopping_clonk = GetCursor(GetPlayerByIndex());
+	return StartSequence("Attack", 0, chopping_clonk);
 }
 
 
@@ -102,7 +107,8 @@ func StartAttackSequence(object chopping_clonk)
 
 func OnPlaneLoaded(object plane, object oil)
 {
-	if (!plane || !oil) return false; // disappeared in that one frame?
+	if (!plane || !oil || g_oil_delivered) return false; // disappeared in that one frame?
+	g_oil_delivered = true;
 	oil->Enter(plane);
 	g_goal->SetStageDone();
 	g_goal->SetFulfilled();

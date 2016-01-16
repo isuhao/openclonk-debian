@@ -11,10 +11,13 @@ static intro_init;
 
 protected func Initialize()
 {
+	// Show wealth in HUD.
+	GUI_Controller->ShowWealth();
+	
 	// Rules: team account and buying at flagpole.
 	CreateObject(Rule_TeamAccount);
 	CreateObject(Rule_BuyAtFlagpole);
-	
+
 	// Goal: transport the cannon to the top of the chine.
 	var cannon = CreateObjectAbove(Cannon, 96 + RandomX(-12, 12), LandscapeHeight() - 92);
 	var keg = cannon->CreateContents(PowderKeg);
@@ -23,14 +26,15 @@ protected func Initialize()
 	var cannon_goal = CreateObject(Goal_Script);
 	cannon_goal.Name = "$GoalName$";
 	cannon_goal.Description = "$GoalDesc$";
+	cannon_goal.Picture = Chine_GoalIcon;
 	// Add an effect to check whether the goal is fulfilled.
 	AddEffect("GoalCheck", nil, 100, 2, nil);
-	
+
 	// Initialize different parts of the scenario.
 	InitEnvironment(SCENPAR_MapSize, SCENPAR_Difficulty);
 	InitVegetation(SCENPAR_MapSize, SCENPAR_Difficulty);
 	InitAnimals(SCENPAR_Difficulty);
-	InitMaterial(4 - SCENPAR_Difficulty);	
+	InitMaterial(4 - SCENPAR_Difficulty);
 	return;
 }
 
@@ -152,16 +156,16 @@ private func InitEnvironment(int map_size, int difficulty)
 		Rockfall->SetExplosiveness(15);
 	}
 	Rockfall->SetSpawnDistance(250);
-	Rockfall->SetArea(Rectangle(128, 0, 128, LandscapeHeight() - 300));
+	Rockfall->SetArea(Shape->Rectangle(128, 0, 128, LandscapeHeight() - 300));
 	return;
 }
 
 private func InitVegetation(int map_size, int difficulty)
 {
 	// Define parts of the map for even distribution.
-	var top = Rectangle(0, 0, LandscapeWidth(), LandscapeHeight() / 3);
-	var middle = Rectangle(0, LandscapeHeight() / 3, LandscapeWidth(), LandscapeHeight() / 3);
-	var bottom = Rectangle(0, 2 * LandscapeHeight() / 3, LandscapeWidth(), LandscapeHeight() / 3);
+	var top = Shape->Rectangle(0, 0, LandscapeWidth(), LandscapeHeight() / 3);
+	var middle = Shape->Rectangle(0, LandscapeHeight() / 3, LandscapeWidth(), LandscapeHeight() / 3);
+	var bottom = Shape->Rectangle(0, 2 * LandscapeHeight() / 3, LandscapeWidth(), LandscapeHeight() / 3);
 	
 	// Place gras wherever possible.
 	PlaceGrass(100);

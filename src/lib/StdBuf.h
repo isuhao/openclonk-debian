@@ -40,7 +40,7 @@ public:
 
 	// *** Construction
 	// Standard constructor
-	StdBuf() : fRef(true), pData(NULL), iSize(0) { }
+	StdBuf() = default;
 
 	// Constructor from other buffer (copy construction):
 	// Will take over buffer ownership. Copies data if specified.
@@ -55,7 +55,6 @@ public:
 		else
 			Ref(Buf2);
 	}
-#ifdef HAVE_RVALUE_REF
 	StdBuf(const StdBuf & Buf2, bool fCopy = true)
 			: fRef(true), pData(NULL), iSize(0)
 	{
@@ -64,7 +63,7 @@ public:
 		else
 			Ref(Buf2);
 	}
-	StdBuf(StdBuf RREF Buf2, bool fCopy = false)
+	StdBuf(StdBuf &&Buf2, bool fCopy = false)
 			: fRef(true), pData(NULL), iSize(0)
 	{
 		if (fCopy)
@@ -74,7 +73,6 @@ public:
 		else
 			Ref(Buf2);
 	}
-#endif
 
 	// Set by constant data. Copies data if desired.
 	StdBuf(const void *pData, size_t iSize, bool fCopy = false)
@@ -88,22 +86,20 @@ public:
 		Clear();
 	}
 
-	ALLOW_TEMP_TO_REF(StdBuf)
-
 protected:
 
 	// Reference? Otherwise, this object holds the data.
-	bool fRef;
+	bool fRef = true;
 	// Data
 	union
 	{
-		const void *pData;
+		const void *pData = 0;
 		void *pMData;
 #if defined(_DEBUG)
 		char *szString; // for debugger preview
 #endif
 	};
-	unsigned int iSize;
+	unsigned int iSize = 0;
 
 public:
 
@@ -291,12 +287,10 @@ public:
 	{
 		Take(Buf2.GrabPointer(), Buf2.getSize());
 	}
-#ifdef HAVE_RVALUE_REF
-	void Take(StdBuf RREF Buf2)
+	void Take(StdBuf &&Buf2)
 	{
 		Take(Buf2.GrabPointer(), Buf2.getSize());
 	}
-#endif
 
 	// * File support
 	bool LoadFromFile(const char *szFile);
@@ -328,7 +322,7 @@ public:
 	bool operator != (const StdBuf &Buf2) const { return ! operator == (Buf2); }
 
 	// Set (as constructor: take if possible)
-	StdBuf &operator = (StdBuf RREF Buf2)
+	StdBuf &operator = (StdBuf &&Buf2)
 	{
 		if (Buf2.isRef()) Ref(Buf2); else Take(std::move(Buf2));
 		return *this;
@@ -368,8 +362,7 @@ class StdCopyBuf : public StdBuf
 {
 public:
 
-	StdCopyBuf()
-	{ }
+	StdCopyBuf() = default;
 
 	// Set by buffer. Copies data by default.
 	StdCopyBuf(const StdBuf &Buf2, bool fCopy = true)
@@ -380,14 +373,12 @@ public:
 	StdCopyBuf(const StdCopyBuf &Buf2, bool fCopy = true)
 			: StdBuf(Buf2.getRef(), fCopy)
 	{ }
-#ifdef HAVE_RVALUE_REF
-	StdCopyBuf(StdBuf RREF Buf2, bool fCopy = false)
+	StdCopyBuf(StdBuf &&Buf2, bool fCopy = false)
 			: StdBuf(std::move(Buf2), fCopy)
 	{ }
-	StdCopyBuf(StdCopyBuf RREF Buf2, bool fCopy = false)
+	StdCopyBuf(StdCopyBuf &&Buf2, bool fCopy = false)
 			: StdBuf(std::move(Buf2), fCopy)
 	{ }
-#endif
 
 	// Set by constant data. Copies data by default.
 	StdCopyBuf(const void *pData, size_t iSize, bool fCopy = true)
@@ -406,9 +397,7 @@ public:
 
 	// *** Construction
 
-	StdStrBuf()
-			: StdBuf()
-	{ }
+	StdStrBuf() = default;
 
 	// See StdBuf::StdBuf. Will take data if possible.
 	// The static_cast is necessary to pass a rvalue reference to
@@ -420,16 +409,14 @@ public:
 			: StdBuf(Buf2, fCopy)
 	{ }
 
-#ifdef HAVE_RVALUE_REF
 	// This constructor is important, because the compiler will create one
 	// otherwise, despite having two other constructors to choose from
 	StdStrBuf(const StdStrBuf & Buf2, bool fCopy = true)
 			: StdBuf(Buf2, fCopy)
 	{ }
-	StdStrBuf(StdStrBuf RREF Buf2, bool fCopy = false)
+	StdStrBuf(StdStrBuf &&Buf2, bool fCopy = false)
 			: StdBuf(std::move(Buf2), fCopy)
 	{ }
-#endif
 
 	// Set by constant data. References data by default, copies if specified.
 	explicit StdStrBuf(const char *pData, bool fCopy = false)
@@ -456,8 +443,6 @@ public:
 	StdStrBuf(const char *pData, size_t iLength, bool fCopy = false)
 			: StdBuf(pData, pData ? iLength + 1 : 0, fCopy)
 	{ }
-
-	ALLOW_TEMP_TO_REF(StdStrBuf)
 
 public:
 
@@ -486,9 +471,7 @@ public:
 	void Ref(const StdStrBuf &Buf2) { StdBuf::Ref(Buf2.getData(), Buf2.getSize()); }
 	StdStrBuf getRef() const { return StdStrBuf(getData(), getLength()); }
 	void Take(StdStrBuf & Buf2) { StdBuf::Take(Buf2); }
-#ifdef HAVE_RVALUE_REF
-	void Take(StdStrBuf RREF Buf2) { StdBuf::Take(std::move(Buf2)); }
-#endif
+	void Take(StdStrBuf &&Buf2) { StdBuf::Take(std::move(Buf2)); }
 	
 	void Clear() { StdBuf::Clear(); }
 	void Copy() { StdBuf::Copy(); }
@@ -534,7 +517,6 @@ public:
 	// Append string
 	void Append(const char *pnData, size_t iChars)
 	{
-		//assert(iChars <= std::strlen(pnData));
 		Grow(iChars);
 		Write(pnData, iChars, iSize - iChars - 1);
 	}
@@ -701,8 +683,7 @@ class StdCopyStrBuf : public StdStrBuf
 {
 public:
 
-	StdCopyStrBuf()
-	{ }
+	StdCopyStrBuf() = default;
 
 	explicit StdCopyStrBuf(const StdStrBuf &Buf2, bool fCopy = true)
 			: StdStrBuf(Buf2.getRef(), fCopy)
@@ -711,14 +692,12 @@ public:
 	StdCopyStrBuf(const StdCopyStrBuf &Buf2, bool fCopy = true)
 			: StdStrBuf(Buf2.getRef(), fCopy)
 	{ }
-#ifdef HAVE_RVALUE_REF
-	StdCopyStrBuf(StdStrBuf RREF Buf2, bool fCopy = false)
+	StdCopyStrBuf(StdStrBuf &&Buf2, bool fCopy = false)
 			: StdStrBuf(std::move(Buf2), fCopy)
 	{ }
-	StdCopyStrBuf(StdCopyStrBuf RREF Buf2, bool fCopy = false)
+	StdCopyStrBuf(StdCopyStrBuf &&Buf2, bool fCopy = false)
 			: StdStrBuf(std::move(Buf2), fCopy)
 	{ }
-#endif
 
 	// Set by constant data. Copies data if desired.
 	explicit StdCopyStrBuf(const char *pData, bool fCopy = true)

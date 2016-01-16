@@ -129,7 +129,8 @@ void C4StartupNetListEntry::SetRefQuery(const char *szAddress, enum QueryType eQ
 	// safety: clear previous
 	ClearRef();
 	// setup layout
-	((C4Facet &) pIcon->GetFacet()) = (const C4Facet &) C4Startup::Get()->Graphics.fctNetGetRef;
+	const_cast<C4Facet &>(reinterpret_cast<const C4Facet &>(pIcon->GetFacet()))
+	  = (const C4Facet &) C4Startup::Get()->Graphics.fctNetGetRef;
 	pIcon->SetAnimated(true, 1);
 	pIcon->SetBounds(rctIconLarge);
 	// init a new ref client to query
@@ -184,7 +185,7 @@ bool C4StartupNetListEntry::Execute()
 			{
 				fError = false;
 				sError.Clear();
-				((C4Facet &) pIcon->GetFacet()) = (const C4Facet &) C4Startup::Get()->Graphics.fctNetGetRef;
+				pIcon->SetFacet(C4Startup::Get()->Graphics.fctNetGetRef);
 				pIcon->SetAnimated(true, 1);
 				pIcon->SetBounds(rctIconLarge);
 				sInfoText[1].Copy(LoadResStr("IDS_NET_INFOQUERY"));
@@ -278,8 +279,6 @@ bool C4StartupNetListEntry::OnReference()
 
 C4GUI::Element* C4StartupNetListEntry::GetNextLower(int32_t sortOrder)
 {
-	// already have a next element? use this.
-	//if (GetNext()) return GetNext();
 	// search list for the next element of a lower sort order
 	for (C4GUI::Element *pElem = pList->GetFirst(); pElem; pElem = pElem->GetNext())
 	{
@@ -583,24 +582,22 @@ C4StartupNetDlg::C4StartupNetDlg() : C4StartupDlg(LoadResStr("IDS_DLG_NETSTART")
 	                            new C4GUI::DlgKeyCB<C4StartupNetDlg>(*this, &C4StartupNetDlg::KeyBack), C4CustomKey::PRIO_Dlg);
 	pKeyRefresh = new C4KeyBinding(C4KeyCodeEx(K_F5), "StartupNetReload", KEYSCOPE_Gui,
 	                               new C4GUI::DlgKeyCB<C4StartupNetDlg>(*this, &C4StartupNetDlg::KeyRefresh), C4CustomKey::PRIO_CtrlOverride);
-	//pKeyForward = new C4KeyBinding(C4KeyCodeEx(K_RIGHT), "StartupNetNext", KEYSCOPE_Gui, - blocks editbox
-	//< new C4GUI::DlgKeyCB<C4StartupNetDlg>(*this, &C4StartupNetDlg::KeyForward), C4CustomKey::PRIO_CtrlOverride);
 
 	// screen calculations
 	UpdateSize();
 	int32_t iIconSize = C4GUI_IconExWdt;
-	int32_t iButtonWidth,iCaptionFontHgt, iSideSize = Max<int32_t>(GetBounds().Wdt/6, iIconSize);
+	int32_t iButtonWidth,iCaptionFontHgt, iSideSize = std::max<int32_t>(GetBounds().Wdt/6, iIconSize);
 	int32_t iButtonHeight = C4GUI_ButtonHgt, iButtonIndent = GetBounds().Wdt/40;
 	::GraphicsResource.CaptionFont.GetTextExtent("<< BACK", iButtonWidth, iCaptionFontHgt, true);
 	iButtonWidth *= 3;
 	C4GUI::ComponentAligner caMain(GetClientRect(), 0,0, true);
 	C4GUI::ComponentAligner caButtonArea(caMain.GetFromBottom(caMain.GetHeight()/7),0,0);
 	int32_t iButtonAreaWdt = caButtonArea.GetWidth()*7/8;
-	iButtonWidth = Min<int32_t>(iButtonWidth, (iButtonAreaWdt - 8 * iButtonIndent)/4);
+	iButtonWidth = std::min<int32_t>(iButtonWidth, (iButtonAreaWdt - 8 * iButtonIndent)/4);
 	iButtonIndent = (iButtonAreaWdt - 4 * iButtonWidth) / 8;
 	C4GUI::ComponentAligner caButtons(caButtonArea.GetCentered(iButtonAreaWdt, iButtonHeight),iButtonIndent,0);
-	C4GUI::ComponentAligner caLeftBtnArea(caMain.GetFromLeft(iSideSize), Min<int32_t>(caMain.GetWidth()/20, (iSideSize-C4GUI_IconExWdt)/2), caMain.GetHeight()/40);
-	C4GUI::ComponentAligner caConfigArea(caMain.GetFromRight(iSideSize), Min<int32_t>(caMain.GetWidth()/20, (iSideSize-C4GUI_IconExWdt)/2), caMain.GetHeight()/40);
+	C4GUI::ComponentAligner caLeftBtnArea(caMain.GetFromLeft(iSideSize), std::min<int32_t>(caMain.GetWidth()/20, (iSideSize-C4GUI_IconExWdt)/2), caMain.GetHeight()/40);
+	C4GUI::ComponentAligner caConfigArea(caMain.GetFromRight(iSideSize), std::min<int32_t>(caMain.GetWidth()/20, (iSideSize-C4GUI_IconExWdt)/2), caMain.GetHeight()/40);
 
 	// left button area: Switch between chat and game list
 	if (C4ChatDlg::IsChatEnabled())
@@ -640,11 +637,8 @@ C4StartupNetDlg::C4StartupNetDlg() : C4StartupDlg(LoadResStr("IDS_DLG_NETSTART")
 	pSearchFieldEdt = new C4GUI::CallbackEdit<C4StartupNetDlg>(caSearch.GetAll(), this, &C4StartupNetDlg::OnSearchFieldEnter);
 	pSearchFieldEdt->SetToolTip(szSearchTip);
 	pSheetGameList->AddElement(pSearchFieldEdt);
-	//const char *szGameSelListTip = LoadResStr("IDS_NET_GAMELIST_INFO"); disabled this tooltip, it's mainly disturbing when browsing the list
-	//pGameListLbl->SetToolTip(szGameSelListTip);
 	pSheetGameList->AddElement(pGameListLbl);
 	pGameSelList = new C4GUI::ListBox(caGameList.GetFromTop(caGameList.GetHeight() - iCaptHgt));
-	//pGameSelList->SetToolTip(szGameSelListTip);
 	pGameSelList->SetDecoration(true, NULL, true, true);
 	pGameSelList->UpdateElementPositions();
 	pGameSelList->SetSelectionDblClickFn(new C4GUI::CallbackHandler<C4StartupNetDlg>(this, &C4StartupNetDlg::OnSelDblClick));
@@ -737,7 +731,6 @@ C4StartupNetDlg::~C4StartupNetDlg()
 	Application.Remove(this);
 	if (pMasterserverClient) delete pMasterserverClient;
 	// dtor
-	//delete pKeyForward;
 	delete pKeyBack;
 	delete pKeyRefresh;
 }
@@ -828,7 +821,9 @@ void C4StartupNetDlg::OnBtnInternet(C4GUI::Control *btn)
 void C4StartupNetDlg::OnBtnRecord(C4GUI::Control *btn)
 {
 	// toggle league signup flag
-	bool fCheck = Config.General.DefRec = Game.Record = !Game.Record;
+	bool fCheck = !Game.Record;
+	Game.Record = fCheck;
+	Config.General.DefRec = fCheck;
 	btnRecord->SetIcon(fCheck ? C4GUI::Ico_Ex_RecordOn : C4GUI::Ico_Ex_RecordOff);
 }
 
@@ -946,9 +941,6 @@ void C4StartupNetDlg::UpdateSelection(bool fUpdateCollapsed)
 	if (fUpdatingList) return;
 	// in collapsed view, updating the selection may uncollapse something
 	if (fIsCollapsed && fUpdateCollapsed) UpdateCollapsed();
-	// 2do
-	// no selection: join button disabled
-	//pJoinBtn->SetEnabled(false);
 }
 
 void C4StartupNetDlg::UpdateDlgMode()
@@ -1109,7 +1101,7 @@ bool C4StartupNetDlg::DoOK()
 	SCopy("Objects.ocd", Game.DefinitionFilenames);
 	Game.NetworkActive = true;
 	Game.fObserve = false;
-	Game.pJoinReference = pRef;
+	Game.pJoinReference.reset(pRef);
 	// start with this set!
 	Application.OpenGame();
 	return true;
@@ -1129,7 +1121,7 @@ void C4StartupNetDlg::DoRefresh()
 	if (tLastRefresh && tNow < tLastRefresh + C4NetMinRefreshInterval)
 	{
 		// avoid hammering on refresh key
-		C4GUI::GUISound("Error");
+		C4GUI::GUISound("UI::Error");
 		return;
 	}
 	tLastRefresh = tNow;

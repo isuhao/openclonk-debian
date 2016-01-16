@@ -52,12 +52,12 @@ public func DrawCavern(proplist map)
     var map_top = {Algo = MAPALGO_Rect, X = 0, Y = 0, Wdt = wdt, Hgt = cavern_hgt};
     
     // The top part is mainly granite and rock.
-    map->DrawMaterial("Earth-earth_rough", map_top, 2, 16);
-	map->DrawMaterial("Earth-earth_dry", map_top, 2, 16);
-	map->DrawMaterial("Earth-earth_midsoil", map_top, 4, 12);
+    map->DrawMaterial("Earth-earth_root", map_top, 2, 16);
+	map->DrawMaterial("Earth-earth_spongy", map_top, 2, 16);
+	map->DrawMaterial("Earth-earth", map_top, 4, 12);
 	map->DrawMaterial("Granite", map_top, 3, 60);
 	map->DrawMaterial("Tunnel", map_top, 2, 16);
-	map->DrawMaterial("Rock-rock_cracked", map_top, 3, 20);
+	map->DrawMaterial("Rock-rock", map_top, 3, 20);
 	map->DrawMaterial("Rock", map_top, 3, 20);
    
     // The cavern is located a bit to the left and can be entered from the left side of the map.
@@ -74,7 +74,7 @@ public func DrawCavern(proplist map)
     map->DrawMaterial("Brick", cavern_ground, 3, 80);
 
     // Draw the left tunnel.
-    var tunnel_left = {Algo = MAPALGO_Polygon, X = [0, wdt / 2 - 30], Y = [cavern_hgt, cavern_hgt], Wdt = -5, Open = 1, Empty = 1};
+    var tunnel_left = {Algo = MAPALGO_Polygon, X = [0, wdt / 2 - 30], Y = [cavern_hgt, cavern_hgt], Wdt = -6, Open = 1, Empty = 1};
     tunnel_left = {Algo = MAPALGO_Or, Op = [tunnel_left, {Algo = MAPALGO_Turbulence, Amplitude = 6, Scale = 8, Iterations = 4, Seed = Random(65536), Op = tunnel_left}]};
     tunnel_left = {Algo = MAPALGO_And, Op = [tunnel_left, map_top]};
     map->Draw("Tunnel", tunnel_left);
@@ -106,12 +106,12 @@ public func DrawMiddle(proplist map, int size)
     var map_middle = {Algo = MAPALGO_Rect, X = 0, Y = 25, Wdt = wdt, Hgt = size};
     
     // Fill the middle part with resources.
-    map->DrawMaterial("Earth-earth_rough", map_middle, 2, 16);
-	map->DrawMaterial("Earth-earth_dry", map_middle, 2, 16);
-	map->DrawMaterial("Earth-earth_midsoil", map_middle, 4, 12);
+    map->DrawMaterial("Earth-earth_root", map_middle, 2, 16);
+	map->DrawMaterial("Earth-earth_spongy", map_middle, 2, 16);
+	map->DrawMaterial("Earth-earth", map_middle, 4, 12);
 	map->DrawMaterial("Granite", map_middle, 3, 10);
 	map->DrawMaterial("Tunnel", map_middle, 2, 8);
-	map->DrawMaterial("Rock-rock_cracked", map_middle, 3, 8);
+	map->DrawMaterial("Rock-rock", map_middle, 3, 8);
 	map->DrawMaterial("Rock", map_middle, 3, 8);
    	map->DrawMaterial("Ore", map_middle, 6, 16);
    	map->DrawMaterial("Firestone", map_middle, 5, 12);
@@ -134,9 +134,9 @@ public func DrawMiddle(proplist map, int size)
 	map->Draw("Tunnel", tunnel);
 	var tunnel_ground = {Algo = MAPALGO_Border, Bottom = -2, Op = tunnel};
 	map->Draw("Earth", tunnel_ground);
-	map->DrawMaterial("Earth-earth_rough", tunnel_ground, 2, 16);
-	map->DrawMaterial("Earth-earth_dry", tunnel_ground, 2, 16);
-	map->DrawMaterial("Earth-earth_midsoil", tunnel_ground, 4, 12);
+	map->DrawMaterial("Earth-earth_root", tunnel_ground, 2, 16);
+	map->DrawMaterial("Earth-earth_spongy", tunnel_ground, 2, 16);
+	map->DrawMaterial("Earth-earth", tunnel_ground, 4, 12);
 	return;
 }
 
@@ -152,11 +152,11 @@ public func DrawGemVeins(proplist map, int size, int difficulty)
     // Fill the bottom with mostly granite materials.
     map->Draw("Granite", map_bottom);
     map->DrawMaterial("Firestone", map_bottom, 2, 6);
-	map->DrawMaterial("Rock-rock_cracked", map_bottom, 3, 12);
+	map->DrawMaterial("Rock-rock", map_bottom, 3, 12);
 	map->DrawMaterial("Rock", map_bottom, 3, 12);
-	map->DrawMaterial("Earth-earth_rough", map_bottom, 2, 8);
-	map->DrawMaterial("Earth-earth_dry", map_bottom, 2, 8);
-	map->DrawMaterial("Earth-earth_midsoil", map_bottom, 4, 6);
+	map->DrawMaterial("Earth-earth_root", map_bottom, 2, 8);
+	map->DrawMaterial("Earth-earth_spongy", map_bottom, 2, 8);
+	map->DrawMaterial("Earth-earth", map_bottom, 4, 6);
 	
 	// Draw a labyrinth using nodes and connections and make it out of tunnel.
 	var nodes = FindVeinNodes(map, size + 12, size / 2);
@@ -173,8 +173,8 @@ public func DrawGemVeins(proplist map, int size, int difficulty)
 		if (node.conn_count == 0)
 			continue;
 		var tunnel = node.tunnels[0];
-		var gem_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Left = 1, Right = 1, Op = tunnel}, {Algo = MAPALGO_Rect, X = 0, Y = node.Y - 4, Wdt = wdt, Hgt = 10}]};
-		var granite_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Left = 2, Right = 2, Op = tunnel}, {Algo = MAPALGO_Rect, X = 0, Y = node.Y - 6, Wdt = wdt, Hgt = 2}]};
+		var gem_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Left = 2, Right = 2, Op = tunnel}, {Algo = MAPALGO_Rect, X = 0, Y = node.Y - 3, Wdt = wdt, Hgt = 9}]};
+		var granite_border = {Algo = MAPALGO_And, Op = [{Algo = MAPALGO_Border, Left = 2, Right = 2, Op = tunnel}, {Algo = MAPALGO_Rect, X = 0, Y = node.Y - 5, Wdt = wdt, Hgt = 2}]};
 		map->Draw(["Ruby", "Amethyst"][Random(2)], gem_border);
 		map->Draw("Granite", granite_border);
 		cnt++;
@@ -185,7 +185,19 @@ public func DrawGemVeins(proplist map, int size, int difficulty)
 	var tunnels = Duplicate("Tunnel");
 	var tunnels_algo = {Algo = MAPALGO_Layer, Layer = tunnels};
 	tunnels_algo = {Algo = MAPALGO_And, Op = [tunnels_algo, {Algo = MAPALGO_Rect, X = 0, Y = hgt - water_level, Wdt = wdt, Hgt = water_level}]}; 
-	map->Draw("Water", tunnels_algo);	
+	map->Draw("Water", tunnels_algo);
+	
+	// On insane the background material of the bottom part is water.    
+    if (difficulty == 3)
+    {
+    	for (var x = 0; x < wdt; x++)
+    	{
+    		for (var y = water_level; y < hgt; y++)
+    		{
+    			// TODO: wait for background pixel setting.
+    		}   
+    	}
+    }
     return;
 }
 
@@ -306,18 +318,4 @@ public func IsLineOverlap(int x1, int y1, int x2, int y2, int x3, int y3, int x4
 	if (!c) 
 		return !a && Inside(x3, x1, x2) && Inside(y3, y1, y2); // lines are parallel
 	return a * c >= 0 && !(a * a / (c * c + 1)) && b * c >= 0 && !(b * b/(c * c + 1));
-}
-
-// Draws some material inside an existing mask.
-public func DrawMaterial(string mat, proplist onto_mask, int speck_size, int ratio)
-{
-	if (!speck_size)
-		speck_size = 4;
-	if (!ratio)
-		ratio = 15;
-	// Use random checker algorithm to draw patches of the material. 
-	var rnd_checker = {Algo = MAPALGO_RndChecker, Ratio = ratio, Wdt = speck_size, Hgt = speck_size};
-	rnd_checker = {Algo = MAPALGO_Turbulence, Iterations = 4, Op = rnd_checker};
-	var algo = {Algo = MAPALGO_And, Op = [onto_mask, rnd_checker]};
-	return Draw(mat, algo);
 }

@@ -142,31 +142,6 @@ void StdMeshLoader::StdMeshXML::LoadGeometry(StdMesh& mesh, std::vector<StdSubMe
 				vertices[i].x = RequireFloatAttribute(position_elem, "x");
 				vertices[i].y = RequireFloatAttribute(position_elem, "y");
 				vertices[i].z = RequireFloatAttribute(position_elem, "z");
-
-				const float d = std::sqrt(vertices[i].x*vertices[i].x
-						                      + vertices[i].y*vertices[i].y
-						                      + vertices[i].z*vertices[i].z);
-
-				// Construct BoundingBox
-				StdMeshBox& BoundingBox = mesh.BoundingBox;
-				if (i == 0 && !hasVertices)
-				{
-					// First vertex
-					BoundingBox.x1 = BoundingBox.x2 = vertices[i].x;
-					BoundingBox.y1 = BoundingBox.y2 = vertices[i].y;
-					BoundingBox.z1 = BoundingBox.z2 = vertices[i].z;
-					mesh.BoundingRadius = d;
-				}
-				else
-				{
-					BoundingBox.x1 = Min(vertices[i].x, BoundingBox.x1);
-					BoundingBox.x2 = Max(vertices[i].x, BoundingBox.x2);
-					BoundingBox.y1 = Min(vertices[i].y, BoundingBox.y1);
-					BoundingBox.y2 = Max(vertices[i].y, BoundingBox.y2);
-					BoundingBox.z1 = Min(vertices[i].z, BoundingBox.z1);
-					BoundingBox.z2 = Max(vertices[i].z, BoundingBox.z2);
-					mesh.BoundingRadius = Max(mesh.BoundingRadius, d);
-				}
 			}
 
 			if(attributes & NORMALS)
@@ -185,6 +160,36 @@ void StdMeshLoader::StdMeshXML::LoadGeometry(StdMesh& mesh, std::vector<StdSubMe
 				TiXmlElement* texcoord_elem = RequireFirstChild(vertex_elem, "texcoord");
 				vertices[i].u = RequireFloatAttribute(texcoord_elem, "u");
 				vertices[i].v = RequireFloatAttribute(texcoord_elem, "v");
+			}
+
+			vertices[i] = OgreToClonk::TransformVertex(vertices[i]);
+
+			if (attributes & POSITIONS)
+			{
+				const float d = std::sqrt(vertices[i].x*vertices[i].x
+				                        + vertices[i].y*vertices[i].y
+				                        + vertices[i].z*vertices[i].z);
+
+				// Construct BoundingBox
+				StdMeshBox& BoundingBox = mesh.BoundingBox;
+				if (i == 0 && !hasVertices)
+				{
+					// First vertex
+					BoundingBox.x1 = BoundingBox.x2 = vertices[i].x;
+					BoundingBox.y1 = BoundingBox.y2 = vertices[i].y;
+					BoundingBox.z1 = BoundingBox.z2 = vertices[i].z;
+					mesh.BoundingRadius = d;
+				}
+				else
+				{
+					BoundingBox.x1 = std::min(vertices[i].x, BoundingBox.x1);
+					BoundingBox.x2 = std::max(vertices[i].x, BoundingBox.x2);
+					BoundingBox.y1 = std::min(vertices[i].y, BoundingBox.y1);
+					BoundingBox.y2 = std::max(vertices[i].y, BoundingBox.y2);
+					BoundingBox.z1 = std::min(vertices[i].z, BoundingBox.z1);
+					BoundingBox.z2 = std::max(vertices[i].z, BoundingBox.z2);
+					mesh.BoundingRadius = std::max(mesh.BoundingRadius, d);
+				}
 			}
 		}
 
@@ -220,20 +225,12 @@ void StdMeshLoader::StdMeshXML::LoadBoneAssignments(StdMesh& mesh, std::vector<S
 
 		if (!bone) Error(FormatString("There is no such bone with ID %d", BoneID), vertexboneassignment_elem);
 
-		// TODO: Maybe implement a table as in the binary version?
-		// Build bone handle->index quick access table
-		//std::map<uint16_t, size_t> bone_lookup;
-		//for (size_t i = 0; i < mesh->GetSkeleton().GetNumBones(); ++i)
-		//{
-		//	bone_lookup[mesh->GetSkeleton().GetBone(i).ID] = i;
-		//}
-
 		// Find first bone assignment with a zero weight (i.e. is unused)
 		StdSubMesh::Vertex& vertex = vertices[VertexIndex];
 		// Check quickly if all weight slots are used
 		if (vertex.bone_weight[StdMeshVertex::MaxBoneWeightCount - 1] != 0)
 		{
-			Error(FormatString("Vertex %d is influenced by more than %d bones", VertexIndex, StdMeshVertex::MaxBoneWeightCount), vertexboneassignment_elem);
+			Error(FormatString("Vertex %d is influenced by more than %d bones", VertexIndex, static_cast<int>(StdMeshVertex::MaxBoneWeightCount)), vertexboneassignment_elem);
 		}
 		for (size_t weight_index = 0; weight_index < StdMeshVertex::MaxBoneWeightCount; ++weight_index)
 		{
@@ -325,9 +322,9 @@ StdMesh *StdMeshLoader::LoadMeshXml(const char* xml_data, size_t size, const Std
 		}
 	}
 
-	// We allow bounding box to be empty if it's only due to X direction since
+	// We allow bounding box to be empty if it's only due to Z direction since
 	// this is what goes inside the screen in Clonk.
-	if(mesh->BoundingBox.y1 == mesh->BoundingBox.y2 || mesh->BoundingBox.z1 == mesh->BoundingBox.z2)
+	if(mesh->BoundingBox.x1 == mesh->BoundingBox.x2 || mesh->BoundingBox.y1 == mesh->BoundingBox.y2)
 		xml.Error(StdCopyStrBuf("Bounding box is empty"), mesh_elem);
 
 	// Read skeleton, if any
@@ -536,6 +533,7 @@ void StdMeshSkeletonLoader::LoadSkeletonXml(const char* groupname, const char* f
 					frame.Transformation.scale = s;
 					frame.Transformation.rotate = StdMeshQuaternion::AngleAxis(angle, r);
 					frame.Transformation.translate = bone->InverseTransformation.rotate * (bone->InverseTransformation.scale * d);
+					frame.Transformation = OgreToClonk::TransformTransformation(frame.Transformation);
 				}
 			}
 		}
@@ -549,13 +547,14 @@ void StdMeshSkeletonLoader::LoadSkeletonXml(const char* groupname, const char* f
 	// transformations, not bone+parent.
 	for (unsigned int i = 0; i < Skeleton->GetNumBones(); ++i)
 	{
+		// Apply parent transformation
 		if (Skeleton->Bones[i]->Parent)
-		{
-			// Apply parent transformation
-			Skeleton->Bones[i]->Transformation = Skeleton->Bones[i]->Parent->Transformation * Skeleton->Bones[i]->Transformation;
-			// Update inverse
-			Skeleton->Bones[i]->InverseTransformation = StdMeshTransformation::Inverse(Skeleton->Bones[i]->Transformation);
-		}
+			Skeleton->Bones[i]->Transformation = Skeleton->Bones[i]->Parent->Transformation * OgreToClonk::TransformTransformation(Skeleton->Bones[i]->Transformation);
+		else
+			Skeleton->Bones[i]->Transformation = OgreToClonk::TransformTransformation(Skeleton->Bones[i]->Transformation);
+
+		// Update inverse
+		Skeleton->Bones[i]->InverseTransformation = StdMeshTransformation::Inverse(Skeleton->Bones[i]->Transformation);
 	}
 
 	StoreSkeleton(groupname, filename, Skeleton);

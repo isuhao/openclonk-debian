@@ -29,7 +29,7 @@ struct FLOAT_RECT { float left,right,top,bottom; };
 class C4Rect
 {
 public:
-	int32_t x,y,Wdt,Hgt;
+	int32_t x = 0, y = 0, Wdt = 0, Hgt = 0;
 public:
 	void Set(int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt);
 	void Default();
@@ -55,13 +55,16 @@ public:
 	void Enlarge(int32_t iBy)
 	{ Enlarge(iBy, iBy); }
 
-	int32_t GetMiddleX() { return x+Wdt/2; }
-	int32_t GetMiddleY() { return y+Hgt/2; }
-	int32_t GetBottom() { return y+Hgt; }
+	int32_t GetMiddleX() const { return x+Wdt/2; }
+	int32_t GetMiddleY() const { return y + Hgt / 2; }
+	int32_t GetBottom() const { return y + Hgt; }
+	int32_t GetTop() const { return y; }
+	int32_t GetLeft() const { return x; }
+	int32_t GetRight() const { return x + Wdt; }
 
+	C4Rect() = default;
 	C4Rect(int32_t tx, int32_t ty, int32_t twdt, int32_t thgt) // ctor
 	{ x=tx; y=ty; Wdt=twdt; Hgt=thgt; }
-	C4Rect() { } // default ctor; doesn't initialize
 	C4Rect(const FLOAT_RECT &rcfOuter) // set to surround floating point rectangle
 	{
 		x=static_cast<int32_t>(rcfOuter.left); y=static_cast<int32_t>(rcfOuter.top);

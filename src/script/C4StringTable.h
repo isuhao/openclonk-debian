@@ -50,11 +50,10 @@ public:
 	C4RefCntPointer(T* p): p(p) { IncRef(); }
 	C4RefCntPointer(): p(0) { }
 	template <class U> C4RefCntPointer(const C4RefCntPointer<U> & r): p(r.p) { IncRef(); }
-#ifdef HAVE_RVALUE_REF
 	// Move constructor
-	template <class U> C4RefCntPointer(C4RefCntPointer<U> RREF r): p(r.p) { r.p = 0; }
+	template <class U> C4RefCntPointer(C4RefCntPointer<U> &&r): p(r.p) { r.p = 0; }
 	// Move assignment
-	template <class U> C4RefCntPointer& operator = (C4RefCntPointer<U> RREF r)
+	template <class U> C4RefCntPointer& operator = (C4RefCntPointer<U> &&r)
 	{
 		if (p != r.p)
 		{
@@ -64,7 +63,6 @@ public:
 		}
 		return *this;
 	}
-#endif
 	~C4RefCntPointer() { DecRef(); }
 	template <class U> C4RefCntPointer& operator = (U* new_p)
 	{
@@ -113,17 +111,15 @@ template<typename T> class C4Set
 		*p = e;
 		return p;
 	}
-#ifdef HAVE_RVALUE_REF
 	T * AddInternal(T && e)
 	{
 		T * p = GetPlaceFor(e);
 		*p = std::move(e);
 		return p;
 	}
-#endif
 	void MaintainCapacity()
 	{
-		if (Capacity - Size < Max(2u, Capacity / 4))
+		if (Capacity - Size < std::max(2u, Capacity / 4))
 		{
 			unsigned int OCapacity = Capacity;
 			Capacity *= 2;
@@ -198,7 +194,6 @@ public:
 		++Size;
 		return r;
 	}
-#ifdef HAVE_RVALUE_REF
 	T * Add(T && e)
 	{
 		MaintainCapacity();
@@ -206,7 +201,6 @@ public:
 		++Size;
 		return r;
 	}
-#endif
 	template<typename H> void Remove(H e)
 	{
 		unsigned int h = Hash(e);
@@ -308,6 +302,8 @@ enum C4PropertyName
 	P_Delay,
 	P_X,
 	P_Y,
+	P_x,
+	P_y,
 	P_Wdt,
 	P_Hgt,
 	P_OffX,
@@ -344,6 +340,7 @@ enum C4PropertyName
 	P_Blasted,				// unused?
 	P_IncineratingObj,		// unused?
 	P_Plane,
+	P_BorderBound,
 	P_SolidMaskPlane,
 	P_Tooltip,
 	P_Placement,
@@ -353,6 +350,21 @@ enum C4PropertyName
 	P_Global,
 	P_Scenario,
 	P_JumpSpeed,
+	P_BackgroundColor,
+	P_Decoration,
+	P_Symbol,
+	P_Target,
+	P_Std,
+	P_Text,
+	P_GraphicsName,
+	P_ID,
+	P_OnClick,
+	P_OnMouseIn,
+	P_OnMouseOut,
+	P_OnClose,
+	P_Style,
+	P_Player,
+	P_Margin,
 	P_Algo,
 	P_Layer,
 	P_Seed,
@@ -383,12 +395,51 @@ enum C4PropertyName
 	P_Phase,
 	P_Stretch,
 	P_CollisionVertex,
+	P_CollisionDensity,
 	P_OnCollision,
 	P_Distance,
 	P_Smoke,
 	P_Source,
 	P_Color,
 	P_EditCursorCommands,
+	P_IsPointContained,
+	P_GetRandomPoint,
+	P_Type,
+	P_Reverb_Density,
+	P_Reverb_Diffusion,
+	P_Reverb_Gain,
+	P_Reverb_GainHF,
+	P_Reverb_Decay_Time,
+	P_Reverb_Decay_HFRatio,
+	P_Reverb_Reflections_Gain,
+	P_Reverb_Reflections_Delay,
+	P_Reverb_Late_Reverb_Gain,
+	P_Reverb_Late_Reverb_Delay,
+	P_Reverb_Air_Absorption_GainHF,
+	P_Reverb_Room_Rolloff_Factor,
+	P_Reverb_Decay_HFLimit,
+	P_Echo_Delay,
+	P_Echo_LRDelay,
+	P_Echo_Damping,
+	P_Echo_Feedback,
+	P_Echo_Spread,
+	P_Equalizer_Low_Gain,
+	P_Equalizer_Low_Cutoff,
+	P_Equalizer_Mid1_Gain,
+	P_Equalizer_Mid1_Center,
+	P_Equalizer_Mid1_Width,
+	P_Equalizer_Mid2_Gain,
+	P_Equalizer_Mid2_Center,
+	P_Equalizer_Mid2_Width,
+	P_Equalizer_High_Gain,
+	P_Equalizer_High_Cutoff,
+	P_LightOffset,
+	P_PlayList,
+	P_MusicBreakMin,
+	P_MusicBreakMax,
+	P_MusicBreakChance,
+	P_MusicMaxPositionMemory,
+	P_InflameLandscape,
 // Default Action Procedures
 	DFA_WALK,
 	DFA_FLIGHT,

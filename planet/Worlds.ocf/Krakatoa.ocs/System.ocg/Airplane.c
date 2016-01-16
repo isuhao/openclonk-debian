@@ -1,19 +1,16 @@
 // The airplane acts as a container for gold bars and starting material.
 
-#appendto Plane
+#appendto Airplane
 
 
 public func IsContainer() { return true; }
 
-private func MaxContentsCount()
-{
-	return 25;
-}
+local MaxContentsCount = 25;
 
 protected func RejectCollect(id object_id, object obj)
 {
 	// Objects can collected if gold bar and not above max contents count.
-	if (ContentsCount() < MaxContentsCount() && object_id == GoldBar)
+	if (ContentsCount() < MaxContentsCount && object_id == GoldBar)
 		return false;
 	return true;
 }

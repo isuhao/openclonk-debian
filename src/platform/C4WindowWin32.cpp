@@ -45,7 +45,7 @@
 #define ConsoleDlgWindowStyle (WS_VISIBLE | WS_POPUP | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX)
 
 /** Convert certain keys to unix scancodes (those that differ from unix scancodes) */
-static void ConvertToUnixScancode(WPARAM wParam, C4KeyCode *scancode)
+static void ConvertToUnixScancode(WPARAM wParam, C4KeyCode *scancode, bool extended)
 {
 	C4KeyCode &s = *scancode;
 
@@ -68,6 +68,7 @@ static void ConvertToUnixScancode(WPARAM wParam, C4KeyCode *scancode)
 	case VK_PAUSE:		s = K_PAUSE; break;
 	case VK_PRINT:		s = K_PRINT; break;
 	case VK_RCONTROL:	s = K_CONTROL_R; break;
+	case VK_CONTROL:	s = (extended ? K_CONTROL_R : K_CONTROL_L); break;
 	case VK_NUMLOCK:	s = K_NUM; break;
 	case VK_NUMPAD1:	s = K_NUM1; break;
 	case VK_NUMPAD2:	s = K_NUM2; break;
@@ -92,7 +93,8 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
 	// compute scancode
 	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
-	ConvertToUnixScancode(wParam, &scancode);
+	bool extended = ((lParam & 0x01000000) != 0);
+	ConvertToUnixScancode(wParam, &scancode, extended);
 
 	// Process message
 	switch (uMsg)
@@ -160,12 +162,17 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 	case WM_SYSKEYDOWN:
 		if (wParam == 18) break;
 		if (Game.DoKeyboardInput(scancode, KEYEV_Down, !!(lParam & 0x20000000), GetKeyState(VK_CONTROL) < 0, GetKeyState(VK_SHIFT) < 0, !!(lParam & 0x40000000), NULL))
+		{
+			// Remove handled message from queue to prevent Windows "standard" sound for unprocessed system message
+			MSG msg;
+			PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE);
 			return 0;
+		}
 		break;
 	case WM_CHAR:
 	{
 		// UTF-8 has 1 to 4 data bytes, and we need a terminating \0
-		char c[5] = {0};
+		char c[5] = {0,0,0,0,0};
 		if(!WideCharToMultiByte(CP_UTF8, 0L, reinterpret_cast<LPCWSTR>(&wParam), 1, c, 4, 0, 0))
 			return 0;
 		// GUI: forward
@@ -225,6 +232,13 @@ LRESULT APIENTRY FullScreenWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 	case WM_INPUTLANGCHANGE:
 		::Application.OnKeyboardLayoutChanged();
 		break;
+	case WM_SYSCOMMAND:
+		// The user pressed Alt to open the system menu. This enters a modal
+		// loop which stops us from event processing, so prevent it. Users
+		// can still open the system menu by clicking the window's icon.
+		if ((wParam & 0xFFF0) == SC_KEYMENU && lParam == 0)
+			return 0;
+		break;
 	}
 	return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
@@ -238,7 +252,8 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 	// compute scancode
 	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
-	ConvertToUnixScancode(wParam, &scancode);
+	bool extended = ((lParam & 0x01000000) != 0);
+	ConvertToUnixScancode(wParam, &scancode, extended);
 
 	// Process message
 	switch (uMsg)
@@ -360,6 +375,13 @@ LRESULT APIENTRY ViewportWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 		}
 		break;
 		//----------------------------------------------------------------------------------------------------------------------------------
+	case WM_SYSCOMMAND:
+		// The user pressed Alt to open the system menu. This enters a modal
+		// loop which stops us from event processing, so prevent it. Users
+		// can still open the system menu by clicking the window's icon.
+		if ((wParam & 0xFFF0) == SC_KEYMENU && lParam == 0)
+			return 0;
+		break;
 	}
 
 	POINT p;
@@ -456,7 +478,8 @@ LRESULT APIENTRY DialogWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 
 	// compute scancode
 	C4KeyCode scancode = (((unsigned int)lParam) >> 16) & 0xFF;
-	ConvertToUnixScancode(wParam, &scancode);
+	bool extended = ((lParam & 0x01000000) != 0);
+	ConvertToUnixScancode(wParam, &scancode, extended);
 
 	// Process message
 	switch (uMsg)
@@ -493,7 +516,6 @@ LRESULT APIENTRY DialogWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 		//----------------------------------------------------------------------------------------------------------------------------------
 	case WM_PAINT:
 		// 2do: only draw specific dlg?
-		//::GraphicsSystem.Execute();
 		break;
 		return 0;
 		//----------------------------------------------------------------------------------------------------------------------------------
@@ -510,7 +532,6 @@ LRESULT APIENTRY DialogWinProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 	case WM_RBUTTONDBLCLK: ::pGUI->MouseInput(C4MC_Button_RightDouble, p.x, p.y, wParam, pDlg, NULL);  break;
 		//----------------------------------------------------------------------------------------------------------------------------------
 	case WM_MOUSEMOVE:
-		//SetCursor(NULL);
 		::pGUI->MouseInput(C4MC_Button_None, p.x, p.y, wParam, pDlg, NULL);
 		break;
 		//----------------------------------------------------------------------------------------------------------------------------------
@@ -572,7 +593,7 @@ C4Window * C4Window::Init(C4Window::WindowKind windowKind, C4AbstractApp * pApp,
 	else if (windowKind == W_Fullscreen)
 	{
 		// Register window class
-		WNDCLASSEXW WndClass = {0};
+		auto WndClass = WNDCLASSEXW();
 		WndClass.cbSize        = sizeof(WNDCLASSEX);
 		WndClass.style         = CS_DBLCLKS;
 		WndClass.lpfnWndProc   = FullScreenWinProc;
@@ -672,6 +693,7 @@ bool C4Window::ReInit(C4AbstractApp* pApp)
 	                                        hWindow, NULL, pApp->hInstance, NULL);
 	if(!hNewRenderWindow) return false;
 
+	CStdGLCtx::Reinitialize();
 	ShowWindow(hNewRenderWindow, SW_SHOW);
 	DestroyWindow(hRenderWindow);
 	hRenderWindow = hNewRenderWindow;
@@ -705,7 +727,7 @@ bool C4Window::RestorePosition(const char *szWindowName, const char *szSubKey, b
 
 void C4Window::SetTitle(const char *szToTitle)
 {
-	if (hWindow) SetWindowTextW(hWindow, szToTitle ? GetWideChar(szToTitle) : L"");
+	if (hWindow) SetWindowTextW(hWindow, GetWideChar(szToTitle ? szToTitle : ""));
 }
 
 bool C4Window::GetSize(C4Rect * pRect)
@@ -724,7 +746,7 @@ void C4Window::SetSize(unsigned int cx, unsigned int cy)
 	if (hWindow)
 	{
 		// If bordered, add border size
-		RECT rect = {0, 0, cx, cy};
+		RECT rect = { 0, 0, static_cast<LONG>(cx), static_cast<LONG>(cy) };
 		::AdjustWindowRectEx(&rect, GetWindowLong(hWindow, GWL_STYLE), FALSE, GetWindowLong(hWindow, GWL_EXSTYLE));
 		cx = rect.right - rect.left;
 		cy = rect.bottom - rect.top;
@@ -825,7 +847,7 @@ bool C4AbstractApp::FlushMessages()
 void C4AbstractApp::SetLastErrorFromOS()
 {
 	LPWSTR buffer = 0;
-	DWORD rv = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM,
+	FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM,
 		0, ::GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPWSTR>(&buffer), 0, 0);
 	sLastError.Take(StdStrBuf(buffer));
 	LocalFree(buffer);
@@ -870,7 +892,7 @@ void C4AbstractApp::RestoreVideoMode()
 {
 }
 
-bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int iColorDepth, unsigned int iRefreshRate, unsigned int iMonitor, bool fFullScreen)
+bool C4AbstractApp::SetVideoMode(int iXRes, int iYRes, unsigned int iColorDepth, unsigned int iRefreshRate, unsigned int iMonitor, bool fFullScreen)
 {
 #ifndef USE_CONSOLE
 	SetWindowLong(pWindow->hWindow, GWL_EXSTYLE,
@@ -922,7 +944,7 @@ bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigne
 			SetLastErrorFromOS();
 			return false;
 		}
-		int orientation = dmode.dmDisplayOrientation;
+		unsigned long orientation = dmode.dmDisplayOrientation;
 		if (iXRes == -1 && iYRes == -1)
 		{
 			dspMode=dmode;
@@ -932,7 +954,7 @@ bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigne
 		int i=0;
 		if (!fFound) while (EnumDisplaySettingsW(Mon.GetWideChar(), i++, &dmode))
 				// compare enumerated mode with requested settings
-				if (dmode.dmPelsWidth==iXRes && dmode.dmPelsHeight==iYRes && dmode.dmBitsPerPel==iColorDepth && dmode.dmDisplayOrientation==orientation
+				if (static_cast<int>(dmode.dmPelsWidth) == iXRes && static_cast<int>(dmode.dmPelsHeight) == iYRes && dmode.dmBitsPerPel == iColorDepth && dmode.dmDisplayOrientation == orientation
 				        && (iRefreshRate == 0 || dmode.dmDisplayFrequency == iRefreshRate))
 				{
 					fFound=true;
@@ -972,35 +994,6 @@ bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigne
 	}
 	return true;
 #endif
-}
-
-bool C4AbstractApp::SaveDefaultGammaRamp(_GAMMARAMP &ramp)
-{
-	HDC hDC = GetDC(pWindow->hWindow);
-	if (hDC)
-	{
-		bool r = !!GetDeviceGammaRamp(hDC, &ramp);
-		if (!r)
-		{
-			Log("  Error getting default gamma ramp; using standard");
-		}
-		ReleaseDC(pWindow->hWindow, hDC);
-		return r;
-	}
-	return false;
-}
-
-bool C4AbstractApp::ApplyGammaRamp(_GAMMARAMP &ramp, bool fForce)
-{
-	if (!Active && !fForce) return false;
-	HDC hDC = GetDC(pWindow->hWindow);
-	if (hDC)
-	{
-		bool r = !!SetDeviceGammaRamp(hDC, &ramp);
-		ReleaseDC(pWindow->hWindow, hDC);
-		return r;
-	}
-	return false;
 }
 
 void C4AbstractApp::MessageDialog(const char * message)

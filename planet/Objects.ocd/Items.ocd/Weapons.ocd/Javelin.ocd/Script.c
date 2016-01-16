@@ -7,7 +7,13 @@
 
 #include Library_Stackable
 
+// Multiplication factor to clonk.ThrowSpeed
+local shooting_strength = 21;
+
 public func MaxStackCount() { return 3; }
+// Note that the javelin damage also takes the speed into account. A direct eye-to-eye hit will do roughly this damage.
+public func JavelinStrength() { return 18; }
+public func TumbleStrength() { return 100; }
 
 local animation_set;
 
@@ -32,21 +38,22 @@ local aiming;
 public func GetCarryMode(clonk) { if(aiming >= 0) return CARRY_HandBack; }
 public func GetCarryBone() { return "Javelin"; }
 public func GetCarrySpecial(clonk) { if(aiming > 0) return "pos_hand2"; }
-public func GetCarryTransform() { if(aiming == 1) return Trans_Rotate(180, 1, 0, 0); }
+public func GetCarryTransform() { if(aiming == 1) return Trans_Rotate(180, 0, 0, 1); }
+
+public func RejectUse(object clonk)
+{
+	return !clonk->HasHandAction();
+}
 
 public func ControlUseStart(object clonk, int x, int y)
 {
-	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction())
-		return true;
-
 	aiming = 1;
 
 	clonk->StartAim(this);
 
 	ControlUseHolding(clonk, x, y);
 	
-	Sound("DrawJavelin");
+	Sound("Objects::Weapons::Javelin::Draw");
 	return 1;
 }
 
@@ -100,7 +107,7 @@ public func DoThrow(object clonk, int angle)
 	var div = 60; // 40% is converted to the direction of the throwing angle.
 	var xdir = clonk->GetXDir(1000);
 	var ydir = clonk->GetYDir(1000);
-	var speed = clonk.ThrowSpeed * 21 + (100 - div) * Sqrt(xdir**2 + ydir**2) / 100;
+	var speed = clonk.ThrowSpeed * shooting_strength + (100 - div) * Sqrt(xdir**2 + ydir**2) / 100;
 	var jav_x = div * xdir / 100 + Sin(angle, speed);
 	var jav_y = div * ydir / 100 - Cos(angle, speed);
 		
@@ -112,13 +119,11 @@ public func DoThrow(object clonk, int angle)
 	javelin->AddEffect("Flight",javelin,1,1,javelin,nil);
 	javelin->AddEffect("HitCheck",javelin,1,1,nil,nil,clonk);
 	
-	Sound("ThrowJavelin?");
+	Sound("Objects::Weapons::Javelin::Throw?");
 	
 	aiming = -1;
 	clonk->UpdateAttach();
 }
-
-protected func JavelinStrength() { return 14; }
 
 //slightly modified HitObject() from arrow
 public func HitObject(object obj)
@@ -126,20 +131,23 @@ public func HitObject(object obj)
 	var relx = GetXDir() - obj->GetXDir();
 	var rely = GetYDir() - obj->GetYDir();
 	var speed = Sqrt(relx*relx+rely*rely);
+	
+	var dmg = JavelinStrength() * speed * 1000 / 60;
 
-	var dmg = JavelinStrength()*speed/100;
-	ProjectileHit(obj,dmg,ProjectileHit_tumble);
+	if (WeaponCanHit(obj))
+	{
+		if (obj->GetAlive())
+			Sound("Hits::ProjectileHitLiving?");
+		else
+			Sound("Objects::Weapons::Javelin::HitGround");
+		
+		obj->~OnProjectileHit(this);
+		WeaponDamage(obj, dmg, FX_Call_EngObjHit, true);
+		WeaponTumble(obj, this->TumbleStrength());
+		if (!this) return;
+	}
 	
 	Stick();
-}
-
-// called by successful hit of object after from ProjectileHit(...)
-public func OnStrike(object obj)
-{
-	if(obj->GetAlive())
-		Sound("ProjectileHitLiving?");
-	else
-		Sound("JavelinHitGround");
 }
 
 protected func Hit()
@@ -147,10 +155,10 @@ protected func Hit()
 	if(GetEffect("Flight",this))
 	{
 		Stick();
-		Sound("JavelinHitGround");
+		Sound("Objects::Weapons::Javelin::HitGround");
 	}
 	else
-		Sound("WoodHit?");
+		Sound("Hits::Materials::Wood::WoodHit?");
 }
 
 protected func Stick()
@@ -221,4 +229,3 @@ func Definition(def) {
 local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
-local Rebuy = true;

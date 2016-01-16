@@ -34,13 +34,11 @@
 	GetAnimationSet();         // Has to return the animation set
 	// The following Stop* Callbacks, have to return true if the clonk doesn't have to be reset (e.g. stating aiming after loading)
 	FinishedLoading(object clonk);             // When the loading animation is over (after LoadTime frames)
-	FinishedAiming(object clonk, int angle);   // When the clonk has finished loading and aiming at the disired position
+	FinishedAiming(object clonk, int angle);   // When the clonk has finished loading and aiming at the desired position
 	FinishedShooting(object clonk, int angle); // When the shooting animation is over (after ShootTime frames)
 	DuringLoad(object clonk);                  // LoadTime2 frames after load start
 	DuringShoot(object clonk, int angle);      // ShootTime2 frames after shoot start
 	// When the clonk has during aiming an action where he can't use his hands, the aiming is paused
-	OnPauseAim(object clonk);  // Callback when the clonk has to pause the aiming
-	OnRestartAim(object clonk);// Callback when the clonk want's to restart aiming. Has to return true if aiming again is possible
 	Reset(object clonk);       // Callback when the clonk has been reseted
 
 	The Weapon can use the following functions on the clonk:
@@ -60,15 +58,12 @@ local aim_weapon;
 local aim_animation_index;
 local aim_angle;
 local aim_stop;
-local aim_pause;
 
 local aim_schedule_timer;
 local aim_schedule_call;
 
 local aim_schedule_timer2;
 local aim_schedule_call2;
-
-local aim_pause_timer;
 
 // Aim modes
 static const AIM_Position = 1; // The aim angle alters the position of the animation (0° menas 0% animation position, 180° menas 100% andimation position)
@@ -86,8 +81,6 @@ func IsAiming() { return !!GetEffect("IntAim", this); }
 func FxIntAimCheckProcedureStart(target, effect, tmp)
 {
 	if(tmp) return;
-	aim_pause = 0;
-	aim_pause_timer = 0;
 }
 
 func FxIntAimCheckProcedureTimer()
@@ -116,40 +109,7 @@ func FxIntAimCheckProcedureTimer()
 	
 	// check procedure
 	if(!ReadyToAction())
-	{
-		if(aim_pause_timer >= 20 || GetAction() != "Scale") // Wait 20 frames, so a very short scale passage doesn't ruin aiming TODO: see if this is a good idea
-		{
-			// Already released? cancel
-			if(aim_stop)
-			{
-				CancelAiming();
-				return -1;
-			}
-			if(aim_pause != 1)
-			{
-				PauseAim();
-				aim_schedule_call = nil;
-				aim_schedule_timer = nil;
-				aim_pause = 1;
-			}
-			aim_pause_timer = 0;
-		}
-		else aim_pause_timer++;
-	}
-	else
-	{
-		aim_pause_timer = 0;
-		if(aim_pause == 1)
-		{
-			if(!RestartAim()) // Can't start again? :-( stop
-			{
-				aim_weapon = nil;
-				aim_set = nil;
-				return -1;
-			}
-			aim_pause = 0;
-		}
-	}
+		PauseAim();
 }
 
 func FxIntAimCheckProcedureStop(target, effect, reason, tmp)
@@ -162,20 +122,9 @@ func FxIntAimCheckProcedureStop(target, effect, reason, tmp)
 func PauseAim()
 {
 	if(!aim_weapon) return CancelAiming();
-	ResetHands(1);
-	
-	// might be invalid if the weapon does anything weird on Reset() 
-	if(aim_weapon)
-		aim_weapon->~OnPauseAim(this);
-}
-
-func RestartAim()
-{
-	if(!aim_weapon) return false;
-	if(!aim_weapon->~OnRestartAim(this)) return false;
-	// Applay the set
-	ApplySet(aim_set);
-	return true;
+	// reissue the CON_Use command to the weapon when ready
+	this->PauseUse(aim_weapon);
+	CancelAiming();
 }
 
 public func StartLoad(object weapon)
@@ -199,7 +148,7 @@ public func StartLoad(object weapon)
 	}
 
 	if(aim_set["AnimationLoad"] != nil)
-		PlayAnimation(aim_set["AnimationLoad"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationLoad"]), aim_set["LoadTime"], ANIM_Remove), Anim_Const(1000));
+		PlayAnimation(aim_set["AnimationLoad"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationLoad"]), aim_set["LoadTime"], ANIM_Remove), Anim_Const(1000));
 
 	aim_schedule_timer = aim_set["LoadTime"];
 	aim_schedule_call  = "StopLoad";
@@ -209,36 +158,13 @@ public func StartLoad(object weapon)
 		aim_schedule_timer2 = aim_set["LoadTime2"];
 		aim_schedule_call2  = "DuringLoad";
 	}
-	
-	var e = GetEffect("IntLoadingBar", this);
-	if(e)
-	{
-		RemoveEffect(nil, this, e);
-	}
-	
-	e = AddEffect("IntLoadingBar", this, 1, BoundBy(aim_schedule_timer / 20, 3, 20), this);
-	e.max = aim_schedule_timer;
-	e.current = 0;
-	// handled by HUDAdapter to add a progress bar
-	this->~SetProgressBarLinkForObject(weapon, e);
-}
-
-func FxIntLoadingBarTimer(target, effect, time)
-{
-	effect.current = time;
-	
-	if(time > effect.max + 40) // the progress bar int he HUD should have updated by then
-	{
-		return -1;
-	}
-	return 1;
 }
 
 public func DuringLoad() { aim_weapon->~DuringLoad(this); }
 
 public func StopLoad()
 {
-	if(!aim_weapon->~FinishedLoading(this)) // return 1 means the weapon goes on doing something (e.g. start aiming) then we don't reset
+	if(!aim_weapon || !aim_weapon->~FinishedLoading(this)) // return 1 means the weapon goes on doing something (e.g. start aiming) then we don't reset
 		ResetHands();
 }
 
@@ -265,11 +191,11 @@ public func StartAim(object weapon, int angle)
 	if(aim_set["AnimationAim"] != nil)
 	{
 		if(aim_set["AimMode"] == AIM_Position)
-			aim_animation_index = PlayAnimation(aim_set["AnimationAim"], 10, Anim_Const(GetAnimationLength(aim_set["AnimationAim"])/2), Anim_Const(1000));
+			aim_animation_index = PlayAnimation(aim_set["AnimationAim"], CLONK_ANIM_SLOT_Arms, Anim_Const(GetAnimationLength(aim_set["AnimationAim"])/2), Anim_Const(1000));
 		if(aim_set["AimMode"] == AIM_Weight)
 		{
-			aim_animation_index = PlayAnimation(aim_set["AnimationAim"],  10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationAim"]),  aim_set["AimTime"], ANIM_Loop), Anim_Const(1000));
-			aim_animation_index = PlayAnimation(aim_set["AnimationAim2"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationAim2"]), aim_set["AimTime"], ANIM_Loop), Anim_Const(1000), aim_animation_index);
+			aim_animation_index = PlayAnimation(aim_set["AnimationAim"],  CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationAim"]),  aim_set["AimTime"], ANIM_Loop), Anim_Const(1000));
+			aim_animation_index = PlayAnimation(aim_set["AnimationAim2"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationAim2"]), aim_set["AimTime"], ANIM_Loop), Anim_Const(1000), aim_animation_index);
 			aim_animation_index++;
 			SetAnimationWeight(aim_animation_index, Anim_Const(500));
 		}
@@ -309,6 +235,9 @@ func FxIntAimTimer(target, effect, time)
 	}
 }
 
+// returns the current aiming angle
+public func GetAimPosition() { return aim_angle; }
+
 public func SetAimPosition(int angle)
 {
 	// Save angle
@@ -319,15 +248,14 @@ public func SetAimPosition(int angle)
 
 public func StopAim()
 {
-	// while pausing interpret this as cancel
-	if(aim_pause == 1)
-		return CancelAiming();
 	// Schedule Stop
 	aim_stop = 1;
 }
 
 private func DoStopAim()
 {
+	if (!aim_weapon)
+		ResetHands();
 	if(!aim_weapon->~FinishedAiming(this, aim_angle)) // return 1 means the weapon goes on doing something (e.g. start aiming) then we don't reset
 		ResetHands();
 }
@@ -356,13 +284,13 @@ public func StartShoot(object weapon)
 	{
 		// Do we just have one animation? Then just play it
 		if(aim_set["AnimationShoot2"] == nil)
-			PlayAnimation(aim_set["AnimationShoot"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
+			PlayAnimation(aim_set["AnimationShoot"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
 		// Well two animations blend betweend them (animtion 1 is 0° animation2 for 180°)
 		else if(aim_set["AnimationShoot3"] == nil)
 		{
 			var iAim;
-			iAim = PlayAnimation(aim_set["AnimationShoot"],  10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
-			iAim = PlayAnimation(aim_set["AnimationShoot2"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot2"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
+			iAim = PlayAnimation(aim_set["AnimationShoot"],  CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
+			iAim = PlayAnimation(aim_set["AnimationShoot2"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot2"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
 			SetAnimationWeight(iAim+1, Anim_Const(1000*Abs(aim_angle)/180));
 		}
 		// Well then we'll have three to blend (animation 1 is 90°, animation 2 is 0°, animation 2 for 180°)
@@ -371,14 +299,14 @@ public func StartShoot(object weapon)
 			var iAim;
 			if(Abs(aim_angle) < 90)
 			{
-				iAim = PlayAnimation(aim_set["AnimationShoot2"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot2"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
-				iAim = PlayAnimation(aim_set["AnimationShoot"],  10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
+				iAim = PlayAnimation(aim_set["AnimationShoot2"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot2"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
+				iAim = PlayAnimation(aim_set["AnimationShoot"],  CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
 				SetAnimationWeight(iAim+1, Anim_Const(1000*Abs(aim_angle)/90));
 			}
 			else
 			{
-				iAim = PlayAnimation(aim_set["AnimationShoot"],  10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
-				iAim = PlayAnimation(aim_set["AnimationShoot3"], 10, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot3"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
+				iAim = PlayAnimation(aim_set["AnimationShoot"],  CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot"] ), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000));
+				iAim = PlayAnimation(aim_set["AnimationShoot3"], CLONK_ANIM_SLOT_Arms, Anim_Linear(0, 0, GetAnimationLength(aim_set["AnimationShoot3"]), aim_set["ShootTime"], ANIM_Remove), Anim_Const(1000), iAim);
 				SetAnimationWeight(iAim+1, Anim_Const(1000*(Abs(aim_angle)-90)/90));
 			}
 		}
@@ -394,11 +322,11 @@ public func StartShoot(object weapon)
 	}
 }
 
-public func DuringShoot() { aim_weapon->~DuringShoot(this, aim_angle); }
+public func DuringShoot() { if (aim_weapon) aim_weapon->~DuringShoot(this, aim_angle); }
 
 public func StopShoot()
 {
-	if(!aim_weapon->~FinishedShooting(this, aim_angle)) // return 1 means the weapon goes on doing something (e.g. start aiming) then we don't reset
+	if(aim_weapon == nil || !aim_weapon->~FinishedShooting(this, aim_angle)) // return 1 means the weapon goes on doing something (e.g. start aiming) then we don't reset
 		ResetHands();
 }
 
@@ -426,7 +354,7 @@ public func ApplySet(set)
 		SetBackwardsSpeed(set["WalkBack"]);
 }
 
-public func ResetHands(bool pause)
+public func ResetHands()
 {
 	if(!GetEffect("IntAimCheckProcedure", this))
 		return;
@@ -449,25 +377,21 @@ public func ResetHands(bool pause)
 	SetBackwardsSpeed(nil);
 	
 	RemoveEffect("IntAim", this);
-	RemoveEffect("IntLoadingBar", this);
 
 	SetTurnForced(-1);
 
 	SetTurnType(0, -1);
 	SetHandAction(0);
 
-	if(!pause)
-	{
-		aim_weapon = nil;
-		aim_set = nil;
+	aim_weapon = nil;
+	aim_set = nil;
 		
-		aim_schedule_call = nil;
-		aim_schedule_timer = nil;
-		aim_schedule_call2 = nil;
-		aim_schedule_timer2 = nil;
+	aim_schedule_call = nil;
+	aim_schedule_timer = nil;
+	aim_schedule_call2 = nil;
+	aim_schedule_timer2 = nil;
 		
-		RemoveEffect("IntAimCheckProcedure", this);
-	}
+	RemoveEffect("IntAimCheckProcedure", this);
 }
 
 /* +++++++++++ Slow walk +++++++++++ */

@@ -19,7 +19,7 @@ func DoInit(int first_player)
 	var storm = EnsureObject(Storm,0,0,NO_OWNER);
 	storm->SetStorm(-20,0,1000);
 	SetSkyParallax(1); // move background with the wind
-	var time = EnsureObject(Environment_Time,0,0,-1);
+	var time = EnsureObject(Time,0,0,-1);
 	time->SetTime(600);
 	time->SetCycleSpeed(20);
 	// Goal
@@ -45,21 +45,13 @@ func InitializePlayer(int plr)
 	while (crew = GetCrew(plr, index))
 	{
 		var x = 150 + Random(50);
-		crew->SetPosition(x , 400);
+		crew->SetPosition(x , 390);
 		crew->CreateContents(Shovel);
 		// one clonk can construct, another can mine.
 		if (index == 1)
-		{
 			crew->CreateContents(Hammer);
-			crew->CreateContents(Wood,4);
-			crew->CreateContents(Metal);
-		}
 		else
-		{
 			crew->CreateContents(Axe);
-			crew->CreateContents(Wood,3);
-			crew->CreateContents(Metal,2);
-		}
 		index++;
 	}
 	return;
@@ -68,7 +60,7 @@ func InitializePlayer(int plr)
 func OnPlaneFinished(object plane)
 {
   // todo: outro
-  plane->CreateObjectAbove(Plane, 0,0, NO_OWNER);
+  plane->CreateObjectAbove(Airplane, 0,0, NO_OWNER);
   plane->RemoveObject();
 }
 

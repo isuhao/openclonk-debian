@@ -15,6 +15,9 @@ protected func Initialize()
 public func IsPlant() { return true; }
 public func IsTree() { return true; }
 
+// Not supported by this tree
+public func CreateObjectInTreetop() { return nil; }
+
 public func IsStanding() { return GetCategory() & C4D_StaticBack; }
 
 public func ChopDown()
@@ -37,7 +40,7 @@ public func ChopDown()
 		}
 	}
 	// Effect
-	Sound("TreeCrack");
+	Sound("Environment::Tree::Crack");
 	AddEffect("TreeFall", this, 1, 1, nil, Library_Plant);
 }
 
@@ -88,7 +91,7 @@ func BurstIntoAshes()
 // Place an amount of trunks in the specified rectangle. Settings:
 // size = [min, max]: Random size (con) between min and max.
 // underground = true/false: whether to place only underground.
-public func Place(int amount, proplist rectangle, proplist settings)
+public func Place(int amount, proplist area, proplist settings)
 {
 	// Only allow definition call.
 	if (this != Trunk) 
@@ -99,20 +102,24 @@ public func Place(int amount, proplist rectangle, proplist settings)
 	if (!settings.size) 
 		settings.size = [80, 100];
 	var loc_area = nil;
-	if (rectangle) 
-		loc_area = Loc_InRect(rectangle);
-	var loc_background = Loc_Or(Loc_Sky(), Loc_Tunnel());
-	if (settings.underground)
+	if (area) 
+		loc_area = Loc_InArea(area);
+	var loc_background;
+	if (settings.underground == nil)
+		loc_background = Loc_Or(Loc_Sky(), Loc_Tunnel());
+	else if (settings.underground)
 		loc_background = Loc_Tunnel();
+	else
+		loc_background = Loc_Sky();	
 		
 	var trunks = [];	
 	for (var i = 0; i < amount; i++)
 	{
 		var size = RandomX(settings.size[0], settings.size[1]);
-		var loc = FindLocation(loc_background, Loc_Not(Loc_Liquid()), Loc_Wall(CNAT_Left | CNAT_Right | CNAT_Top), loc_area);
+		var loc = FindLocation(loc_background, Loc_Not(Loc_Liquid()), Loc_Wall(CNAT_Left | CNAT_Right | CNAT_Top, Loc_Or(Loc_Material("Granite"), Loc_Material("Rock"), Loc_MaterialVal("Soil", "Material", nil, 1))), loc_area);
 		if (!loc)
 			continue;
-		var trunk = CreateObjectAbove(Trunk);
+		var trunk = CreateObject(Trunk);
 		trunk->SetPosition(loc.x, loc.y);
 		trunk->SetCon(size);
 		if (!Random(3))

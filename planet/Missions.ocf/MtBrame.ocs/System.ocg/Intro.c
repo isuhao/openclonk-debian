@@ -68,7 +68,6 @@ global func FxIntIntroStart(object target, proplist effect)
 
 	effect.Sister = CreateObjectAbove(Clonk, 174, 532, NO_OWNER);
 	effect.Sister->MakeInvincible();
-	effect.Sister->MakeNonFlammable();
 	effect.Sister->SetSkin(1);
 	effect.Sister->SetName("$NameSister$");
 	effect.Sister->SetColor(RGB(213, 68, 172));
@@ -149,7 +148,10 @@ global func FxIntIntroTimer(object target, proplist effect, int time)
 	if(effect.Time == 556)
 	{
 		for(var crew in effect.Players)
+		{
 			crew->Contained()->Fling(2,-2);
+			crew->Contained()->PlaySoundScream();
+		}
 	}
 
 	if(effect.Time == 570)

@@ -185,8 +185,6 @@ private:
 
 		void UpdateInfo();                                  // update for changed player info
 
-		//const char *GetName() const { return GetCore().getName(); }
-		//JoinedPlayer *JoinPlayer(const char *szLocalPlayerFilename); // join
 		DWORD GetColor() const { return dwClientClr; } // client chat color
 		C4Client *GetClient() const; // get client associated with this list item
 		bool IsLocalClientPlayer() const; // whether this player is going to join locally
@@ -216,11 +214,12 @@ private:
 		int32_t idTeam; // team ID
 
 	protected:
-		virtual void MouseInput(C4GUI::CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam); // input: mouse movement or buttons
 		virtual void UpdateOwnPos(); // recalculate item positioning
 
 	public:
 		TeamListItem(C4PlayerInfoListBox *pForListBox, int32_t idTeam, ListItem *pInsertBefore); // ctor
+
+		virtual void MouseInput(C4GUI::CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam); // input: mouse movement or buttons
 
 		// spacing inserted between of those list items; usually this is top anyway...
 		virtual bool GetListItemTopSpacingBar() { return true; }

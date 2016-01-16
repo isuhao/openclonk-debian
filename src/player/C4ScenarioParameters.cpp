@@ -30,7 +30,7 @@ bool C4AchievementGraphics::Init(C4Group &File)
 	while (File.FindNextEntry(C4CFN_Achievements, FileName))
 	{
 		C4FacetSurface *new_fct = new C4FacetSurface();
-		if (!new_fct->Load(File, FileName, C4FCT_Height, C4FCT_Full))
+		if (!new_fct->Load(File, FileName, C4FCT_Height, C4FCT_Full, false, 0))
 		{
 			delete new_fct;
 			LogF(LoadResStr("IDS_PRC_NOGFXFILE"), FileName, LoadResStr("IDS_ERR_NOFILE"));
@@ -137,7 +137,7 @@ bool C4ScenarioParameterDefs::Load(C4Group &hGroup, C4LangStringTable *pLang)
 	StdStrBuf Buf;
 	if (!hGroup.LoadEntryString(C4CFN_ScenarioParameterDefs,&Buf)) return false;
 	if (pLang) pLang->ReplaceStrings(Buf);
-	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(*this, Buf, C4CFN_ScenarioCore))
+	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(*this, Buf, C4CFN_ScenarioParameterDefs))
 		{ return false; }
 	return true;
 }

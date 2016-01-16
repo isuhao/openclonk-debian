@@ -15,6 +15,9 @@
 
 protected func Initialize()
 {
+	// Show wealth in HUD.
+	GUI_Controller->ShowWealth();
+	
 	// Rules: team account and buying at flagpole.
 	CreateObject(Rule_TeamAccount);
 	CreateObject(Rule_BuyAtFlagpole);
@@ -67,6 +70,7 @@ protected func InitializePlayer(int plr)
 	GivePlayerPumpingKnowledge(plr);
 	GivePlayerWeaponryKnowledge(plr);
 	GivePlayerAdvancedKnowledge(plr);
+	GivePlayerFarmingKnowledge(plr);
 	GivePlayerAirKnowledge(plr);
 	RemovePlayerSpecificKnowledge(plr, [InventorsLab, Shipyard, WallKit]);
 	
@@ -91,7 +95,7 @@ protected func InitializePlayer(int plr)
 private func InitEnvironment(int difficulty)
 {
 	// Set time to almost night and have stars.	
-	var time = CreateObject(Environment_Time);
+	var time = CreateObject(Time);
 	time->SetTime(20 * 60 + 15);
 	time->SetCycleSpeed(0);
 	
@@ -128,7 +132,11 @@ private func InitVegetation()
 	for (var i = 0; i < 40 + Random(8); i++)
 		PlaceVegetation(Tree_Coconut, 0, 0, LandscapeWidth(), LandscapeHeight(), 1000 * (61 + Random(40)));
 	for (var i = 0; i < 6 + Random(2); i++)
-		PlaceVegetation(Tree_Coconut, LandscapeWidth() - 300, LandscapeHeight() - 200, 600, 400, 1000 * (71 + Random(30)));
+		PlaceVegetation(Tree_Coconut, LandscapeWidth()/2 - 300, LandscapeHeight()/2 - 200, 600, 400, 1000 * (71 + Random(30)));
+		
+	// Place some cotton plants over the map
+	for (var i = 0; i < 8 + Random(2); i++)
+		PlaceVegetation(Cotton, 0, 0, LandscapeWidth(), LandscapeHeight(), 1000 * (61 + Random(40)));
 		
 	// Create an effect to make sure there will always grow some new trees.	
 	AddEffect("EnsureTreesOnMainIsland", nil, 100, 20, nil);
@@ -150,6 +158,11 @@ global func FxEnsureTreesOnMainIslandTimer()
 	if (Random(9) >= nr_trees)
 		if (!Random(20))
 			PlaceVegetation(Tree_Coconut, wdt / 2 - 300, hgt / 2 - 200, 600, 400, 3);
+	// Place cotton plants (at least two)
+	var nr_cotton = ObjectCount(Find_ID(Cotton), Find_InRect(wdt / 2 - 300, hgt / 2 - 200, 600, 400));
+	if (Random(3) >= nr_trees)
+		if (!Random(20))
+			PlaceVegetation(Cotton, wdt / 2 - 300, hgt / 2 - 200, 600, 400, 3);
 	return FX_OK;
 }
 
@@ -188,7 +201,7 @@ global func FxGrowGemStalactitesTimer(object target, proplist effect, int time)
 	{
 		good_pos = false;
 		var dist = 64; // distance from border
-		pos = FindLocation(Loc_Sky(), Loc_Wall(CNAT_Top), Loc_Space(8), Loc_InRect(dist, dist, LandscapeWidth() - 2 * dist, LandscapeHeight() - 2 * dist));
+		pos = FindLocation(Loc_Sky(), Loc_Wall(CNAT_Top), Loc_Space(8, CNAT_Bottom | CNAT_Left | CNAT_Right), Loc_InRect(dist, dist, LandscapeWidth() - 2 * dist, LandscapeHeight() - 2 * dist));
 		if (!pos)
 			continue;
 			
@@ -411,7 +424,7 @@ private func ProvideIsland(array island, int number, int amount)
 	// All of the islands have a few in-earth loam pieces.
 	PlaceObjects(Loam, amount + RandomX(1, 3), "Earth", island[0], island[1], island[2], island[3]);
 	
-	var spot = FindLocation(Loc_InRect(island[0], island[1], island[2], island[3] / 2), Loc_Wall(CNAT_Bottom), Loc_Space(20), Loc_Sky());
+	var spot = FindLocation(Loc_InRect(island[0], island[1], island[2], island[3] / 2), Loc_Wall(CNAT_Bottom), Loc_Space(20, CNAT_Left | CNAT_Right | CNAT_Top), Loc_Sky());
 	if (!spot)
 		return 0;		
 	
@@ -450,7 +463,7 @@ private func ProvideIsland(array island, int number, int amount)
 	// A catapult for the fourth island and place some metal & wood.
 	if (number == 4)
 	{
-		SproutBerryBush->Place(Random(amount + 1), Rectangle(island[0], island[1] - 80, island[2], island[3] / 2));
+		SproutBerryBush->Place(Random(amount + 1), Shape->Rectangle(island[0], island[1] - 80, island[2], island[3] / 2));
 		CreateObjectAbove(Catapult, spot.x, spot.y);
 		PlaceObjects(Wood, amount + Random(2), "Earth", island[0], island[1], island[2], island[3]);
 		PlaceObjects(Metal, amount + Random(2), "Earth", island[0], island[1], island[2], island[3]);
@@ -465,13 +478,13 @@ private func ProvideIsland(array island, int number, int amount)
 		lorry->CreateContents(DynamiteBox, amount);
 		lorry->CreateContents(Dynamite, 4);
 		lorry->CreateContents(GoldBar, Random(amount + 1));
-		SproutBerryBush->Place(amount + Random(2), Rectangle(island[0], island[1] - 80, island[2], island[3] / 2));
+		SproutBerryBush->Place(amount + Random(2), Shape->Rectangle(island[0], island[1] - 80, island[2], island[3] / 2));
 	}
 	
 	// For all the islands some decoration.
 	if (!Random(3))
 	{
-		var spot = FindLocation(Loc_InRect(island[0], island[1], island[2], island[3] / 2), Loc_Wall(CNAT_Bottom), Loc_Space(20), Loc_Sky());
+		var spot = FindLocation(Loc_InRect(island[0], island[1], island[2], island[3] / 2), Loc_Wall(CNAT_Bottom), Loc_Space(20, CNAT_Top | CNAT_Left | CNAT_Right), Loc_Sky());
 		if (spot)
 			CreateObjectAbove(Column, spot.x, spot.y);
 	}	

@@ -22,6 +22,7 @@
 #include "C4Console.h"
 #include <C4DefList.h>
 #include "C4FullScreen.h"
+#include "C4GraphicsSystem.h"
 #include "C4Game.h"
 #include "C4GameObjects.h"
 #include "C4MouseControl.h"
@@ -33,6 +34,7 @@
 C4Set<C4PropList *> C4PropList::PropLists;
 #endif
 C4Set<C4PropListNumbered *> C4PropListNumbered::PropLists;
+C4Set<C4PropListScript *> C4PropListScript::PropLists;
 std::vector<C4PropListNumbered *> C4PropListNumbered::ShelvedPropLists;
 int32_t C4PropListNumbered::EnumerationIndex = 0;
 C4StringTable  Strings;
@@ -43,5 +45,8 @@ C4FullScreen   FullScreen;
 C4MouseControl MouseControl;
 C4GameObjects  Objects;
 C4DefList      Definitions;
+// make sure C4Game reference members are initialized before Game because otherwise they're acccessed in C4Game::Default before initialization
+C4GraphicsSystem GraphicsSystem;
 C4Game         Game;
 C4Network2     Network;
+

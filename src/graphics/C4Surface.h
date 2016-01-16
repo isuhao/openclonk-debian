@@ -56,6 +56,10 @@ class CStdGLCtx;
 extern CStdGL *pGL;
 #endif
 
+const int C4SF_Tileable = 1;
+const int C4SF_MipMap   = 2;
+const int C4SF_Unlocked = 4;
+
 class C4Surface
 {
 private:
@@ -65,7 +69,7 @@ private:
 public:
 	C4Surface();
 	~C4Surface();
-	C4Surface(int iWdt, int iHgt); // create new surface and init it
+	C4Surface(int iWdt, int iHgt, int iFlags); // create new surface and init it
 	C4Surface(C4AbstractApp * pApp, C4Window * pWindow); // create new surface for a window
 public:
 	int Wdt,Hgt; // size of surface
@@ -123,7 +127,7 @@ public:
 	bool SetPixDw(int iX, int iY, DWORD dwCol);       // set pix in surface only
 	bool SetPixAlpha(int iX, int iY, BYTE byAlpha);   // adjust alpha value of pixel
 	bool BltPix(int iX, int iY, C4Surface *sfcSource, int iSrcX, int iSrcY, bool fTransparency); // blit pixel from source to this surface (assumes clipped coordinates!)
-	bool Create(int iWdt, int iHgt, bool fOwnPal=false, bool fIsRenderTarget=false, int MaxTextureSize = 0);
+	bool Create(int iWdt, int iHgt, bool fIsRenderTarget, int MaxTextureSize, int iFlags);
 	bool Copy(C4Surface &fromSfc);
 	bool CreateColorByOwner(C4Surface *pBySurface);  // create ColorByOwner-surface
 	bool SetAsClrByOwnerOf(C4Surface *pOfSurface);   // assume that ColorByOwner-surface has been created, and just assign it; fails if the size doesn't match
@@ -140,16 +144,16 @@ public:
 	void NoClip();
 
 	// In C4SurfaceLoaders.cpp
-	bool LoadAny(C4Group &hGroup, const char *szFilename, bool fOwnPal=false, bool fNoErrIfNotFound=false);
-	bool LoadAny(C4GroupSet &hGroupset, const char *szFilename, bool fOwnPal=false, bool fNoErrIfNotFound=false);
-	bool Load(C4Group &hGroup, const char *szFilename, bool fOwnPal=false, bool fNoErrIfNotFound=false);
+	bool LoadAny(C4Group &hGroup, const char *szFilename, bool fOwnPal, bool fNoErrIfNotFound, int iFlags);
+	bool LoadAny(C4GroupSet &hGroupset, const char *szFilename, bool fOwnPal, bool fNoErrIfNotFound, int iFlags);
+	bool Load(C4Group &hGroup, const char *szFilename, bool fOwnPal, bool fNoErrIfNotFound, int iFlags);
 	bool Save(C4Group &hGroup, const char *szFilename);
-	bool SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha=true, bool fApplyGamma=false, bool fSaveOverlayOnly=false);
-	bool SavePNG(const char *szFilename, bool fSaveAlpha, bool fApplyGamma, bool fSaveOverlayOnly);
-	bool Read(CStdStream &hGroup, const char * extension);
-	bool ReadPNG(CStdStream &hGroup);
-	bool ReadJPEG(CStdStream &hGroup);
-	bool ReadBMP(CStdStream &hGroup);
+	bool SavePNG(C4Group &hGroup, const char *szFilename, bool fSaveAlpha=true, bool fSaveOverlayOnly=false);
+	bool SavePNG(const char *szFilename, bool fSaveAlpha, bool fSaveOverlayOnly, bool use_background_thread);
+	bool Read(CStdStream &hGroup, const char * extension, int iFlags);
+	bool ReadPNG(CStdStream &hGroup, int iFlags);
+	bool ReadJPEG(CStdStream &hGroup, int iFlags);
+	bool ReadBMP(CStdStream &hGroup, int iFlags);
 
 	bool AttachPalette();
 	bool GetSurfaceSize(int &irX, int &irY); // get surface size
@@ -159,7 +163,7 @@ public:
 private:
 	void MapBytes(BYTE *bpMap);
 	bool ReadBytes(BYTE **lpbpData, void *bpTarget, int iSize);
-	bool CreateTextures(int MaxTextureSize = 0);    // create ppTex-array
+	bool CreateTextures(int MaxTextureSize, int iFlags); // create ppTex-array
 	void FreeTextures();      // free ppTex-array if existant
 	
 	bool GetTexAtImpl(C4TexRef **ppTexRef, int &rX, int &rY);
@@ -186,9 +190,10 @@ public:
 	int iSizeX;
 	int iSizeY;
 	bool fIntLock;    // if set, texref is locked internally only
+	int iFlags;
 	C4Rect LockSize;
 
-	C4TexRef(int iSizeX, int iSizeY, bool fAsRenderTarget);   // create texture with given size
+	C4TexRef(int iSizeX, int iSizeY, int iFlags);   // create texture with given size
 	~C4TexRef();           // release texture
 	bool Lock();          // lock texture
 	// Lock a part of the rect, discarding the content
@@ -205,6 +210,9 @@ public:
 	{
 		*((DWORD *) (((BYTE *) texLock.pBits) + (iY - LockSize.y) * texLock.Pitch + (iX - LockSize.x) * 4)) = v;
 	}
+private:
+	void CreateTexture();
+	friend class C4TexMgr;
 };
 
 // texture management

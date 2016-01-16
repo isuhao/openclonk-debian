@@ -7,7 +7,7 @@ global func BlueExplode(int level)
 
 	// Sound must be created before object removal, for it to be played at the right position.
 	var grade = BoundBy(level / 10 - 1, 1, 3);
-	Sound(Format("Blast%d", grade), false);
+	Sound(Format("Fire::Blast%d", grade), false);
 
 	// Explosion parameters.
 	var x = GetX(), y = GetY();
@@ -42,10 +42,10 @@ global func DoBlueExplosion(int x, int y, int level, object inobj, int cause_plr
 	if (!container)
 	{
 		// Incinerate oil.
-		if (!IncinerateLandscape(x, y))
-			if (!IncinerateLandscape(x, y - 10))
-				if (!IncinerateLandscape(x - 5, y - 5))
-					IncinerateLandscape(x + 5, y - 5);
+		if (!IncinerateLandscape(x, y, cause_plr))
+			if (!IncinerateLandscape(x, y - 10, cause_plr))
+				if (!IncinerateLandscape(x - 5, y - 5, cause_plr))
+					IncinerateLandscape(x + 5, y - 5, cause_plr);
 		// Graphic effects.
 		BlueExplosionEffect(level, x, y);
 	}

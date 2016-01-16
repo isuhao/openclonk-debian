@@ -7,6 +7,7 @@
 		Functions to be used as documented in the docs.
 --*/
 
+static const FIRE_LIGHT_COLOR = 0xc86400;
 
 // fire drawing modes
 static const C4Fx_FireMode_Default   = 0; // determine mode by category
@@ -67,14 +68,17 @@ global func Incinerate(
 		return true;
 	}
 	else
-		AddEffect("Fire", this, 100, 4, this, nil, caused_by, !!blasted, incinerating_object, strength);
-	return true;
+	{
+		effect = AddEffect("Fire", this, 100, 4, this, nil, caused_by, !!blasted, incinerating_object, strength);
+		return !!effect;
+	}
 }
 
 // Called if the object is submerged in incendiary material (for example in lava).
 global func OnInIncendiaryMaterial()
 {
-	return this->Incinerate(10, NO_OWNER);
+	this->DoEnergy(-7, false, FX_Call_EngFire, NO_OWNER);
+	return this->Incinerate(15, NO_OWNER);
 }
 
 // Makes the calling object non flammable.
@@ -264,9 +268,9 @@ global func FxFireStart(object target, proplist effect, int temp, int caused_by,
 
 	// Set values
 	if ((4 * effect.width * effect.height) > 500)
-		target->Sound("Inflame", false, 100);
+		target->Sound("Fire::Inflame", false, 100);
 	if (target->GetMass() >= 100)
-		if (target->Sound("Fire", false, 100, nil, 1))
+		if (target->Sound("Fire::Fire", false, 100, nil, 1))
 			effect.fire_sound = true;
 	
 	// callback
@@ -482,7 +486,7 @@ global func FxFireStop(object target, proplist effect, int reason, bool temp)
 	}
 	// stop sound
 	if (effect.fire_sound)
-		target->Sound("Fire", false, 100, nil, -1);
+		target->Sound("Fire::Fire", false, 100, nil, -1);
 	// callback
 	target->~Extinguishing();
 	// done, success

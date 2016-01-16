@@ -109,7 +109,7 @@ size_t C4AulDebug::UnpackPacket(const StdBuf &rInBuf, const C4NetIO::addr_t &add
 	else if (!Password.getSize() || Password == Buf)
 	{
 		fConnected = true;
-		SendLine("HLO", "This is " C4ENGINEINFOLONG ", " C4VERSION);
+		SendLine("HLO", "This is " C4ENGINECAPTION ", " C4VERSION);
 		Log("C4Aul debugger connected successfully!");
 	}
 	else
@@ -390,7 +390,6 @@ void C4AulDebug::DebugStep(C4AulBCC *pCPos, C4Value* stackTop)
 	
 	// Get current script context
 	C4AulScriptContext *pCtx = pExec->GetContext(iCallDepth-1);
-	//bool isReturn = pCPos[1].bccType = AB_RETURN;
 
 	if (!fConnected)
 	{

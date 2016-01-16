@@ -319,7 +319,7 @@ void C4Network2Client::CreateGraphs()
 	// get client color
 	static const DWORD ClientDefColors[] = {0xff0000, 0x00ff00, 0xffff00, 0x7f7fff, 0xffffff, 0x00ffff, 0xff00ff, 0x7f7f7f, 0xff7f7f, 0x7fff7f, 0x0000ff};
 	int32_t iClientColorNum = sizeof(ClientDefColors)/sizeof(DWORD);
-	DWORD dwClientClr = ClientDefColors[Max<int32_t>(getID(), 0) % iClientColorNum];
+	DWORD dwClientClr = ClientDefColors[std::max<int32_t>(getID(), 0) % iClientColorNum];
 	// create graphs
 	pstatPing = new C4TableGraph(C4TableGraph::DefaultBlockLength, Game.pNetworkStatistics ? Game.pNetworkStatistics->SecondCounter : 0);
 	pstatPing->SetColorDw(dwClientClr);
@@ -537,7 +537,7 @@ bool C4Network2ClientList::SendMsgToHost(C4NetIOPacket rPkt)
 	return pHost->SendMsg(rPkt);
 }
 
-bool C4Network2ClientList::SendMsgToClient(int32_t iClient, C4NetIOPacket RREF rPkt)
+bool C4Network2ClientList::SendMsgToClient(int32_t iClient, C4NetIOPacket &&rPkt)
 {
 	// find client
 	C4Network2Client *pClient = GetClientByID(iClient);
@@ -560,7 +560,7 @@ void C4Network2ClientList::HandlePacket(char cStatus, const C4PacketBase *pBaseP
 
 #define GETPKT(type, name) \
     assert(pBasePkt); const type &name = \
-      /*dynamic_cast*/ static_cast<const type &>(*pBasePkt);
+     static_cast<const type &>(*pBasePkt);
 
 	switch (cStatus)
 	{

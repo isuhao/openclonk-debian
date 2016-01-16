@@ -9,9 +9,12 @@
 // has extra slot
 #include Library_HasExtraSlot
 
+// Initial velocity of the arrow
+local shooting_strength = 100;
+
 private func Hit()
 {
-	Sound("WoodHit?");
+	Sound("Hits::Materials::Wood::WoodHit?");
 }
 
 local fAiming;
@@ -54,14 +57,14 @@ func Initialize()
 
 public func GetAnimationSet() { return animation_set; }
 
-public func ControlUseStart(object clonk, int x, int y)
+public func RejectUse(object clonk)
 {
 	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction())
-	{
-		return true;
-	}
-	
+	return !clonk->HasHandAction();
+}
+
+public func ControlUseStart(object clonk, int x, int y)
+{
 	// check for ammo
 	if(!Contents(0))
 	{
@@ -98,7 +101,7 @@ public func DuringLoad(object clonk) { return AddArrow(clonk); }
 // Called during loading then the arrow is added to the animation
 public func AddArrow(object clonk)
 {
-	Sound("BowLoad?");
+	Sound("Objects::Weapons::Bow::Load?");
 	iArrowMesh = clonk->AttachMesh(HelpArrow, "pos_hand1", "main", nil);
 }
 
@@ -143,8 +146,8 @@ public func FinishedAiming(object clonk, int angle)
 		if(Contents(0)->~IsArrow())
 		{
 			var arrow = Contents(0)->TakeObject();
-			arrow->Launch(angle,100,clonk);
-			Sound("BowShoot?");
+			arrow->Launch(angle,shooting_strength,clonk);
+			Sound("Objects::Weapons::Bow::Shoot?");
 		}
 	}
 
@@ -159,18 +162,6 @@ public func ControlUseCancel(object clonk, int x, int y)
 {
 	clonk->CancelAiming(this);
 	return true;
-}
-
-public func OnPauseAim(object clonk)
-{
-	Reset(clonk);
-}
-
-public func OnRestartAim(object clonk)
-{
-	ControlUseStart(clonk);
-	if(fAiming) return true;
-	return false;
 }
 
 /* ++++++++ Animation functions ++++++++ */
@@ -220,26 +211,26 @@ func RejectCollect(id arrowid, object arrows)
 /*
 func Selection()
 {
-	Sound("DrawBow");
+	Sound("Objects::Weapons::Bow::Draw");
 }
 
 func Deselection()
 {
-	Sound("PutAwayBow");
+	Sound("Objects::Weapons::Bow::PutAwayBow");
 }
 */
 
 public func IsWeapon() { return true; }
 public func IsArmoryProduct() { return true; }
 
-func Definition(def) {
-	SetProperty("PictureTransformation",Trans_Mul(Trans_Translate(-2000,-3000,-2000),Trans_Rotate(180,0,1,0),Trans_Rotate(-25,1,0,1)),def);
+func Definition(def)
+{
+	def.PictureTransformation = Trans_Mul(Trans_Translate(-4000,-2000,4000),Trans_Rotate(180,0,1,0),Trans_Rotate(-45,0,0,1));
 }
 
 local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = true;
 local BlastIncinerate = 30;
 local ContactIncinerate = 5;

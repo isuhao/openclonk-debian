@@ -216,6 +216,8 @@ struct C4KeyCodeEx
 			: Key(Key), dwShift(Shift), fRepeated(fIsRepeated) {}
 
 	bool IsRepeated() const { return fRepeated; }
+
+	void FixShiftKeys(); // reduce stuff like Ctrl+RightCtrl to simply RightCtrl
 private:
 	static C4KeyCode GetKeyByScanCode(const char *scan_code);
 };
@@ -386,6 +388,7 @@ private:
 	StdStrBuf Name;                // custom key name; used for association in config files
 	typedef std::vector<C4KeyboardCallbackInterface *> CBVec;
 	unsigned int uiPriority;       // key priority: If multiple keys of same code are defined, high prio overwrites low prio keys
+	bool is_down;                  // down-callbacks have been executed but up-callbacks have not (not compiled)
 
 public:
 	CBVec vecCallbacks; // a list of all callbacks assigned to that key
@@ -405,11 +408,11 @@ public:
 
 protected:
 	int iRef;
-
-public:
 	C4CustomKey(const C4KeyCodeEx &DefCode, const char *szName, C4KeyScope Scope, C4KeyboardCallbackInterface *pCallback, unsigned int uiPriority = PRIO_Base); // ctor for default key
 	C4CustomKey(const CodeList &rDefCodes, const char *szName, C4KeyScope Scope, C4KeyboardCallbackInterface *pCallback, unsigned int uiPriority = PRIO_Base); // ctor for default key with multiple possible keys assigned
-	C4CustomKey(const C4KeyCodeEx &Code, const StdStrBuf &rName); // ctor for single custom key override
+	friend class C4Game;
+
+public:
 	C4CustomKey(const C4CustomKey &rCpy, bool fCopyCallbacks);
 	virtual ~C4CustomKey(); // dtor
 
@@ -424,6 +427,8 @@ public:
 
 	void Update(const C4CustomKey *pByKey); // merge given key into this
 	bool Execute(C4KeyEventType eEv, C4KeyCodeEx key);
+
+	bool IsDown() const { return is_down; }
 
 	void KillCallbacks(const C4CustomKey *pOfKey); // remove any callbacks that were created by given key
 

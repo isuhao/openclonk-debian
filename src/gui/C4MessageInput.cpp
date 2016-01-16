@@ -412,7 +412,7 @@ bool C4MessageInput::ProcessInput(const char *szText)
 				if (eMsgType == C4CMT_Say) { ++szMsg; szEnd--; }
 			}
 			// get message
-			SCopy(szMsg, szMessage, Min<unsigned long>(C4MaxMessage, szEnd - szMsg + 1));
+			SCopy(szMsg, szMessage, std::min<ptrdiff_t>(C4MaxMessage, szEnd - szMsg + 1));
 		}
 		// get sending player (if any)
 		C4Player *pPlr = Game.IsRunning ? ::Players.GetLocalByIndex(0) : NULL;
@@ -453,7 +453,7 @@ bool C4MessageInput::ProcessCommand(const char *szCommand)
 			C4GameLobby::LobbyError(FormatString(LoadResStr("IDS_MSG_CMD_JOINPLR_NOFILE"), plrPath.getData()).getData());
 		}
 		else
-			::Network.Players.JoinLocalPlayer(plrPath.getData(), true);
+			::Network.Players.JoinLocalPlayer(plrPath.getData());
 		return true;
 	}
 	if (!Game.IsRunning && SEqualNoCase(szCmdName, "plrclr"))
@@ -592,8 +592,6 @@ bool C4MessageInput::ProcessCommand(const char *szCommand)
 	{
 		if (!Game.IsRunning) return false;
 		if (!Game.DebugMode) return false;
-		if (!::Network.isEnabled() && Game.ScenarioFile.IsPacked()) return false;
-		if (::Network.isEnabled() && !::Network.isHost()) return false;
 
 		::Control.DoInput(CID_Script, new C4ControlScript(pCmdPar, C4ControlScript::SCOPE_Console), CDT_Decide);
 		return true;
@@ -663,8 +661,8 @@ bool C4MessageInput::ProcessCommand(const char *szCommand)
 			pLobby->ClearLog();
 		}
 		// fullscreen
-		else if (::GraphicsSystem.MessageBoard.Active)
-			::GraphicsSystem.MessageBoard.ClearLog();
+		else if (::GraphicsSystem.MessageBoard)
+			::GraphicsSystem.MessageBoard->ClearLog();
 		else
 		{
 			// EM mode
@@ -781,16 +779,27 @@ bool C4MessageInput::ProcessCommand(const char *szCommand)
 		// try writing main file (usually {SCENARIO}/TODO.txt); if access is not possible, e.g. because scenario is packed, write to alternate file
 		const char *todo_filenames[] = { ::Config.Developer.TodoFilename, ::Config.Developer.AltTodoFilename };
 		bool success = false;
-		for (int i = 0; i < std::extent<decltype(todo_filenames)>::value; ++i)
+		for (int i = 0; i < static_cast<int>(std::extent<decltype(todo_filenames)>::value); ++i)
 		{
 			StdCopyStrBuf todo_filename(todo_filenames[i]);
+			todo_filename.Replace("{USERPATH}", Config.General.UserDataPath);
 			int replacements = todo_filename.Replace("{SCENARIO}", Game.ScenarioFile.GetFullName().getData());
-			// sanity check if entered in editor with no file open
-			if (replacements && !Game.ScenarioFile.IsOpen()) continue;
+			// sanity checks for writing scenario TODO file
+			if (replacements)
+			{
+				// entered in editor with no file open?
+				if (!::Game.ScenarioFile.IsOpen()) continue;
+				// not into packed
+				if (::Game.ScenarioFile.IsPacked()) continue;
+				// not into temp network file
+				if (::Control.isNetwork() && !::Control.isCtrlHost()) continue;
+			}
 			// try to append. May fail e.g. on packed scenario file, name getting too long, etc. Then fallback to alternate location.
 			CStdFile todo_file;
 			if (!todo_file.Append(todo_filename.getData())) continue;
 			if (!todo_file.WriteString(pCmdPar)) continue;
+			// check on file close because CStdFile may do a delayed write
+			if (!todo_file.Close()) continue;
 			success = true;
 			break;
 		}

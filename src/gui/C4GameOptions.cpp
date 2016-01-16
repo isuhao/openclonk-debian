@@ -107,7 +107,7 @@ void C4GameOptionsList::OptionScenarioParameter::DoDropdownFill(C4GUI::ComboBox_
 {
 	// Fill dropdown menuy with known possible options for this parameter
 	size_t idx=0; const C4ScenarioParameterDef::Option *option;
-	while (option = ParameterDef->GetOptionByIndex(idx++))
+	while ((option = ParameterDef->GetOptionByIndex(idx++)))
 	{
 		pFiller->AddEntry(option->Name.getData(), option->Value);
 	}
@@ -157,7 +157,7 @@ void C4GameOptionsList::OptionScenarioParameter::Update()
 
 // Unfortunately, the control mode cannot be changed in the lobby
 C4GameOptionsList::OptionControlMode::OptionControlMode(class C4GameOptionsList *pForDlg)
-		: C4GameOptionsList::OptionDropdown(pForDlg, LoadResStr("IDS_TEXT_CONTROLMODE"), !::Control.isCtrlHost() || !::Control.isNetwork() || !::Control.Network.IsEnabled() || !pForDlg->IsRuntime())
+		: C4GameOptionsList::OptionDropdown(pForDlg, LoadResStr("IDS_TEXT_CONTROLMODE"), !::Control.isCtrlHost() || !::Control.isNetwork() || !::Control.Network.IsEnabled())
 {
 	SetToolTip(LoadResStr("IDS_DESC_CHANGESTHEWAYCONTROLDATAI"));
 }
@@ -177,7 +177,8 @@ void C4GameOptionsList::OptionControlMode::DoDropdownSelChange(int32_t idNewSele
 	if (!::Control.isNetwork() || !::Control.Network.IsEnabled() || !::Control.isCtrlHost()) return;
 	// perform it
 	::Network.SetCtrlMode(idNewSelection);
-	// update done in parent call
+	// update for clients done by packet; host needs to set it manually
+	Update();
 }
 
 void C4GameOptionsList::OptionControlMode::Update()
@@ -187,7 +188,7 @@ void C4GameOptionsList::OptionControlMode::Update()
 		szControlMode = LoadResStr("IDS_NET_NONET");
 	else
 	{
-		switch (::Control.Network.GetCtrlMode())
+		switch (::Network.Status.getCtrlMode())
 		{
 		case CNM_Central: szControlMode = LoadResStr("IDS_NET_CTRLMODE_CENTRAL"); break;
 		case CNM_Decentral: szControlMode = LoadResStr("IDS_NET_CTRLMODE_DECENTRAL"); break;
@@ -208,7 +209,7 @@ C4GameOptionsList::OptionControlRate::OptionControlRate(class C4GameOptionsList 
 
 void C4GameOptionsList::OptionControlRate::DoDropdownFill(C4GUI::ComboBox_FillCB *pFiller)
 {
-	for (int i = 1; i < Min(C4MaxControlRate, 10); ++i)
+	for (int i = 1; i < std::min(C4MaxControlRate, 10); ++i)
 		pFiller->AddEntry(FormatString("%d", i).getData(), i);
 }
 
@@ -333,7 +334,7 @@ void C4GameOptionsList::InitOptions()
 	if (param_defs)
 	{
 		size_t idx = 0; const C4ScenarioParameterDef *def;
-		while (def = param_defs->GetParameterDefByIndex(idx++))
+		while ((def = param_defs->GetParameterDefByIndex(idx++)))
 			if (!def->IsAchievement()) // achievements are displayed in scenario selection. no need to repeat them here
 				new OptionScenarioParameter(this, def);
 	}
@@ -354,7 +355,7 @@ void C4GameOptionsList::InitOptions()
 void C4GameOptionsList::ClearOptions()
 {
 	C4GUI::Element *pFirst;
-	while (pFirst = GetFirst()) delete pFirst;
+	while ((pFirst = GetFirst())) delete pFirst;
 }
 
 void C4GameOptionsList::Update()

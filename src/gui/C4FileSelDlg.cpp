@@ -295,7 +295,6 @@ void C4FileSelDlg::UpdateSelection()
 	pSelection = static_cast<ListItem *>(pFileListBox->GetSelectedItem());
 	// OK button only available if selection
 	// SetEnabled would look a lot better here, but it doesn't exist yet :(
-	//btnOK->SetEnabled(!!pSelection || IsMultiSelection());
 	// selection preview, if enabled
 	if (pSelectionInfoBox)
 	{
@@ -459,7 +458,7 @@ C4PortraitSelDlg::ListItem::ListItem(const char *szFilename) : C4FileSelDlg::Lis
 		sDisplayLabel.Ref(LoadResStr("IDS_MSG_NOPORTRAIT"));
 	}
 	// insert linebreaks into label text
-	int32_t iLineHgt = Max<int32_t>(pUseFont->BreakMessage(sDisplayLabel.getData(), ImagePreviewSize-6, &sFilenameLabelText, false), 1);
+	int32_t iLineHgt = std::max<int32_t>(pUseFont->BreakMessage(sDisplayLabel.getData(), ImagePreviewSize-6, &sFilenameLabelText, false), 1);
 	// set size
 	SetBounds(C4Rect(0,0,ImagePreviewSize,ImagePreviewSize+iLineHgt));
 }
@@ -476,7 +475,7 @@ void C4PortraitSelDlg::ListItem::Load()
 		GetParentPath(sFilename.getData(), &sParentPath);
 		bool fLoadError = true;
 		if (SrcGrp.Open(sParentPath.getData()))
-			if (fctLoadedImage.Load(SrcGrp, ::GetFilename(sFilename.getData())))
+			if (fctLoadedImage.Load(SrcGrp, ::GetFilename(sFilename.getData()), C4FCT_Full, C4FCT_Full, false, 0))
 			{
 				// image loaded. Can only be put into facet by main thread, because those operations aren't thread safe
 				fLoaded = true;

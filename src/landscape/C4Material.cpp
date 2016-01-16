@@ -34,9 +34,9 @@
 #include <C4Physics.h> // For GravAccel
 
 
-int32_t MVehic=MNone,MTunnel=MNone,MWater=MNone,MEarth=MNone;
+int32_t MVehic=MNone,MHalfVehic=MNone,MTunnel=MNone,MWater=MNone,MEarth=MNone;
 BYTE MCVehic=0;
-
+BYTE MCHalfVehic=0;
 // -------------------------------------- C4MaterialReaction
 
 
@@ -89,129 +89,6 @@ void C4MaterialReaction::ResolveScriptFuncs(const char *szMatName)
 		pScriptFunc = NULL;
 }
 
-// -------------------------------------- C4MaterialShape
-
-C4MaterialShape::C4MaterialShape() : prepared_for_zoom(0)
-{
-	wdt = hgt = overlap_left = overlap_top = overlap_right = overlap_bottom = 0;
-	max_poly_width=max_poly_height=0;
-}
-
-bool C4MaterialShape::Load(C4Group &group, const char *filename)
-{
-	// Material shapes: Currently, shapes are loaded as a list polygons derived from vectorizing a binary image
-	// In the future, vectorization of the image could be put directly into the engine (if we get a free* library to do it)
-	// load file contents into buffer
-	StdStrBuf source;
-	if (!group.LoadEntryString(filename,&source)) return false;
-	// parse buffer
-	StdStrBuf name = group.GetFullName() + DirSep + filename;
-	if (!CompileFromBuf_LogWarn<StdCompilerINIRead>(*this, source, name.getData())) return false;
-	// Compute shape centers/mins/maxs and maximum overlap
-	max_poly_width=max_poly_height=0;
-	overlap_left=0; overlap_top=0; overlap_right=0; overlap_bottom=0;
-	for (PolyVec::iterator i = polys.begin(); i != polys.end(); ++i)
-	{
-		int32_t n = 0; Pt center(0,0), min(0,0), max(0,0);
-		for (Poly::iterator j = i->begin(); j != i->end(); ++j)
-		{
-			center.x += j->x; center.y += j->y;
-			if (n++)
-			{
-				min.x = Min(min.x, j->x); max.x = Max(max.x, j->x);
-				min.y = Min(min.y, j->y); max.y = Max(max.y, j->y);
-			}
-			else
-			{
-				min = max = *j;
-			}
-			if (j ->x<- overlap_left     ) overlap_left   = -j->x;
-			if (j ->y<- overlap_top      ) overlap_top    = -j->y;
-			if (j ->x> wdt+overlap_right ) overlap_right  =  j->x - wdt;
-			if (j ->y> hgt+overlap_bottom) overlap_bottom =  j->y - hgt;
-		}
-		center.x /= n; center.y /= n;
-		i->center = center; i->min = min; i->max = max;
-		max_poly_width  = Max(max_poly_width , max.x-min.x);
-		max_poly_height = Max(max_poly_height, max.y-min.y);
-	}
-	// Overlap data not calculated yet
-	prepared_for_zoom = 0;
-	return true;
-}
-
-void C4MaterialShape::CompileFunc(StdCompiler *comp)
-{
-	if (comp->Name("Shape"))
-	{
-		comp->Value(mkNamingAdapt(wdt, "Width"));
-		comp->Value(mkNamingAdapt(hgt, "Height"));
-		comp->Value(mkNamingAdapt(mkSTLContainerAdapt(polys, StdCompiler::SEP_SEP2), "Shape"));
-		comp->NameEnd();
-	}
-}
-
-bool C4MaterialShape::DoPrepareForZoom(int32_t zoom)
-{
-	// calculate map pixel overlaps from polygons
-	// only works if shape size is a multiple of the map zoom!
-	if ((wdt % zoom) || (hgt % zoom)) return false;
-	for (PolyVec::iterator i = polys.begin(); i != polys.end(); ++i)
-		i->PrepareForZoom(zoom);
-	// done; mark cache for zoom
-	prepared_for_zoom = zoom;
-	return true;
-}
-
-void C4MaterialShape::Poly::CompileFunc(StdCompiler *comp)
-{
-	comp->Value(mkSTLContainerAdapt(*this, StdCompiler::SEP_SEP));
-}
-
-void C4MaterialShape::Poly::PrepareForZoom(int32_t zoom)
-{
-	overlaps.clear();
-	// center is always contained and always first in list (for IFT)
-	Pt center_map(center.x/zoom, center.y/zoom);
-	overlaps.push_back(center_map);
-	// walk from min to max; check if center or some corner point is in poly and add if this is the case
-	for (int32_t y=min.y/zoom; y<=max.y/zoom; ++y)
-		for (int32_t x=min.x/zoom; x<=max.x/zoom; ++x)
-			if (x != center_map.x || y != center_map.y)
-				for (int32_t ty=0; ty<=zoom; ty += 3)
-					for (int32_t tx=0; tx<=zoom; tx += 3)
-						if (IsPtContained(x*zoom+tx,y*zoom+ty))
-						{
-							overlaps.push_back(Pt(x,y));
-							tx=zoom+1; break;
-						}
-}
-
-bool C4MaterialShape::Poly::IsPtContained(int32_t x, int32_t y) const
-{
-	// point is contained if it crosses an off number of borders
-	int crossings = 0;
-	for (size_t i=0; i<size(); ++i)
-	{
-		Pt pt1 = (*this)[i];
-		Pt pt2 = (*this)[(i+1)%size()];
-		if ((pt1.y<y) != (pt2.y<y)) // crossing vertically?
-		{
-			// does line pt1-pt2 intersecti line (x,y)-(inf,y)?
-			crossings += ((pt1.x-(pt1.y-y)*(pt2.x-pt1.x)/(pt2.y-pt1.y))>x);
-		}
-	}
-	return (crossings % 2)==1;
-}
-
-void C4MaterialShape::Pt::CompileFunc(StdCompiler *comp)
-{
-	comp->Value(x);
-	comp->Separator();
-	comp->Value(y);
-}
-
-
 // -------------------------------------- C4MaterialCore
 
 C4MaterialCore::C4MaterialCore()
@@ -231,7 +108,6 @@ void C4MaterialCore::Clear()
 	sAboveTempConvertTo.Clear();
 	*Name='\0';
 	MapChunkType = C4M_Flat;
-	ShapeTexture.Clear();
 	Density = 0;
 	Friction = 0;
 	DigFree = 0;
@@ -262,11 +138,17 @@ void C4MaterialCore::Clear()
 	BelowTempConvertDir = 0;
 	AboveTempConvert = 0;
 	AboveTempConvertDir = 0;
-	ColorAnimation = 0;
 	TempConvStrength = 0;
 	MinHeightCount = 0;
 	SplashRate=10;
 	KeepSinglePixels=false;
+	AnimationSpeed = 20;
+	LightAngle = 255;
+	for (int i = 0; i < 3; i++) {
+		LightEmit[i] = 0;
+		LightSpot[i] = 16;
+	}
+	MinShapeOverlap = 25;
 }
 
 void C4MaterialCore::Default()
@@ -304,7 +186,6 @@ void C4MaterialCore::CompileFunc(StdCompiler *pComp)
 	if (pComp->isCompiler()) Clear();
 	pComp->Name("Material");
 	pComp->Value(mkNamingAdapt(toC4CStr(Name),      "Name",                ""));
-	pComp->Value(mkNamingAdapt(ColorAnimation,      "ColorAnimation",      0));
 
 	const StdEnumEntry<C4MaterialCoreShape> Shapes[] =
 	{
@@ -318,8 +199,6 @@ void C4MaterialCore::CompileFunc(StdCompiler *pComp)
 	};
 	pComp->Value(mkNamingAdapt(mkEnumAdaptT<uint8_t>(MapChunkType, Shapes),
 	                                                "Shape",               C4M_Flat));
-	pComp->Value(mkNamingAdapt(mkParAdapt(ShapeTexture, StdCompiler::RCT_All),
-	                                                "ShapeTexture",        ""));
 	pComp->Value(mkNamingAdapt(Density,             "Density",             0));
 	pComp->Value(mkNamingAdapt(Friction,            "Friction",            0));
 	pComp->Value(mkNamingAdapt(DigFree,             "DigFree",             0));
@@ -368,6 +247,11 @@ void C4MaterialCore::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(MinHeightCount,      "MinHeightCount",      0));
 	pComp->Value(mkNamingAdapt(SplashRate,          "SplashRate",          10));
 	pComp->Value(mkNamingAdapt(KeepSinglePixels,    "KeepSinglePixels",    false));
+	pComp->Value(mkNamingAdapt(AnimationSpeed,      "AnimationSpeed",      100));
+	pComp->Value(mkNamingAdapt(LightAngle,          "LightAngle",          255));
+	pComp->Value(mkNamingAdapt(mkArrayAdaptDM(LightEmit, 0), "LightEmit"));
+	pComp->Value(mkNamingAdapt(mkArrayAdaptDM(LightSpot, 16),"LightSpot"));
+	pComp->Value(mkNamingAdapt(MinShapeOverlap,     "MinShapeOverlap",     25));
 	pComp->NameEnd();
 	// material reactions
 	pComp->Value(mkNamingAdapt(mkSTLContainerAdapt(CustomReactionList),
@@ -383,7 +267,6 @@ C4Material::C4Material()
 	InMatConvertTo=MNone;
 	BelowTempConvertTo=0;
 	AboveTempConvertTo=0;
-	CustomShape = NULL;
 }
 
 void C4Material::UpdateScriptPointers()
@@ -411,7 +294,6 @@ void C4MaterialMap::Clear()
 {
 	if (Map) delete [] Map; Map=NULL; Num=0;
 	delete [] ppReactionMap; ppReactionMap = NULL;
-	Shapes.clear();
 }
 
 int32_t C4MaterialMap::Load(C4Group &hGroup)
@@ -447,21 +329,6 @@ int32_t C4MaterialMap::Load(C4Group &hGroup)
 
 	// set material number
 	Num+=cnt;
-
-	// Load material shapes
-	hGroup.ResetSearch();
-	while (hGroup.FindNextEntry(C4CFN_MaterialShapeFiles,entryname))
-	{
-		C4MaterialShape shape;
-		if (shape.Load(hGroup, entryname))
-		{
-			Shapes[StdCopyStrBuf(entryname)] = shape;
-		}
-		else
-		{
-			DebugLogF("Error loading material shape %s from %s.", entryname, hGroup.GetFullName().getData());
-		}
-	}
 
 	return cnt;
 }
@@ -560,24 +427,6 @@ bool C4MaterialMap::CrossMapMaterials(const char* szEarthMaterial) // Called aft
 			if ((Texture=::TextureMap.GetTexture(Map[cnt].sPXSGfx.getData())))
 				if ((sfcTexture=Texture->Surface32))
 					Map[cnt].PXSFace.Set(sfcTexture, Map[cnt].PXSGfxRt.x, Map[cnt].PXSGfxRt.y, Map[cnt].PXSGfxRt.Wdt, Map[cnt].PXSGfxRt.Hgt);
-		// init shape
-		if (Map[cnt].ShapeTexture.getLength())
-		{
-			C4MaterialShape *shape = GetShapeByName(Map[cnt].ShapeTexture.getData());
-			Map[cnt].CustomShape = shape;
-			if (!shape)
-			{
-				DebugLogF("Custom shape texture (%s) for material %s not found!", Map[cnt].ShapeTexture.getData(), Map[cnt].Name);
-			}
-			else
-			{
-				// adjust max shape overlap
-				max_shape_width  = Max(max_shape_width , shape->max_poly_width);
-				max_shape_height = Max(max_shape_height, shape->max_poly_height);
-			}
-		}
-		else
-			Map[cnt].CustomShape = NULL;
 		// evaluate reactions for that material
 		for (unsigned int iRCnt = 0; iRCnt < pMat->CustomReactionList.size(); ++iRCnt)
 		{
@@ -677,10 +526,11 @@ bool C4MaterialMap::CrossMapMaterials(const char* szEarthMaterial) // Called aft
 	if(!earth_entry)
 		{ LogFatal(FormatString("Earth material \"%s\" not found!", szEarthMaterial).getData()); return false; }
 
-	MVehic   = Get("Vehicle"); MCVehic = Mat2PixColDefault(MVehic);
-	MTunnel  = Get("Tunnel");
-	MWater   = Get("Water");
-	MEarth   = Get(earth_entry->GetMaterialName());
+	MVehic     = Get("Vehicle");     MCVehic     = Mat2PixColDefault(MVehic);
+	MHalfVehic = Get("HalfVehicle"); MCHalfVehic = Mat2PixColDefault(MHalfVehic);
+	MTunnel    = Get("Tunnel");
+	MWater     = Get("Water");
+	MEarth     = Get(earth_entry->GetMaterialName());
 
 	if ((MVehic==MNone) || (MTunnel==MNone))
 		{ LogFatal(LoadResStr("IDS_PRC_NOSYSMATS")); return false; }
@@ -692,7 +542,7 @@ bool C4MaterialMap::CrossMapMaterials(const char* szEarthMaterial) // Called aft
 void C4MaterialMap::SetMatReaction(int32_t iPXSMat, int32_t iLSMat, C4MaterialReaction *pReact)
 {
 	// evaluate reaction swap
-	if (pReact && pReact->fReverse) Swap(iPXSMat, iLSMat);
+	if (pReact && pReact->fReverse) std::swap(iPXSMat, iLSMat);
 	// set it
 	ppReactionMap[(iLSMat+1)*(Num+1) + iPXSMat+1] = pReact;
 }
@@ -788,6 +638,16 @@ bool mrfInsertCheck(int32_t &iX, int32_t &iY, C4Real &fXDir, C4Real &fYDir, int3
 	// always manipulating pos/speed here
 	if (pfPosChanged) *pfPosChanged = true;
 
+	// Move up by up to 3px to account for moving SolidMasks, other material insertions, etc.
+	int32_t mdens = std::min(::MaterialMap.Map[iPxsMat].Density, C4M_Solid);
+	int32_t max_upwards = 3;
+	bool was_pushed_upwards = false;
+	while (max_upwards-- && (::Landscape.GetDensity(iX, iY) >= mdens))
+	{
+		--iY;
+		was_pushed_upwards = true;
+	}
+
 	// Rough contact? May splash
 	if (fYDir > itofix(1))
 		if (::MaterialMap.Map[iPxsMat].SplashRate && !Random(::MaterialMap.Map[iPxsMat].SplashRate))
@@ -798,7 +658,7 @@ bool mrfInsertCheck(int32_t &iX, int32_t &iY, C4Real &fXDir, C4Real &fYDir, int3
 		}
 
 	// Contact: Stop
-	fYDir = 0;
+	fYDir = -GravAccel;
 
 	// Incindiary mats smoke on contact even before doing their slide
 	if (::MaterialMap.Map[iPxsMat].Incindiary)
@@ -809,10 +669,14 @@ bool mrfInsertCheck(int32_t &iX, int32_t &iY, C4Real &fXDir, C4Real &fYDir, int3
 
 	// Move by mat path/slide
 	int32_t iSlideX = iX, iSlideY = iY;
-	if (::Landscape.FindMatSlide(iSlideX,iSlideY,Sign(GravAccel),Min(::MaterialMap.Map[iPxsMat].Density, C4M_Solid),::MaterialMap.Map[iPxsMat].MaxSlide))
+	
+	if (::Landscape.FindMatSlide(iSlideX,iSlideY,Sign(GravAccel),mdens,::MaterialMap.Map[iPxsMat].MaxSlide))
 	{
-		if (iPxsMat == iLsMat)
+		// Sliding on equal material: Move directly to optimize insertion of rain onto lakes
+		// Also move directly when shifted upwards to ensure movement on permamently moving SolidMask
+		if (iPxsMat == iLsMat || was_pushed_upwards)
 			{ iX = iSlideX; iY = iSlideY; fXDir = 0; return false; }
+		// Otherwise, just move using xdir/ydir for nice visuals when rain is moving over landscape
 		// Accelerate into the direction
 		fXDir = (fXDir * 10 + Sign(iSlideX - iX)) / 11 + C4REAL10(Random(5)-2);
 		// Slide target in range? Move there directly.
@@ -887,7 +751,7 @@ bool C4MaterialMap::mrfPoof(C4MaterialReaction *pReaction, int32_t &iX, int32_t 
 	case meePXSPos: // PXS check before movement: Kill both landscape and PXS mat
 		::Landscape.ExtractMaterial(iLSPosX,iLSPosY,false);
 		if (!Random(3)) Smoke(iX,iY,3);
-		if (!Random(3)) StartSoundEffectAt("Pshshsh", iX, iY);
+		if (!Random(3)) StartSoundEffectAt("Liquids::Pshshsh", iX, iY);
 		return true;
 
 	case meePXSMove: // PXS movement
@@ -899,7 +763,7 @@ bool C4MaterialMap::mrfPoof(C4MaterialReaction *pReaction, int32_t &iX, int32_t 
 		// Always kill both landscape and PXS mat
 		::Landscape.ExtractMaterial(iLSPosX,iLSPosY,false);
 		if (!Random(3)) Smoke(iX,iY,3);
-		if (!Random(3)) StartSoundEffectAt("Pshshsh", iX, iY);
+		if (!Random(3)) StartSoundEffectAt("Liquids::Pshshsh", iX, iY);
 		return true;
 	}
 	// not handled
@@ -930,7 +794,7 @@ bool C4MaterialMap::mrfCorrode(C4MaterialReaction *pReaction, int32_t &iX, int32
 			{
 				Smoke(iX, iY, 3 + Random(3));
 			}
-			if (!Random(20)) StartSoundEffectAt("Corrode", iX, iY);
+			if (!Random(20)) StartSoundEffectAt("Liquids::Corrode", iX, iY);
 			return true;
 		}
 	}
@@ -957,7 +821,7 @@ bool C4MaterialMap::mrfCorrode(C4MaterialReaction *pReaction, int32_t &iX, int32
 			{
 				Smoke(iX,iY,3+Random(3));
 			}
-			if (!Random(20)) StartSoundEffectAt("Corrode", iX, iY);
+			if (!Random(20)) StartSoundEffectAt("Liquids::Corrode", iX, iY);
 			return true;
 		}
 		// Else: dead. Insert material here
@@ -977,7 +841,7 @@ bool C4MaterialMap::mrfIncinerate(C4MaterialReaction *pReaction, int32_t &iX, in
 	{
 	case meeMassMove: // MassMover-movement
 	case meePXSPos: // PXS check before movement
-		if (::Landscape.Incinerate(iX, iY)) return true;
+		if (::Landscape.Incinerate(iX, iY, NO_OWNER)) return true;
 		break;
 
 	case meePXSMove: // PXS movement
@@ -986,7 +850,7 @@ bool C4MaterialMap::mrfIncinerate(C4MaterialReaction *pReaction, int32_t &iX, in
 			// either splash or slide prevented interaction
 			return false;
 		// evaluate inflammation (should always succeed)
-		if (::Landscape.Incinerate(iX, iY)) return true;
+		if (::Landscape.Incinerate(iX, iY, NO_OWNER)) return true;
 		// Else: dead. Insert material here
 		::Landscape.InsertMaterial(iPxsMat,&iX,&iY);
 		return true;
@@ -1059,13 +923,6 @@ void C4MaterialMap::UpdateScriptPointers()
 {
 	// update in all materials
 	for (int32_t i=0; i<Num; ++i) Map[i].UpdateScriptPointers();
-}
-
-C4MaterialShape *C4MaterialMap::GetShapeByName(const char *name)
-{
-	C4MaterialShapeMap::iterator i = Shapes.find(StdCopyStrBuf(name));
-	if (i == Shapes.end()) return NULL;
-	return &(i->second);
 }
 
 C4MaterialMap MaterialMap;

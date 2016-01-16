@@ -13,6 +13,9 @@ static intro_init;
 
 protected func Initialize()
 {
+	// Show wealth in HUD.
+	GUI_Controller->ShowWealth();
+	
 	// Goal: Expand your area of influence to secure the ore.
 	var goal = CreateObject(Goal_Expansion);
 	goal->SetExpansionGoal(300 + 100 * SCENPAR_Difficulty);
@@ -104,16 +107,16 @@ private func InitEnvironment(int difficulty)
 	// Add a snow storm effect, strong winds and lot's of snow.
 	AddEffect("SnowStorm", nil, 100, 5, nil);
 	
+	// A light blue hue, to indicate the cold climate.
+	var blue = 4;
+	SetGamma(100 - blue, 100 - blue, 100 + blue);
+	
 	// Set time of day to evening and create some clouds and celestials.
 	Cloud->Place(20);
 	Cloud->SetPrecipitation("Snow", 20 + 5 * difficulty);
-	var time = CreateObject(Environment_Time);
+	var time = CreateObject(Time);
 	time->SetTime(60 * 22);
 	time->SetCycleSpeed(0);
-	
-	// A light blue hue, to indicate the cold climate.
-	var blue = 4;
-	SetGamma(RGB(0, 0, blue), RGB(128 - blue, 128 - blue, 128 + blue), RGB(255 - blue, 255 - blue, 255));
 	
 	// Some natural disasters. 
 	Earthquake->SetChance(5 + 5 * difficulty);
@@ -124,7 +127,8 @@ private func InitEnvironment(int difficulty)
 private func InitVegetation(int map_size)
 {
 	// Place some coniferous trees, but only up to 2/3 of the mountain.
-	Tree_Coniferous->Place(16 + Random(5), Rectangle(0, LandscapeHeight() / 3, LandscapeWidth(), 2 * LandscapeHeight() / 3));
+	Tree_Coniferous->Place(8 + Random(3), Shape->Rectangle(0, LandscapeHeight() / 3, LandscapeWidth(), 2 * LandscapeHeight() / 3));
+	Tree_Coniferous2->Place(8 + Random(3), Shape->Rectangle(0, LandscapeHeight() / 3, LandscapeWidth(), 2 * LandscapeHeight() / 3));
 	// Also some cave mushrooms as a source of wood.
 	LargeCaveMushroom->Place(5 + 2 * map_size + Random(5), nil, { terraform = false });
 
@@ -177,7 +181,7 @@ global func FxSnowStormStart(object target, proplist effect)
 	// Always a strong wind, either to the left or the right.
 	effect.wind = (2 * Random(2) - 1) * (90 + Random(10));
 	// Accordingly a stormy sound.
-	Sound("WindLoop.ogg", true, 50, nil, 1);
+	Sound("Environment::WindLoop", true, 50, nil, 1);
 	return 1;
 }
 

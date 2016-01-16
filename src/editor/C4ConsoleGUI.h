@@ -86,7 +86,6 @@ public:
 	void AddNetMenu();
 	void ClearNetMenu();
 	void AddNetMenuItemForPlayer(int32_t index, StdStrBuf &text);
-	void ClearInput();
 	void ClearPlayerMenu();
 	void SetInputFunctions(std::list<const char*> &functions);
 	
@@ -121,16 +120,16 @@ public:
 	
 	bool PropertyDlgOpen();
 	void PropertyDlgClose();
-	void PropertyDlgUpdate(C4ObjectList &rSelection);
+	void PropertyDlgUpdate(C4ObjectList &rSelection, bool force_function_update);
 	C4Object * PropertyDlgObject;
 	
 	bool ToolsDlgOpen(class C4ToolsDlg *dlg);
 	void ToolsDlgClose();
 	void ToolsDlgInitMaterialCtrls(class C4ToolsDlg *dlg);
-	void ToolsDlgSetTexture(class C4ToolsDlg *dlg, const char *texture);
-	void ToolsDlgSetMaterial(class C4ToolsDlg *dlg, const char *material);
 	void ToolsDlgSelectTexture(C4ToolsDlg *dlg, const char *texture);
 	void ToolsDlgSelectMaterial(C4ToolsDlg *dlg, const char *material);
+	void ToolsDlgSelectBackTexture(C4ToolsDlg *dlg, const char *texture);
+	void ToolsDlgSelectBackMaterial(C4ToolsDlg *dlg, const char *material);
 
 #ifdef USE_WIN32_WINDOWS
 	void Win32KeepDialogsFloating(HWND hwnd = 0);

@@ -34,14 +34,27 @@ public:
 	~C4TargetFacet() { }
 public:
 	float TargetX,TargetY,Zoom;
+
+	// Reference values for parallax computations. This is similar to
+	// a scrolling position. In most cases these are the same as TargetX
+	// and TargetY, however for full map screenshots, which are composed
+	// of several individual screenshots, these are kept fixed while
+	// TargetX/TargetY are varied to cover the full map. This prevents
+	// duplicate parallax objects in fullscreen map screenshots. If
+	// TargetX/TargetY are different from ParRefX/ParRefY it can be thought
+	// of as drawing only a part of a window/viewport at a given fixed
+	// scroll position.
+	// See bug #1042.
+	float ParRefX, ParRefY;
 public:
-	void Default() { TargetX=TargetY=0; Zoom=1; C4Facet::Default(); }
+	void Default() { TargetX=TargetY=0; Zoom=1; ParRefX=ParRefY=0; C4Facet::Default(); }
 	void Clear() { Surface=NULL; }
 
-	void Set(const C4Facet &cpy) { TargetX=TargetY=0; Zoom=1; C4Facet::Set(cpy); }
+	void Set(const C4Facet &cpy) { TargetX=TargetY=0; Zoom=1; ParRefX=ParRefY=0; C4Facet::Set(cpy); }
 	void Set(const C4TargetFacet &cpy) { *this = cpy; }
 	void Set(class C4Surface *nsfc, float nx, float ny, float nwdt, float nhgt, float ntx=0, float nty=0, float Zoom=1);
 	void Set(class C4Surface *nsfc, const C4Rect & r, float ntx=0, float nty=0, float Zoom=1);
+	void Set(class C4Surface *nsfc, float nx, float ny, float nwdt, float nhgt, float ntx, float nty, float Zoom, float prx, float pry);
 
 public:
 	C4TargetFacet &operator = (const C4Facet& rhs)
@@ -76,10 +89,8 @@ public:
 	bool Create(int iWdt, int iHgt, int iWdt2=C4FCT_Full, int iHgt2=C4FCT_Full);
 	C4Surface &GetFace() { return Face; } // get internal face
 	bool CreateClrByOwner(C4Surface *pBySurface);
-	bool EnsureSize(int iMinWdt, int iMinHgt);
 	bool EnsureOwnSurface();
-	bool Load(C4Group &hGroup, const char *szName, int iWdt=C4FCT_Full, int iHgt=C4FCT_Full, bool fOwnPal=false, bool fNoErrIfNotFound=false);
-	bool Load(BYTE *bpBitmap, int iWdt=C4FCT_Full, int iHgt=C4FCT_Full);
+	bool Load(C4Group &hGroup, const char *szName, int iWdt, int iHgt, bool fNoErrIfNotFound, int iFlags);
 	bool Save(C4Group &hGroup, const char *szName);
 	void GrabFrom(C4FacetSurface &rSource)
 	{

@@ -12,21 +12,111 @@ local full_material; // true when all needed material is in the site
 local no_cancel; // if true, site cannot be cancelled
 local is_constructing;
 
-public func IsContainer()		{ return !full_material; }
+// This should be recongnized as a container by the interaction menu independent of its category.
+public func IsContainer() { return !full_material; }
 // disallow taking stuff out
 public func RefuseTransfer(object toMove) { return true; }
 // disallow site cancellation. Useful e.g. for sites that are pre-placed for a game goal
 public func MakeUncancellable() { no_cancel = true; return true; }
 
-// we have 2 interaction modes
-public func IsInteractable(object obj)	{ return definition != nil && !full_material; }
-public func GetInteractionCount() { return 1 + !no_cancel; }
-public func GetInteractionMetaInfo(object obj, int num)
+/*-- Interaction --*/
+
+public func HasInteractionMenu() { return true; }
+
+public func GetInteractionMenuEntries(object clonk)
 {
-	if(num == 0)
-		return {IconName=nil, IconID=Hammer, Description="$TxtTransfer$"};
-	if(num == 1 && !no_cancel)
-		return {IconName=nil, IconID=Icon_Cancel, Description="$TxtAbort$"};
+	// default design of a control menu item
+	var custom_entry = 
+	{
+		Right = "100%", Bottom = "2em",
+		BackgroundColor = {Std = 0, OnHover = 0x50ff0000},
+		image = {Right = "2em"},
+		text = {Left = "2em"}
+	};
+	
+	return [{symbol = Icon_Cancel, extra_data = "abort", 
+			custom =
+			{
+				Prototype = custom_entry,
+				Priority = 1,
+				text = {Prototype = custom_entry.text, Text = "$TxtAbort$"},
+				image = {Prototype = custom_entry.image, Symbol = Icon_Cancel}
+			}}];
+}
+
+public func GetMissingMaterialMenuEntries(object clonk)
+{
+	var material = GetMissingComponents();
+	if (!material) return [];
+	
+	var entries = [];
+	for (var mat in material)
+	{
+		var text = nil;
+		if (mat.count > 1) text = Format("x%d", mat.count);
+		PushBack(entries, {symbol = mat.id, text = text});
+	}
+	return entries;
+}
+
+public func GetInteractionMenus(object clonk)
+{
+	var menus = _inherited() ?? [];		
+	var comp_menu =
+	{
+		title = "$TxtMissingMaterial$",
+		entries_callback = this.GetMissingMaterialMenuEntries,
+		BackgroundColor = RGB(50, 0, 0),
+		Priority = 15
+	};
+	PushBack(menus, comp_menu);
+	var prod_menu =
+	{
+		title = "$TxtAbort$",
+		entries_callback = this.GetInteractionMenuEntries,
+		callback = "OnInteractionControl",
+		callback_hover = "OnInteractionControlHover",
+		callback_target = this,
+		BackgroundColor = RGB(0, 50, 50),
+		Priority = 20
+	};
+	PushBack(menus, prod_menu);
+	return menus;
+}
+
+public func OnInteractionControlHover(id symbol, string action, desc_menu_target, menu_id)
+{
+	var text = "";
+	if (action == "abort")
+	{
+		if (no_cancel)
+			text = "$TxtNoAbortDesc$";
+		else
+			text = "$TxtAbortDesc$";
+	}
+	GuiUpdateText(text, menu_id, 1, desc_menu_target);
+}
+
+public func OnInteractionControl(id symbol, string action, object clonk)
+{
+	if (action == "abort")
+	{
+		if (!Deconstruct())
+			Sound("UI::Click*", false, nil, clonk->GetOwner());
+	}
+}
+
+public func Deconstruct()
+{
+	// Remove Site
+	if (!no_cancel)
+	{
+		for(var obj in FindObjects(Find_Container(this)))
+			obj->Exit();
+		RemoveObject();
+		return true;
+	}
+	return false;
 }
 
 public func Construction()
@@ -112,6 +202,9 @@ public func Collection2(object obj)
 	// update message
 	ShowMissingComponents();
 	
+	// Update possibly open menus.
+	UpdateInteractionMenus(this.GetMissingMaterialMenuEntries);
+	
 	// Update preview image
 	if (definition) definition->~SetConstructionSiteOverlay(this, direction, stick_to, obj);
 	
@@ -125,42 +218,22 @@ public func Collection2(object obj)
 public func ContentsDestruction(object obj) { return Collection2(nil); }
 public func Ejection(object obj) { return Collection2(nil); }
 
-// Interacting removes the Construction site
-public func Interact(object clonk, int num)
-{
-	// Open Contents-Menu
-	if(num == 0)
-	{
-		clonk->CreateContentsMenus();
-	}
-	// Remove Site
-	if(num == 1 && !no_cancel)
-	{
-		// test
-		for(var obj in FindObjects(Find_Container(this)))
-			obj->Exit();
-	
-		RemoveObject();
-	}
-}
-
 private func ShowMissingComponents()
 {
-	if(definition == nil)
+	if (definition == nil)
 	{
 		Message("");
 		return;
 	}
 		
 	var stuff = GetMissingComponents();
-	//var msg = "Construction Needs:";
 	var msg = "@";
-	for(var s in stuff)
-		if(s.count > 0)
+	for (var s in stuff)
+		if (s.count > 0)
 			msg = Format("%s %dx{{%i}}", msg, s.count, s.id);
-	
-	//Message("@%s",msg);
-	CustomMessage(msg, this, NO_OWNER, 0, 23);
+	// Ensure that the message is not below the bottom of the map.
+	var dy = 23 - Max(23 + GetY() - LandscapeHeight(), 0) / 2;
+	CustomMessage(msg, this, NO_OWNER, 0, dy);
 }
 
 private func GetMissingComponents()
@@ -208,7 +281,7 @@ private func StartConstructing()
 	// find all objects on the bottom of the area that are not stuck
 	var wdt = GetObjWidth();
 	var hgt = GetObjHeight();
-	var lying_around = FindObjects(Find_Or(Find_Category(C4D_Vehicle), Find_Category(C4D_Object), Find_Category(C4D_Living)),Find_InRect(-wdt/2 - 2, -hgt, wdt + 2, hgt + 12), Find_Not(Find_OCF(OCF_InFree)),Find_NoContainer());
+	var lying_around = FindObjects(Find_Category(C4D_Vehicle | C4D_Object | C4D_Living), Find_AtRect(-wdt/2 - 2, -hgt, wdt + 2, hgt + 12), Find_OCF(OCF_InFree), Find_NoContainer());
 	
 	// create the construction, below surface constructions don't perform any checks.
 	// uncancellable sites (for special game goals) are forced and don't do checks either
@@ -221,7 +294,7 @@ private func StartConstructing()
 		// message on one of the contents.
 		if(Contents(0))
 			CustomMessage("$TxtNoConstructionHere$", Contents(0), GetOwner(), nil,nil, RGB(255,0,0));
-		Interact(nil, 1);
+		Deconstruct();
 		return;
 	}
 	
@@ -237,6 +310,7 @@ private func StartConstructing()
 		// If not: Autoconstruct 2.0!
 		Schedule(site, "DoCon(2)",1,50);
 		Schedule(this,"RemoveObject()",1);
+		site->Sound("Structures::FinishBuilding");
 	}
 	
 	// clean up stuck objects

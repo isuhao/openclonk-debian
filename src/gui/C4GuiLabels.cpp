@@ -151,7 +151,7 @@ namespace C4GUI
 			if (tNow >= tLastChangeTime + iAutoScrollDelay)
 			{
 				if (!iScrollDir) iScrollDir=1;
-				int32_t iMaxScroll = Max<int32_t>(pFont->GetTextWidth(sText.getData(), true) + (x0 - rcBounds.x) + iXOff + GetRightIndent() - rcBounds.Wdt, 0);
+				int32_t iMaxScroll = std::max<int32_t>(pFont->GetTextWidth(sText.getData(), true) + (x0 - rcBounds.x) + iXOff + GetRightIndent() - rcBounds.Wdt, 0);
 				if (iMaxScroll)
 				{
 					iScrollPos += iScrollDir;
@@ -175,7 +175,7 @@ namespace C4GUI
 	int32_t WoodenLabel::GetDefaultHeight(CStdFont *pUseFont)
 	{
 		if (!pUseFont) pUseFont = &(::GraphicsResource.TextFont);
-		return Max<int32_t>(pUseFont->GetLineHeight(), C4GUI_MinWoodBarHgt);
+		return std::max<int32_t>(pUseFont->GetLineHeight(), C4GUI_MinWoodBarHgt);
 	}
 
 	void WoodenLabel::SetIcon(const C4Facet &rfctIcon)
@@ -255,7 +255,7 @@ namespace C4GUI
 			iHgt += iFontLineHeight;
 			++iIndex;
 		}
-		rcBounds.Hgt = Max<int32_t>(iHgt, 5);
+		rcBounds.Hgt = std::max<int32_t>(iHgt, 5);
 		// update parent container
 		Element::UpdateSize();
 	}
@@ -306,7 +306,6 @@ namespace C4GUI
 		// calc progress width
 		int32_t iProgressWdt = (rcBounds.Wdt-4) * iProgress / iMax;
 		// draw progress
-		//pDraw->DrawBoxDw(cgo.Surface, cgo.TargetX+rcBounds.x+2, cgo.TargetY+rcBounds.y+2, cgo.TargetX+rcBounds.x+iProgressWdt, cgo.TargetY+rcBounds.y+rcBounds.Hgt-2, C4GUI_ProgressBarColor);
 		::GraphicsResource.fctProgressBar.DrawX(cgo.Surface, cgo.TargetX+rcBounds.x+2, cgo.TargetY+rcBounds.y+2, iProgressWdt, rcBounds.Hgt-2);
 		// print out progress text
 		char szPrg[32+1];
@@ -396,10 +395,10 @@ namespace C4GUI
 	{
 		// draw inner image
 		C4Facet cgo2 = cgo;
-		cgo2.X = rcBounds.x + cgo.TargetX + iBorderSize * rcBounds.Wdt / Max<int>(OverlayImage.Wdt, 1);
-		cgo2.Y = rcBounds.y + cgo.TargetY + iBorderSize * rcBounds.Hgt / Max<int>(OverlayImage.Hgt, 1);
-		cgo2.Wdt = rcBounds.Wdt - 2 * iBorderSize * rcBounds.Wdt / Max<int>(OverlayImage.Wdt, 1);
-		cgo2.Hgt = rcBounds.Hgt - 2 * iBorderSize * rcBounds.Hgt / Max<int>(OverlayImage.Hgt, 1);
+		cgo2.X = rcBounds.x + cgo.TargetX + iBorderSize * rcBounds.Wdt / std::max<int>(OverlayImage.Wdt, 1);
+		cgo2.Y = rcBounds.y + cgo.TargetY + iBorderSize * rcBounds.Hgt / std::max<int>(OverlayImage.Hgt, 1);
+		cgo2.Wdt = rcBounds.Wdt - 2 * iBorderSize * rcBounds.Wdt / std::max<int>(OverlayImage.Wdt, 1);
+		cgo2.Hgt = rcBounds.Hgt - 2 * iBorderSize * rcBounds.Hgt / std::max<int>(OverlayImage.Hgt, 1);
 		Facet.Draw(cgo2, fAspect);
 		// draw outer image
 		cgo2.X = rcBounds.x + cgo.TargetX;
@@ -443,15 +442,10 @@ namespace C4GUI
 
 	void PaintBox::MouseInput(CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam)
 	{
-		// only if a valid surface is present
-		// C4Surface::Surface was always != 0
-		//if (!fctPaint.GetFace().Surface) return;
 	}
 
 	void PaintBox::DrawElement(C4TargetFacet &cgo)
 	{
-		// only if a valid surface is present
-		//if (!fctPaint.GetFace().Surface) return;
 		// draw it
 		fctPaint.Draw(cgo.Surface, rcBounds.x+cgo.TargetX, rcBounds.y+cgo.TargetY);
 	}
@@ -493,9 +487,9 @@ namespace C4GUI
 		if (iPicWdt && iPicHgt)
 		{
 			C4Rect rcImage;
-			rcImage.x = Max<int32_t>(rcContentSize.GetMiddleX() - iPicWdt/2, 0);
+			rcImage.x = std::max<int32_t>(rcContentSize.GetMiddleX() - iPicWdt/2, 0);
 			rcImage.y = 0;
-			rcImage.Wdt = Min<size_t>(iPicWdt, rcContentSize.Wdt);
+			rcImage.Wdt = std::min<size_t>(iPicWdt, rcContentSize.Wdt);
 			rcImage.Hgt = iPicHgt * rcImage.Wdt / iPicWdt;
 			rcContentSize.y += rcImage.Hgt + iPicPadding;
 			if (pOverlayPic)

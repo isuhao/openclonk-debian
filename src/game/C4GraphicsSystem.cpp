@@ -46,9 +46,6 @@ C4GraphicsSystem::~C4GraphicsSystem()
 
 bool C4GraphicsSystem::Init()
 {
-	// Init video module
-	if (Config.Graphics.VideoModule)
-		Video.Init(FullScreen.pSurface);
 	// Success
 	return true;
 }
@@ -56,15 +53,11 @@ bool C4GraphicsSystem::Init()
 void C4GraphicsSystem::Clear()
 {
 	// Clear message board
-	MessageBoard.Clear();
-	// Clear upper board
-	UpperBoard.Clear();
+	MessageBoard.reset();
 	// clear loader
 	if (pLoaderScreen) { delete pLoaderScreen; pLoaderScreen=NULL; }
 	// Close viewports
 	::Viewports.Clear();
-	// Clear video system
-	Video.Clear();
 	// No debug stuff
 	DeactivateDebugOutput();
 }
@@ -101,7 +94,7 @@ void C4GraphicsSystem::Execute()
 			{
 				// Message board
 				if (iRedrawBackground) ClearFullscreenBackground();
-				MessageBoard.Execute();
+				MessageBoard->Execute();
 				if (!C4GUI::IsActive())
 					{ FinishDrawing(); return; }
 				fBGDrawn = true;
@@ -116,7 +109,7 @@ void C4GraphicsSystem::Execute()
 		return;
 	}
 
-	
+
 	// Reset object audibility
 	::Objects.ResetAudibility();
 
@@ -135,7 +128,7 @@ void C4GraphicsSystem::Execute()
 		UpperBoard.Execute();
 
 		// Message board
-		MessageBoard.Execute();
+		MessageBoard->Execute();
 
 		// Help & Messages
 		DrawHelp();
@@ -149,21 +142,13 @@ void C4GraphicsSystem::Execute()
 		::pGUI->Render(false);
 	}
 
-	// gamma update
-	pDraw->ApplyGamma();
-
-	// Video record & status (fullsrceen)
-	if (!Application.isEditor)
-		Video.Execute();
-
 	// done
 	FinishDrawing();
 }
 
 void C4GraphicsSystem::Default()
 {
-	UpperBoard.Default();
-	MessageBoard.Default();
+	MessageBoard.reset(new C4MessageBoard);
 	InvalidateBg();
 	ShowVertices=false;
 	ShowAction=false;
@@ -171,12 +156,12 @@ void C4GraphicsSystem::Default()
 	ShowEntrance=false;
 	ShowPathfinder=false;
 	ShowNetstatus=false;
-	ShowSolidMask=false;
+	Show8BitSurface=0;
 	ShowLights=false;
+	ShowMenuInfo=false;
 	ShowHelp=false;
 	FlashMessageText[0]=0;
 	FlashMessageTime=0; FlashMessageX=FlashMessageY=0;
-	Video.Default();
 	pLoaderScreen=NULL;
 }
 
@@ -194,8 +179,6 @@ bool C4GraphicsSystem::InitLoaderScreen(const char *szLoaderSpec)
 	if (!pNewLoader->Init(szLoaderSpec)) { delete pNewLoader; return false; }
 	if (pLoaderScreen) delete pLoaderScreen;
 	pLoaderScreen = pNewLoader;
-	// apply user gamma for loader
-	pDraw->ApplyGamma();
 	// done, success
 	return true;
 }
@@ -208,9 +191,10 @@ void C4GraphicsSystem::EnableLoaderDrawing()
 
 bool C4GraphicsSystem::SaveScreenshot(bool fSaveAll, float fSaveAllZoom)
 {
-	// Filename
+	// Find a unique screenshot filename by iterating over all possible names
+	// Keep static counter so multiple screenshots in succession do not use same filename even if the background thread hasn't started writing the file yet
 	char szFilename[_MAX_PATH+1];
-	int32_t iScreenshotIndex=1;
+	static int32_t iScreenshotIndex=1;
 	const char *strFilePath = NULL;
 	do
 		sprintf(szFilename,"Screenshot%03i.png",iScreenshotIndex++);
@@ -239,9 +223,10 @@ bool C4GraphicsSystem::DoSaveScreenshot(bool fSaveAll, const char *szFilename, f
 		float zoom = fSaveAllZoom;
 		// get viewport to draw in
 		C4Viewport *pVP=::Viewports.GetFirstViewport(); if (!pVP) return false;
-		// create image large enough to hold the landcape
-		CPNGFile png; int32_t lWdt=GBackWdt * zoom,lHgt=GBackHgt * zoom;
-		if (!png.Create(lWdt, lHgt, false)) return false;
+		// create image large enough to hold the landscape
+		std::unique_ptr<CPNGFile> png(new CPNGFile());
+		int32_t lWdt = GBackWdt * zoom, lHgt = GBackHgt * zoom;
+		if (!png->Create(lWdt, lHgt, false)) return false;
 		// get backbuffer size
 		int32_t bkWdt=C4GUI::GetScreenWdt(), bkHgt=C4GUI::GetScreenHgt();
 		if (!bkWdt || !bkHgt) return false;
@@ -267,20 +252,28 @@ bool C4GraphicsSystem::DoSaveScreenshot(bool fSaveAll, const char *szFilename, f
 				if (iX+bkWdt2>lWdt) bkWdt2-=iX+bkWdt2-lWdt;
 				if (iY+bkHgt2>lHgt) bkHgt2-=iY+bkHgt2-lHgt;
 				// update facet
-				bkFct.Set(FullScreen.pSurface, 0, 0, ceil(float(bkWdt2)/zoom), ceil(float(bkHgt2)/zoom), iX/zoom, iY/zoom, zoom);
+				bkFct.Set(FullScreen.pSurface, 0, 0, ceil(float(bkWdt2)/zoom), ceil(float(bkHgt2)/zoom), iX/zoom, iY/zoom, zoom, 0, 0);
 				// draw there
-				pVP->Draw(bkFct, false);
+				pVP->Draw(bkFct, true, false);
 				// render
 				FullScreen.pSurface->PageFlip(); FullScreen.pSurface->PageFlip();
 				// get output (locking primary!)
 				if (FullScreen.pSurface->Lock())
 				{
 					// transfer each pixel - slooow...
-					for (int32_t iY2=0; iY2<bkHgt2; ++iY2)
+					for (int32_t iY2 = 0; iY2 < bkHgt2; ++iY2)
+#ifndef USE_CONSOLE
+						glReadPixels(0, FullScreen.pSurface->Hgt - iY2 - 1, bkWdt2, 1, GL_BGR, GL_UNSIGNED_BYTE, reinterpret_cast<BYTE *>(png->GetRow(iY + iY2)) + iX * 3);
+#else
 						for (int32_t iX2=0; iX2<bkWdt2; ++iX2)
-							png.SetPix(iX+iX2, iY+iY2, pDraw->ApplyGammaTo(FullScreen.pSurface->GetPixDw(iX2, iY2, false)));
+							png->SetPix(iX+iX2, iY+iY2, FullScreen.pSurface->GetPixDw(iX2, iY2, false));
+#endif
 					// done; unlock
 					FullScreen.pSurface->Unlock();
+					// This can take a long time and we would like to pump messages
+					// However, we're currently hogging the primary surface and horrible things might happen if we do that, including initiation of another screenshot
+					// The only thing that can be safely run is music (sound could play but that would just make them out of sync of the game)
+					::Application.MusicSystem.Execute(true);
 				}
 			}
 		// restore viewport player
@@ -296,10 +289,11 @@ bool C4GraphicsSystem::DoSaveScreenshot(bool fSaveAll, const char *szFilename, f
 		// restore viewport size
 		::Viewports.RecalculateViewports();
 		// save!
-		return png.Save(szFilename);
+		CPNGFile::ScheduleSaving(png.release(), szFilename);
+		return true;
 	}
-	// Save primary surface
-	return FullScreen.pSurface->SavePNG(szFilename, false, true, false);
+	// Save primary surface in background thread
+	return FullScreen.pSurface->SavePNG(szFilename, false, false, true);
 }
 
 void C4GraphicsSystem::DeactivateDebugOutput()
@@ -310,8 +304,9 @@ void C4GraphicsSystem::DeactivateDebugOutput()
 	ShowEntrance=false;
 	ShowPathfinder=false; // allow pathfinder! - why this??
 	ShowLights=false;
-	ShowSolidMask=false;
+	Show8BitSurface=0;
 	ShowNetstatus=false;
+	ShowMenuInfo=false;
 }
 
 void C4GraphicsSystem::DrawHoldMessages()
@@ -404,8 +399,8 @@ void C4GraphicsSystem::DrawHelp()
 	strText.AppendFormat("\n\n[%s]\n\n", "Debug");
 	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgModeToggle").getData(), LoadResStr("IDS_CTL_DEBUGMODE"));
 	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgShowVtxToggle").getData(), "Entrance+Vertices");
-	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgShowActionToggle").getData(), "Actions/Commands/Pathfinder");
-	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgShowSolidMaskToggle").getData(), "SolidMasks");
+	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgShowActionToggle").getData(), "Actions/Commands/Pathfinder/Lights/Menus");
+	strText.AppendFormat("<c ffff00>%s</c> - %s\n", GetKeyboardInputName("DbgShow8BitSurface").getData(), "8-bit surfaces");
 	pDraw->TextOut(strText.getData(), ::GraphicsResource.FontRegular, 1.0, FullScreen.pSurface,
 	                           iX + iWdt/2 + 64, iY + 64, C4Draw::DEFAULT_MESSAGE_COLOR, ALeft);
 }
@@ -419,8 +414,8 @@ bool C4GraphicsSystem::ToggleShowNetStatus()
 bool C4GraphicsSystem::ToggleShowVertices()
 {
 	if (!Game.DebugMode && !Console.Active) { FlashMessage(LoadResStr("IDS_MSG_NODEBUGMODE")); return false; }
-	Toggle(ShowVertices);
-	Toggle(ShowEntrance); // vertices and entrance now toggled together
+	ShowVertices = !ShowVertices;
+	ShowEntrance = !ShowEntrance; // vertices and entrance now toggled together
 	FlashMessageOnOff("Entrance+Vertices", ShowVertices || ShowEntrance);
 	return true;
 }
@@ -428,7 +423,7 @@ bool C4GraphicsSystem::ToggleShowVertices()
 bool C4GraphicsSystem::ToggleShowAction()
 {
 	if (!Game.DebugMode && !Console.Active) { FlashMessage(LoadResStr("IDS_MSG_NODEBUGMODE")); return false; }
-	if (!(ShowAction || ShowCommand || ShowPathfinder || ShowLights))
+	if (!(ShowAction || ShowCommand || ShowPathfinder || ShowLights || ShowMenuInfo))
 		{ ShowAction = true; FlashMessage("Actions"); }
 	else if (ShowAction)
 		{ ShowAction = false; ShowCommand = true; FlashMessage("Commands"); }
@@ -437,24 +432,30 @@ bool C4GraphicsSystem::ToggleShowAction()
 	else if (ShowPathfinder)
 		{ ShowPathfinder = false; ShowLights = true; FlashMessage("Lights"); }
 	else if (ShowLights)
-		{ ShowLights = false; FlashMessageOnOff("Actions/Commands/Pathfinder/Lights", false); }
+		{ ShowLights = false; ShowMenuInfo = true; FlashMessage("Menu Info"); }
+	else if (ShowMenuInfo)
+		{ ShowMenuInfo = false; FlashMessageOnOff("Actions/Commands/Pathfinder/Lights/Menus", false); }
 	return true;
 }
 
-bool C4GraphicsSystem::ToggleShowSolidMask()
+bool C4GraphicsSystem::ToggleShow8BitSurface()
 {
 	if (!Game.DebugMode && !Console.Active) { FlashMessage(LoadResStr("IDS_MSG_NODEBUGMODE")); return false; }
-	Toggle(ShowSolidMask);
-	FlashMessageOnOff("SolidMasks", !!ShowSolidMask);
+	Show8BitSurface = (Show8BitSurface + 1) % 3;
+	if (Show8BitSurface == 0)
+		FlashMessage("Default view");
+	else if (Show8BitSurface == 1)
+		FlashMessage("Foreground 8-bit landscape");
+	else if (Show8BitSurface == 2)
+		FlashMessage("Background 8-bit landscape");
 	return true;
 }
 
 bool C4GraphicsSystem::ToggleShowHelp()
 {
-	Toggle(ShowHelp);
+	ShowHelp = !ShowHelp;
 	// Turned off? Invalidate background.
 	if (!ShowHelp) InvalidateBg();
 	return true;
 }
 
-C4GraphicsSystem GraphicsSystem;

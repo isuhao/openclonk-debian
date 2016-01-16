@@ -42,9 +42,6 @@ extern "C" {
 // Global access pointer
 C4Draw *pDraw=NULL;
 
-// Transformation matrix to convert meshes from Ogre to Clonk coordinate system
-const StdMeshMatrix C4Draw::OgreToClonk = StdMeshMatrix::Scale(-1.0f, 1.0f, 1.0f) * StdMeshMatrix::Rotate(float(M_PI)/2.0f, 1.0f, 0.0f, 0.0f) * StdMeshMatrix::Rotate(float(M_PI)/2.0f, 0.0f, 0.0f, 1.0f);
-
 inline DWORD GetTextShadowClr(DWORD dwTxtClr)
 {
 	return RGBA(((dwTxtClr >>  0) % 256) / 3, ((dwTxtClr >>  8) % 256) / 3, ((dwTxtClr >> 16) % 256) / 3, (dwTxtClr >> 24) % 256);
@@ -173,43 +170,6 @@ DWORD C4Pattern::PatternClr(unsigned int iX, unsigned int iY) const
 	return CachedPattern[iY * Wdt + iX];
 }
 
-void C4GammaControl::SetClrChannel(WORD *pBuf, BYTE c1, BYTE c2, int c3)
-{
-	// Using this minimum value, gamma ramp errors on some cards can be avoided
-	int MinGamma = 0x100;
-	// adjust clr3-value
-	++c3;
-	// get rises
-	int r1=c2-c1,r2=c3-c2,r=(c3-c1)/2;
-	// calc beginning and end rise
-	r1=2*r1-r; r2=2*r2-r;
-	// calc ramp
-	WORD *pBuf2=pBuf+128;
-	for (int i=0; i<128; ++i)
-	{
-		int i2=128-i;
-		// interpolate linear ramps with the rises r1 and r
-		*pBuf ++=Clamp(((c1+r1*i/128) *i2  +  (c2-r*i2/128) *i) <<1, MinGamma, 0xffff);
-		// interpolate linear ramps with the rises r and r2
-		*pBuf2++=Clamp(((c2+r*i/128) *i2  +  (c3-r2*i2/128) *i) <<1, MinGamma, 0xffff);
-	}
-}
-
-void C4GammaControl::Set(DWORD dwClr1, DWORD dwClr2, DWORD dwClr3)
-{
-	// set red, green and blue channel
-	SetClrChannel(ramp.red  , GetRedValue(dwClr1), GetRedValue(dwClr2), GetRedValue(dwClr3));
-	SetClrChannel(ramp.green, GetGreenValue(dwClr1), GetGreenValue(dwClr2), GetGreenValue(dwClr3));
-	SetClrChannel(ramp.blue , GetBlueValue(dwClr1), GetBlueValue(dwClr2), GetBlueValue(dwClr3));
-}
-
-DWORD C4GammaControl::ApplyTo(DWORD dwClr)
-{
-	// apply to red, green and blue color component
-	return RGBA(ramp.red[GetRedValue(dwClr)]>>8, ramp.green[GetGreenValue(dwClr)]>>8, ramp.blue[GetBlueValue(dwClr)]>>8, dwClr>>24);
-}
-
-
 //--------------------------------------------------------------------
 
 void C4Draw::Default()
@@ -219,21 +179,16 @@ void C4Draw::Default()
 	Active=false;
 	BlitModulated=false;
 	dwBlitMode = 0;
-	Gamma.Default();
-	DefRamp.Default();
+	ResetGamma();
 	pFoW = NULL;
 	ZoomX = 0; ZoomY = 0; Zoom = 1;
 	MeshTransform = NULL;
 	fUsePerspective = false;
-	for (int32_t iRamp=0; iRamp<3*C4MaxGammaRamps; iRamp+=3)
-		{ dwGamma[iRamp+0]=0; dwGamma[iRamp+1]=0x808080; dwGamma[iRamp+2]=0xffffff; }
-	fSetGamma=false;
 }
 
 void C4Draw::Clear()
 {
 	ResetGamma();
-	DisableGamma();
 	Active=BlitModulated=false;
 	dwBlitMode = 0;
 }
@@ -246,7 +201,7 @@ bool C4Draw::GetSurfaceSize(C4Surface * sfcSurface, int &iWdt, int &iHgt)
 bool C4Draw::SubPrimaryClipper(int iX1, int iY1, int iX2, int iY2)
 {
 	// Set sub primary clipper
-	SetPrimaryClipper(Max(iX1,iClipX1),Max(iY1,iClipY1),Min(iX2,iClipX2),Min(iY2,iClipY2));
+	SetPrimaryClipper(std::max(iX1,iClipX1),std::max(iY1,iClipY1),std::min(iX2,iClipX2),std::min(iY2,iClipY2));
 	return true;
 }
 
@@ -276,13 +231,11 @@ bool C4Draw::SetPrimaryClipper(int iX1, int iY1, int iX2, int iY2)
 
 bool C4Draw::ApplyPrimaryClipper(C4Surface * sfcSurface)
 {
-	//sfcSurface->SetClipper(lpClipper);
 	return true;
 }
 
 bool C4Draw::DetachPrimaryClipper(C4Surface * sfcSurface)
 {
-	//sfcSurface->SetClipper(NULL);
 	return true;
 }
 
@@ -337,14 +290,14 @@ void C4Draw::Blit8Fast(CSurface8 * sfcSource, int fx, int fy,
 
 			if(bufcnt == BUF_SIZE)
 			{
-				PerformMultiPix(sfcTarget, vertices, BUF_SIZE);
+				PerformMultiPix(sfcTarget, vertices, BUF_SIZE, NULL);
 				bufcnt = 0;
 			}
 		}
 
 	}
 	if(bufcnt > 0)
-		PerformMultiPix(sfcTarget, vertices, bufcnt);
+		PerformMultiPix(sfcTarget, vertices, bufcnt, NULL);
 	delete[] vertices;
 	// unlock
 	if (!fRender) sfcTarget->Unlock();
@@ -411,13 +364,10 @@ bool C4Draw::BlitUnscaled(C4Surface * sfcSource, float fx, float fy, float fwdt,
 	// get involved texture offsets
 	int iTexSizeX=sfcSource->iTexSize;
 	int iTexSizeY=sfcSource->iTexSize;
-	int iTexX=Max(int(fx/iTexSizeX), 0);
-	int iTexY=Max(int(fy/iTexSizeY), 0);
-	int iTexX2=Min((int)(fx+fwdt-1)/iTexSizeX +1, sfcSource->iTexX);
-	int iTexY2=Min((int)(fy+fhgt-1)/iTexSizeY +1, sfcSource->iTexY);
-	// calc stretch regarding texture size and indent
-/*	float scaleX2 = scaleX * iTexSizeX;
-	float scaleY2 = scaleY * iTexSizeY;*/
+	int iTexX=std::max(int(fx/iTexSizeX), 0);
+	int iTexY=std::max(int(fy/iTexSizeY), 0);
+	int iTexX2=std::min((int)(fx+fwdt-1)/iTexSizeX +1, sfcSource->iTexX);
+	int iTexY2=std::min((int)(fy+fhgt-1)/iTexSizeY +1, sfcSource->iTexY);
 	// blit from all these textures
 	for (int iY=iTexY; iY<iTexY2; ++iY)
 	{
@@ -431,20 +381,18 @@ bool C4Draw::BlitUnscaled(C4Surface * sfcSource, float fx, float fy, float fwdt,
 			if (iTexSizeX != pTex->iSizeX)
 			{
 				iTexSizeX = pTex->iSizeX;
-				/*scaleX2 = scaleX * iTexSizeX;*/
 			}
 			if (iTexSizeY != pTex->iSizeY)
 			{
 				iTexSizeY = pTex->iSizeY;
-				/*scaleY2 = scaleY * iTexSizeY;*/
 			}
 
 			// get new texture source bounds
 			FLOAT_RECT fTexBlt;
-			fTexBlt.left  = Max<float>(fx - iBlitX, 0);
-			fTexBlt.top   = Max<float>(fy - iBlitY, 0);
-			fTexBlt.right = Min<float>(fx + fwdt - (float)iBlitX, (float)iTexSizeX);
-			fTexBlt.bottom= Min<float>(fy + fhgt - (float)iBlitY, (float)iTexSizeY);
+			fTexBlt.left  = std::max<float>(fx - iBlitX, 0);
+			fTexBlt.top   = std::max<float>(fy - iBlitY, 0);
+			fTexBlt.right = std::min<float>(fx + fwdt - (float)iBlitX, (float)iTexSizeX);
+			fTexBlt.bottom= std::min<float>(fy + fhgt - (float)iBlitY, (float)iTexSizeY);
 			// get new dest bounds
 			FLOAT_RECT tTexBlt;
 			tTexBlt.left  = (fTexBlt.left  + iBlitX - fx) * scaleX + tx;
@@ -486,7 +434,7 @@ bool C4Draw::BlitUnscaled(C4Surface * sfcSource, float fx, float fy, float fwdt,
 
 			// ClrByOwner is always fully opaque
 			const DWORD dwOverlayClrMod = 0xff000000 | sfcSource->ClrByOwnerClr;
-			PerformMultiTris(sfcTarget, vertices, 6, pTransform, pBaseTex, fBaseSfc ? pTex : NULL, pNormalTex, dwOverlayClrMod);
+			PerformMultiTris(sfcTarget, vertices, 6, pTransform, pBaseTex, fBaseSfc ? pTex : NULL, pNormalTex, dwOverlayClrMod, NULL);
 		}
 	}
 	// success
@@ -505,7 +453,7 @@ bool C4Draw::RenderMesh(StdMeshInstance &instance, C4Surface * sfcTarget, float 
 	// Update bone matrices and vertex data (note this also updates attach transforms and child transforms)
 	instance.UpdateBoneTransforms();
 	// Order faces according to MeshTransformation (note pTransform does not affect Z coordinate, so does not need to be taken into account for correct ordering)
-	StdMeshMatrix mat = OgreToClonk;
+	StdMeshMatrix mat = StdMeshMatrix::Identity();
 	if(MeshTransform) mat = *MeshTransform * mat;
 	instance.ReorderFaces(&mat);
 	// Render mesh
@@ -539,10 +487,10 @@ bool C4Draw::Blit8(C4Surface * sfcSource, int fx, int fy, int fwdt, int fhgt,
 	pTransform->TransformPoint(ttx1, tty1);
 	pTransform->TransformPoint(ttx2, tty2);
 	pTransform->TransformPoint(ttx3, tty3);
-	int ttxMin = Max<int>((int)floor(Min(Min(ttx0, ttx1), Min(ttx2, ttx3))), 0);
-	int ttxMax = Min<int>((int)ceil(Max(Max(ttx0, ttx1), Max(ttx2, ttx3))), sfcTarget->Wdt);
-	int ttyMin = Max<int>((int)floor(Min(Min(tty0, tty1), Min(tty2, tty3))), 0);
-	int ttyMax = Min<int>((int)ceil(Max(Max(tty0, tty1), Max(tty2, tty3))), sfcTarget->Hgt);
+	int ttxMin = std::max<int>((int)floor(std::min(std::min(ttx0, ttx1), std::min(ttx2, ttx3))), 0);
+	int ttxMax = std::min<int>((int)ceil(std::max(std::max(ttx0, ttx1), std::max(ttx2, ttx3))), sfcTarget->Wdt);
+	int ttyMin = std::max<int>((int)floor(std::min(std::min(tty0, tty1), std::min(tty2, tty3))), 0);
+	int ttyMax = std::min<int>((int)ceil(std::max(std::max(tty0, tty1), std::max(tty2, tty3))), sfcTarget->Hgt);
 	// blit within target rect
 	for (int y = ttyMin; y < ttyMax; ++y)
 		for (int x = ttxMin; x < ttxMax; ++x)
@@ -625,78 +573,36 @@ bool C4Draw::BlitSurface(C4Surface * sfcSurface, C4Surface * sfcTarget, int tx, 
 	}
 }
 
-bool C4Draw::BlitSurfaceTile(C4Surface * sfcSurface, C4Surface * sfcTarget, float iToX, float iToY, float iToWdt, float iToHgt, float iOffsetX, float iOffsetY, bool fSrcColKey)
+bool C4Draw::BlitSurfaceTile(C4Surface * sfcSurface, C4Surface * sfcTarget, float iToX, float iToY, float iToWdt, float iToHgt, float iOffsetX, float iOffsetY, C4ShaderCall* shader_call)
 {
-	int iSourceWdt,iSourceHgt;
-	float iX,iY,iBlitX,iBlitY,iBlitWdt,iBlitHgt;
-	// Get source surface size
-	if (!GetSurfaceSize(sfcSurface,iSourceWdt,iSourceHgt)) return false;
-	// reduce offset to needed size
-	iOffsetX = fmod(iOffsetX, iSourceWdt);
-	iOffsetY = fmod(iOffsetY, iSourceHgt);
-	// Vertical blits
-	for (iY=iToY+iOffsetY; iY<iToY+iToHgt; iY+=iSourceHgt)
-	{
-		// Vertical blit size
-		iBlitY=Max(iToY-iY,0.0f); iBlitHgt=Min<float>(iSourceHgt,iToY+iToHgt-iY)-iBlitY;
-		// Horizontal blits
-		for (iX=iToX+iOffsetX; iX<iToX+iToWdt; iX+=iSourceWdt)
-		{
-			// Horizontal blit size
-			iBlitX=Max(iToX-iX,0.0f); iBlitWdt=Min<float>(iSourceWdt,iToX+iToWdt-iX)-iBlitX;
-			// Blit
-			if (!Blit(sfcSurface, iBlitX, iBlitY, iBlitWdt, iBlitHgt, sfcTarget, iX+iBlitX, iY+iBlitY, iBlitWdt, iBlitHgt, fSrcColKey)) return false;
-		}
-	}
-	return true;
-}
+	// Only direct rendering from single, tileable, texture
+	if (!sfcTarget->IsRenderTarget()) return false;
+	if (!sfcSurface->IsSingleSurface()) return false;
+	if ((sfcSurface->textures[0].iFlags & C4SF_Tileable) == 0) return false;
 
-bool C4Draw::BlitSurfaceTile2(C4Surface * sfcSurface, C4Surface * sfcTarget, float iToX, float iToY, float iToWdt, float iToHgt, float iOffsetX, float iOffsetY, bool fSrcColKey)
-{
-	// if it's a render target, simply blit with repeating texture
-	// repeating textures, however, aren't currently supported
-	/*if (sfcTarget->IsRenderTarget())
-	  return Blit(sfcSurface, iOffsetX, iOffsetY, iToWdt, iToHgt, sfcTarget, iToX, iToY, iToWdt, iToHgt, false);*/
-	float tx,ty,iBlitX,iBlitY,iBlitWdt,iBlitHgt;
-	// get tile size
-	int iTileWdt=sfcSurface->Wdt;
-	int iTileHgt=sfcSurface->Hgt;
-	// adjust size of offsets
-	iOffsetX = fmod(iOffsetX, iTileWdt);
-	iOffsetY = fmod(iOffsetY, iTileHgt);
-	if (iOffsetX<0) iOffsetX+=iTileWdt;
-	if (iOffsetY<0) iOffsetY+=iTileHgt;
-	// get start pos for blitting
-	float iStartX=iToX-iOffsetX;
-	float iStartY=iToY-iOffsetY;
-	ty=0;
-	// blit vertical
-	for (float iY=iStartY; fabs(ty - iToHgt) > 1e-3; iY+=iTileHgt)
-	{
-		// get vertical blit bounds
-		iBlitY=0; iBlitHgt=iTileHgt;
-		if (iY<iToY) { iBlitY=iToY-iY; iBlitHgt+=iY-iToY; }
-		float iOver=ty+iBlitHgt-iToHgt; if (iOver>0) iBlitHgt-=iOver;
-		// blit horizontal
-		tx=0;
-		for (float iX=iStartX; fabs(tx - iToWdt) > 1e-3; iX+=iTileWdt)
-		{
-			// get horizontal blit bounds
-			iBlitX=0; iBlitWdt=iTileWdt;
-			if (iX<iToX) { iBlitX=iToX-iX; iBlitWdt+=iX-iToX; }
-			iOver=tx+iBlitWdt-iToWdt; if (iOver>0) iBlitWdt-=iOver;
-			// blit
-			if (!Blit(sfcSurface,iBlitX,iBlitY,iBlitWdt,iBlitHgt,sfcTarget,tx+iToX,ty+iToY,iBlitWdt,iBlitHgt,fSrcColKey))
-			{
-				// Ignore blit errors. This is usually due to blit border lying outside surface and shouldn't cause remaining blits to fail.
-			}
-			// next col
-			tx+=iBlitWdt;
-		}
-		// next line
-		ty+=iBlitHgt;
-	}
-	// success
+	// source surface dimensions
+	const float sourceWdt = sfcSurface->Wdt;
+	const float sourceHgt = sfcSurface->Hgt;
+
+	// vertex positions
+	C4BltVertex vertices[6];
+	vertices[0].ftx = iToX; vertices[0].fty = iToY; vertices[0].ftz = 0.0f;
+	vertices[0].tx = (0.0f + iOffsetX) / sourceWdt; vertices[0].ty = (0.0f + iOffsetY) / sourceHgt;
+	DwTo4UB(0xffffffff, vertices[0].color);
+	vertices[1].ftx = iToX + iToWdt; vertices[1].fty = iToY; vertices[1].ftz = 0.0f;
+	vertices[1].tx = (iToWdt + iOffsetX) / sourceWdt; vertices[1].ty = (0.0f + iOffsetY) / sourceHgt;
+	DwTo4UB(0xffffffff, vertices[1].color);
+	vertices[2].ftx = iToX + iToWdt; vertices[2].fty = iToY + iToHgt; vertices[2].ftz = 0.0f;
+	vertices[2].tx = (iToWdt + iOffsetX) / sourceWdt; vertices[2].ty = (iToHgt + iOffsetY) / sourceHgt;
+	DwTo4UB(0xffffffff, vertices[2].color);
+	vertices[3].ftx = iToX; vertices[3].fty = iToY + iToHgt; vertices[3].ftz = 0.0f;
+	vertices[3].tx = (0.0f + iOffsetX) / sourceWdt; vertices[3].ty = (iToHgt + iOffsetY) / sourceHgt;
+	DwTo4UB(0xffffffff, vertices[3].color);
+	// duplicate vertices
+	vertices[4] = vertices[0]; vertices[5] = vertices[2];
+
+	// Draw
+	PerformMultiTris(sfcTarget, vertices, 6, NULL, &sfcSurface->textures[0], NULL, NULL, 0, shader_call);
 	return true;
 }
 
@@ -744,7 +650,7 @@ void C4Draw::DrawPix(C4Surface * sfcDest, float tx, float ty, DWORD dwClr)
 	vtx.ftx = tx;
 	vtx.fty = ty;
 	DwTo4UB(dwClr, vtx.color);
-	PerformMultiPix(sfcDest, &vtx, 1);
+	PerformMultiPix(sfcDest, &vtx, 1, NULL);
 }
 
 void C4Draw::DrawLineDw(C4Surface * sfcTarget, float x1, float y1, float x2, float y2, DWORD dwClr, float width)
@@ -754,7 +660,7 @@ void C4Draw::DrawLineDw(C4Surface * sfcTarget, float x1, float y1, float x2, flo
 	vertices[1].ftx = x2; vertices[1].fty = y2;
 	DwTo4UB(dwClr, vertices[0].color);
 	DwTo4UB(dwClr, vertices[1].color);
-	PerformMultiLines(sfcTarget, vertices, 2, width);
+	PerformMultiLines(sfcTarget, vertices, 2, width, NULL);
 }
 
 void C4Draw::DrawFrameDw(C4Surface * sfcDest, int x1, int y1, int x2, int y2, DWORD dwClr) // make these parameters float...?
@@ -772,10 +678,10 @@ void C4Draw::DrawFrameDw(C4Surface * sfcDest, int x1, int y1, int x2, int y2, DW
 	for(int i = 0; i < 8; ++i)
 		DwTo4UB(dwClr, vertices[i].color);
 
-	PerformMultiLines(sfcDest, vertices, 8, 1.0f);
+	PerformMultiLines(sfcDest, vertices, 8, 1.0f, NULL);
 }
 
-void C4Draw::DrawQuadDw(C4Surface * sfcTarget, float *ipVtx, DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, DWORD dwClr4)
+void C4Draw::DrawQuadDw(C4Surface * sfcTarget, float *ipVtx, DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, DWORD dwClr4, C4ShaderCall* shader_call)
 {
 	C4BltVertex vertices[6];
 	vertices[0].ftx = ipVtx[0]; vertices[0].fty = ipVtx[1];
@@ -788,7 +694,7 @@ void C4Draw::DrawQuadDw(C4Surface * sfcTarget, float *ipVtx, DWORD dwClr1, DWORD
 	DwTo4UB(dwClr4, vertices[3].color);
 	vertices[4] = vertices[0];
 	vertices[5] = vertices[2];
-	PerformMultiTris(sfcTarget, vertices, 6, NULL, NULL, NULL, NULL, 0);
+	PerformMultiTris(sfcTarget, vertices, 6, NULL, NULL, NULL, NULL, 0, shader_call);
 }
 
 void C4Draw::DrawPatternedCircle(C4Surface * sfcDest, int x, int y, int r, BYTE col, C4Pattern & Pattern, CStdPalette &rPal)
@@ -848,8 +754,8 @@ bool C4Draw::GetPrimaryClipper(int &rX1, int &rY1, int &rX2, int &rY2)
 
 C4Rect C4Draw::GetClipRect() const
 {
-	int iWdt=Min(iClipX2, RenderTarget->Wdt-1)-iClipX1+1;
-	int iHgt=Min(iClipY2, RenderTarget->Hgt-1)-iClipY1+1;
+	int iWdt=std::min(iClipX2, RenderTarget->Wdt-1)-iClipX1+1;
+	int iHgt=std::min(iClipY2, RenderTarget->Hgt-1)-iClipY1+1;
 	int iX=iClipX1; if (iX<0) { iWdt+=iX; iX=0; }
 	int iY=iClipY1; if (iY<0) { iHgt+=iY; iY=0; }
 	return C4Rect(iX, iY, iWdt, iHgt);
@@ -860,71 +766,39 @@ C4Rect C4Draw::GetOutRect() const
 	return C4Rect(0, 0, RenderTarget->Wdt, RenderTarget->Hgt);
 }
 
-void C4Draw::SetGamma(DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, int32_t iRampIndex)
+void C4Draw::SetGamma(float r, float g, float b, int32_t iRampIndex)
 {
-	// No gamma effects
-	if (Config.Graphics.DisableGamma) return;
-	if (iRampIndex < 0 || iRampIndex >= C4MaxGammaRamps) return;
-	// turn ramp index into array offset
-	iRampIndex*=3;
-	// set array members
-	dwGamma[iRampIndex+0]=dwClr1;
-	dwGamma[iRampIndex+1]=dwClr2;
-	dwGamma[iRampIndex+2]=dwClr3;
-	// mark gamma ramp to be recalculated
-	fSetGamma=true;
+	// Set
+	gamma[iRampIndex][0] = r;
+	gamma[iRampIndex][1] = g;
+	gamma[iRampIndex][2] = b;
+	// Recalculate resulting gamma. Note that we flip gamma direction here,
+	// because higher gammaOut means darker.
+	gammaOut[0] = gammaOut[1] = gammaOut[2] = 1.0f;
+	for (int i = 0; i < C4MaxGammaRamps; i++) {
+		gammaOut[0] /= gamma[i][0];
+		gammaOut[1] /= gamma[i][1];
+		gammaOut[2] /= gamma[i][2];
+	}
 }
 
 void C4Draw::ResetGamma()
 {
-	pApp->ApplyGammaRamp(DefRamp.ramp, false);
-}
-
-void C4Draw::ApplyGamma()
-{
-	// No gamma effects
-	if (Config.Graphics.DisableGamma) return;
-	if (!fSetGamma) return;
-
-	//  calculate color channels by adding the difference between the gamma ramps to their normals
-	int32_t ChanOff[3];
-	DWORD tGamma[3];
-	const int32_t DefChanVal[3] = { 0x00, 0x80, 0xff };
-	// calc offset for curve points
-	for (int32_t iCurve=0; iCurve<3; ++iCurve)
-	{
-		memset(ChanOff, 0, sizeof(int32_t)*3);
-		// ...channels...
-		for (int32_t iChan=0; iChan<3; ++iChan)
-			// ...ramps...
-			for (int32_t iRamp=0; iRamp<C4MaxGammaRamps; ++iRamp)
-				// add offset
-				ChanOff[iChan]+=(int32_t) BYTE(dwGamma[iRamp*3+iCurve]>>(16-iChan*8)) - DefChanVal[iCurve];
-		// calc curve point
-		tGamma[iCurve]=C4RGB(Clamp<int32_t>(DefChanVal[iCurve]+ChanOff[0], 0, 255), Clamp<int32_t>(DefChanVal[iCurve]+ChanOff[1], 0, 255), Clamp<int32_t>(DefChanVal[iCurve]+ChanOff[2], 0, 255));
+	for (int i = 0; i < C4MaxGammaRamps; i++) {
+		gamma[i][0] = 1.0f;
+		gamma[i][1] = 1.0f;
+		gamma[i][2] = 1.0f;
 	}
-	// calc ramp
-	Gamma.Set(tGamma[0], tGamma[1], tGamma[2]);
-	// set gamma
-	pApp->ApplyGammaRamp(Gamma.ramp, false);
-	fSetGamma=false;
-}
-
-void C4Draw::DisableGamma()
-{
-	// set it
-	pApp->ApplyGammaRamp(DefRamp.ramp, true);
-}
-
-void C4Draw::EnableGamma()
-{
-	// set it
-	pApp->ApplyGammaRamp(Gamma.ramp, false);
+	gammaOut[0] = 1.0f;
+	gammaOut[1] = 1.0f;
+	gammaOut[2] = 1.0f;
 }
 
 DWORD C4Draw::ApplyGammaTo(DWORD dwClr)
 {
-	return Gamma.ApplyTo(dwClr);
+	return C4RGB(int(pow(float(GetRedValue(dwClr)) / 255.0f, gammaOut[0]) * 255.0),
+				 int(pow(float(GetGreenValue(dwClr)) / 255.0f, gammaOut[1]) * 255.0),
+				 int(pow(float(GetBlueValue(dwClr)) / 255.0f, gammaOut[2]) * 255.0));
 }
 
 void C4Draw::SetZoom(float X, float Y, float Zoom)
@@ -967,10 +841,6 @@ bool C4Draw::Init(C4AbstractApp * pApp, unsigned int iXRes, unsigned int iYRes, 
 {
 	this->pApp = pApp;
 
-	// store default gamma
-	if (!pApp->SaveDefaultGammaRamp(DefRamp.ramp))
-		DefRamp.Default();
-
 	pApp->pWindow->pSurface = new C4Surface(pApp, pApp->pWindow);
 
 	if (!CreatePrimarySurfaces(iXRes, iYRes, iBitDepth, iMonitor))
@@ -982,7 +852,7 @@ bool C4Draw::Init(C4AbstractApp * pApp, unsigned int iXRes, unsigned int iYRes, 
 	return true;
 }
 
-void C4Draw::DrawBoxFade(C4Surface * sfcDest, float iX, float iY, float iWdt, float iHgt, DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, DWORD dwClr4, int iBoxOffX, int iBoxOffY)
+void C4Draw::DrawBoxFade(C4Surface * sfcDest, float iX, float iY, float iWdt, float iHgt, DWORD dwClr1, DWORD dwClr2, DWORD dwClr3, DWORD dwClr4, C4ShaderCall* shader_call)
 {
 	// set vertex buffer data
 	// vertex order:
@@ -995,7 +865,7 @@ void C4Draw::DrawBoxFade(C4Surface * sfcDest, float iX, float iY, float iWdt, fl
 	vtx[2] = iX     ; vtx[3] = iY+iHgt;
 	vtx[4] = iX+iWdt; vtx[5] = iY+iHgt;
 	vtx[6] = iX+iWdt; vtx[7] = iY;
-	DrawQuadDw(sfcDest, vtx, dwClr1, dwClr3, dwClr4, dwClr2);
+	DrawQuadDw(sfcDest, vtx, dwClr1, dwClr3, dwClr4, dwClr2, shader_call);
 }
 
 void C4Draw::DrawBoxDw(C4Surface * sfcDest, int iX1, int iY1, int iX2, int iY2, DWORD dwClr)
@@ -1011,6 +881,6 @@ void C4Draw::DrawBoxDw(C4Surface * sfcDest, int iX1, int iY1, int iX2, int iY2, 
 	}
 	else
 	{
-		DrawBoxFade(sfcDest, float(iX1), float(iY1), float(iX2 - iX1 + 1), float(iY2 - iY1 + 1), dwClr, dwClr, dwClr, dwClr, 0, 0);
+		DrawBoxFade(sfcDest, float(iX1), float(iY1), float(iX2 - iX1 + 1), float(iY2 - iY1 + 1), dwClr, dwClr, dwClr, dwClr, NULL);
 	}
 }

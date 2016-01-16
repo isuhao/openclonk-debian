@@ -35,44 +35,31 @@ const int C4LogSize=30000, C4LogMaxLines=1000;
 
 C4MessageBoard::C4MessageBoard() : LogBuffer(C4LogSize, C4LogMaxLines, 0, "  ", false)
 {
-	Default();
+	Delay = -1;
+	Fader = 0;
+	Speed = 2;
+	Output.Default();
+	Startup = false;
+	ScreenFader = 0;
+	iBackScroll = -1;
+	ScrollUpBinding = nullptr;
+	ScrollDownBinding = nullptr;
 }
 
 C4MessageBoard::~C4MessageBoard()
 {
-	Clear();
-}
-
-void C4MessageBoard::Default()
-{
-	Clear();
-	Active=false;
-	Delay=-1;
-	Fader=0;
-	Speed=2;
-	Output.Default();
-	Startup=false;
-	ScreenFader=0;
-	iBackScroll = -1;
-}
-
-void C4MessageBoard::Clear()
-{
-	Active=false;
 	LogBuffer.Clear();
 	LogBuffer.SetLBWidth(0);
 }
 
 void C4MessageBoard::Execute()
 {
-	if (!Active) return;
-
 	// Startup? draw only
 	if (Startup) { Draw(Output); return; }
 
 	// typein or messages waiting? fade in
 	if (::MessageInput.IsTypeIn() || iBackScroll >= 0)
-		ScreenFader = Max(ScreenFader - 0.20f, -1.0f);
+		ScreenFader = std::max(ScreenFader - 0.20f, -1.0f);
 
 	// no curr msg?
 	if (iBackScroll<0)
@@ -80,15 +67,15 @@ void C4MessageBoard::Execute()
 		// draw anyway
 		Draw(Output);
 		if (!::MessageInput.IsTypeIn())
-			ScreenFader = Min(ScreenFader + 0.05f, 1.0f);
+			ScreenFader = std::min(ScreenFader + 0.05f, 1.0f);
 		return;
 	}
 
 	// recalc fade/delay speed
-	Speed = Max(1, iBackScroll / 5);
+	Speed = std::max(1, iBackScroll / 5);
 	// fade msg in?
 	if (Fader > 0)
-		Fader = Max(Fader - Speed, 0);
+		Fader = std::max(Fader - Speed, 0);
 	// hold curr msg? (delay)
 	if (Fader <= 0)
 	{
@@ -96,16 +83,16 @@ void C4MessageBoard::Execute()
 		if (Delay == -1)
 		{
 			// set delay based on msg length
-			const char *szCurrMsg = LogBuffer.GetLine(Min(-iBackScroll, -1), NULL, NULL, NULL);
+			const char *szCurrMsg = LogBuffer.GetLine(std::min(-iBackScroll, -1), NULL, NULL, NULL);
 			if (szCurrMsg) Delay = strlen(szCurrMsg); else Delay = 0;
 		}
 		// wait...
-		if (Delay > 0) Delay = Max(Delay - Speed, 0);
+		if (Delay > 0) Delay = std::max(Delay - Speed, 0);
 		// end of delay
 		if (Delay == 0)
 		{
 			// set cursor to next msg (or at end of log)
-			iBackScroll = Max(iBackScroll - 1, -1);
+			iBackScroll = std::max(iBackScroll - 1, -1);
 			// reset fade
 			Fader = iLineHgt;
 			Delay = -1;
@@ -118,7 +105,6 @@ void C4MessageBoard::Execute()
 
 void C4MessageBoard::Init(C4Facet &cgo, bool fStartup)
 {
-	Active=true;
 	Output=cgo;
 	Startup=fStartup;
 	iLineHgt=::GraphicsResource.FontRegular.GetLineHeight();
@@ -135,11 +121,14 @@ void C4MessageBoard::Init(C4Facet &cgo, bool fStartup)
 		LogBuffer.SetLBWidth(Output.Wdt);
 	}
 
+	// messageboard
+	ScrollUpBinding.reset(new C4KeyBinding(C4KeyCodeEx(K_UP, KEYS_Shift), "MsgBoardScrollUp", KEYSCOPE_Fullscreen, new C4KeyCB  <C4MessageBoard>(*GraphicsSystem.MessageBoard, &C4MessageBoard::ControlScrollUp)));
+	ScrollDownBinding.reset(new C4KeyBinding(C4KeyCodeEx(K_DOWN, KEYS_Shift), "MsgBoardScrollDown", KEYSCOPE_Fullscreen, new C4KeyCB  <C4MessageBoard>(*GraphicsSystem.MessageBoard, &C4MessageBoard::ControlScrollDown)));
 }
 
 void C4MessageBoard::Draw(C4Facet &cgo)
 {
-	if (!Active || !Application.Active) return;
+	if (!Application.Active) return;
 
 	// Startup: draw Loader
 	if (Startup)
@@ -182,14 +171,8 @@ void C4MessageBoard::Draw(C4Facet &cgo)
 		else
 			dwColor = 0xffffff;
 		// fade out (msg fade)
-		DWORD dwFade;
-		//if (iMsgY < cgo.Y)
-		//{
-			float fade = Max(ScreenFader, 0.0f) + ((iMsg + 2.0f + float(Fader) / iLineHgt) / Min(2-iMsgFader, -1));
-			dwFade = (0xff - Clamp(int(fade * 0xff), 0, 0xff)) << 24;
-		//}
-		//else
-		//	dwFade = 0xff000000;
+		float fade = std::max(ScreenFader, 0.0f) + ((iMsg + 2.0f + float(Fader) / iLineHgt) / std::min(2-iMsgFader, -1));
+		DWORD dwFade = (0xff - Clamp(int(fade * 0xff), 0, 0xff)) << 24;
 		dwColor |= dwFade;
 		// Draw
 		pDraw->StringOut(Message,::GraphicsResource.FontRegular,1.0,cgo.Surface,cgo.X,iMsgY,dwColor);
@@ -199,7 +182,7 @@ void C4MessageBoard::Draw(C4Facet &cgo)
 void C4MessageBoard::EnsureLastMessage()
 {
 	// Ingore if startup or typein
-	if (!Active || Startup) return;
+	if (Startup) return;
 	// scroll until end of log
 	for (int i = 0; i < 100; i++)
 	{
@@ -212,8 +195,6 @@ void C4MessageBoard::EnsureLastMessage()
 
 void C4MessageBoard::AddLog(const char *szMessage)
 {
-	// Not active
-	if (!Active) return;
 	// safety
 	if (!szMessage || !*szMessage) return;
 	// make sure new message will be drawn
@@ -229,8 +210,6 @@ void C4MessageBoard::ClearLog()
 
 void C4MessageBoard::LogNotify()
 {
-	// Not active
-	if (!Active) return;
 	// do not show startup board if GUI is active
 	if (::pGUI->IsActive()) return;
 	// Reset
@@ -261,7 +240,6 @@ C4Player* C4MessageBoard::GetMessagePlayer(const char *szMessage)
 
 bool C4MessageBoard::ControlScrollUp()
 {
-	if (!Active) return false;
 	Delay=-1; Fader=0;
 	iBackScroll++;
 	return true;
@@ -269,7 +247,6 @@ bool C4MessageBoard::ControlScrollUp()
 
 bool C4MessageBoard::ControlScrollDown()
 {
-	if (!Active) return false;
 	Delay=-1; Fader=0;
 	if (iBackScroll > -1) iBackScroll--;
 	return true;

@@ -16,6 +16,8 @@ local DefaultFlagRadius = 90;
 
 local last_power;
 local wheel;
+// Rates the current efficiency of the wind generator from 0 to 100.
+local last_wind_efficiency = nil;
 
 func TurnAnimation() { return "Turn"; }
 func MinRevolutionTime() { return 4500; } // in frames
@@ -70,13 +72,23 @@ public func OnPowerProductionStop(int amount)
 // Returns the wind weighted over several points.
 private func GetWeightedWind()
 {
-	return (
-		(10 * GetWind(-150, -30)) + 
-		(25 * GetWind( -75, -30)) + 
-		(30 * GetWind(   0, -30)) + 
-		(25 * GetWind( +75, -30)) + 
-		(10 * GetWind(+150, -30))
-		) / 100;
+	var weighted_wind_sum = 0;
+	var max_wind = 0;
+	var x_coords = [-150, -75, 0, 75, 150];
+	var weights = [10, 25, 30, 25, 10]; // Should sum up to 100.
+	var count = 5;
+	for (var i = 0; i < count; ++i)
+	{
+		var raw_wind = GetWind(x_coords[i], -30);
+		weighted_wind_sum += weights[i] * raw_wind;
+		
+		if (Abs(raw_wind) > max_wind) max_wind = Abs(raw_wind);
+	}
+	var wind_output = weighted_wind_sum / 100;
+	if (max_wind != 0)
+		last_wind_efficiency = 100 * Abs(wind_output) / max_wind;
+	
+	return wind_output;
 }
 
 // Turns wind into power and adjusts the power production accordingly.
@@ -104,10 +116,53 @@ public func Wind2Turn()
 	wheel->SetRDir(current_wind * 90, MinRevolutionTime());
 	// Make some sounds.
 	if (Abs(current_wind) >= 10 && Random(15 - Abs(current_wind / 10)) < 5)
-		Sound(["WoodCreak?","HingeCreak?"][Random(2)], false, nil, nil, nil, 75);
+		Sound(["Hits::Materials::Wood::WoodCreak?","Structures::HingeCreak?"][Random(2)], false, nil, nil, nil, 75);
 	return;
 }
 
+
+/* Interaction */
+
+// Provides an own interaction menu.
+public func HasInteractionMenu() { return true; }
+
+// Show hint about efficiency in the interaction menu.
+public func GetInteractionMenus(object clonk)
+{
+	var menus = _inherited() ?? [];
+	var prod_menu =
+	{
+		title = "$Efficiency$",
+		entries_callback = this.GetInfoMenuEntries,
+		callback = nil,
+		BackgroundColor = RGB(0, 0, 50),
+		Priority = 20
+	};
+	PushBack(menus, prod_menu);
+	
+	return menus;
+}
+
+public func GetInfoMenuEntries()
+{
+	var text = "$EfficiencyUnknown$";
+	if (last_wind_efficiency != nil)
+	{
+		var hint = "$EfficiencyGood$";
+		if (last_wind_efficiency < 25)
+			hint = "$EfficiencyBad$||$EfficiencyGeneral$";
+		else if (last_wind_efficiency < 75)
+			hint = "$EfficiencyMedium$||$EfficiencyGeneral$";
+		text = Format("$Efficiency$: %3d%%|%s", last_wind_efficiency, hint); 
+	}
+	var info_text =
+	{
+		Right = "100%", Bottom = "8em",
+		text = {Top = "2em", Text = text, Style = GUI_TextVCenter | GUI_TextHCenter},
+		image = {Right = "2em", Bottom = "2em", Symbol = Icon_Lightbulb}
+	};
+	return [{symbol = this, custom = info_text}];
+}
 
 /*-- Properties --*/
 

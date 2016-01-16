@@ -1,5 +1,5 @@
 [DefCore]
-id=Plane
+id=Airplane
 Version=6,0
 Category=C4D_Vehicle
 Width=40
@@ -20,4 +20,3 @@ Exclusive=1
 RotatedEntrance=1
 VehicleControl=1
 NoStabilize=1
-BorderBound=7

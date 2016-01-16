@@ -35,9 +35,9 @@ namespace C4GUI
 // --------------------------------------------------
 // Generic helpers
 
-	bool ExpandHotkeyMarkup(StdStrBuf &sText, uint32_t &rcHotkey)
+	bool ExpandHotkeyMarkup(StdStrBuf &sText, uint32_t &rcHotkey, bool for_tooltip)
 	{
-		static const char HotkeyMarkup[] = "<c ffffff7f>%s</c>";
+		const char *HotkeyMarkup = (for_tooltip ? "<c ff800000>%s</c>" : "<c ffffff7f>%s</c>");
 
 		StdStrBuf output;
 
@@ -98,7 +98,7 @@ namespace C4GUI
 	DWORD MakeColorReadableOnBlack(DWORD &rdwClr)
 	{
 		// max alpha
-		DWORD dwAlpha = Max<DWORD>(rdwClr>>24&255, 0xff)<<24;
+		DWORD dwAlpha = std::max<DWORD>(rdwClr>>24&255, 0xff)<<24;
 		rdwClr &= 0xffffff;
 		// determine brightness
 		// 50% red, 87% green, 27% blue (max 164 * 255)
@@ -109,7 +109,7 @@ namespace C4GUI
 		{
 			int32_t iInc = (16575-iLightness) / 164;
 			// otherwise, lighten
-			rdwClr = (Min<DWORD>(r+iInc, 255)<<16) | (Min<DWORD>(g+iInc, 255)<<8) | Min<DWORD>(b+iInc, 255);
+			rdwClr = (std::min<DWORD>(r+iInc, 255)<<16) | (std::min<DWORD>(g+iInc, 255)<<8) | std::min<DWORD>(b+iInc, 255);
 		}
 		// return color and alpha
 		rdwClr |= dwAlpha;
@@ -150,7 +150,7 @@ namespace C4GUI
 // --------------------------------------------------
 // Element
 
-	Element::Element() : pParent(NULL), pDragTarget(NULL), fDragging(false), pContextHandler(NULL), fVisible(true)
+	Element::Element() : pParent(NULL), pDragTarget(NULL), fDragging(false), pContextHandler(NULL), fVisible(true), is_immediate_tooltip(false)
 	{
 		// pParent=NULL invalidates pPrev/pNext
 		// fDragging=false invalidates iDragX/Y
@@ -275,7 +275,6 @@ namespace C4GUI
 			pDragTarget->rcBounds.x += iX-iDragX;
 			pDragTarget->rcBounds.y += iY-iDragY;
 			// drag X/Y is up-to-date if this is a child element of the drag target
-			//iDragX = iX; iDragY = iY;
 			pDragTarget->UpdatePos();
 		}
 	}
@@ -320,7 +319,7 @@ namespace C4GUI
 			if (fOverflow) rFacets.fctBegin.Wdt = wLeft;
 			while (iX < rcBounds.Wdt-iRightShowLength)
 			{
-				int32_t w2=Min(w, rcBounds.Wdt-iRightShowLength-iX); rFacets.fctMiddle.Wdt=w2;
+				int32_t w2=std::min(w, rcBounds.Wdt-iRightShowLength-iX); rFacets.fctMiddle.Wdt=w2;
 				rFacets.fctMiddle.Draw(cgo.Surface, x0+iX, y0);
 				iX += w;
 			}
@@ -348,7 +347,7 @@ namespace C4GUI
 			rFacets.fctBegin.DrawX(cgo.Surface, x0,y0,int32_t(fZoom*rFacets.fctBegin.Wdt),rcBounds.Hgt);
 			while (iX < rcBounds.Wdt-(fZoom*iRightShowLength))
 			{
-				int32_t w2=Min<int32_t>(w, rcBounds.Wdt-int32_t(fZoom*iRightShowLength)-iX); rFacets.fctMiddle.Wdt=long(float(w2)/fZoom);
+				int32_t w2=std::min<int32_t>(w, rcBounds.Wdt-int32_t(fZoom*iRightShowLength)-iX); rFacets.fctMiddle.Wdt=long(float(w2)/fZoom);
 				rFacets.fctMiddle.DrawX(cgo.Surface, x0+iX, y0, w2,rcBounds.Hgt);
 				iX += w;
 			}
@@ -387,7 +386,7 @@ namespace C4GUI
 
 		for (int32_t iY = 0; iY <= barHeight; iY += h)
 		{
-			int32_t h2 = Min(h, barHeight - iY);
+			int32_t h2 = std::min(h, barHeight - iY);
 			rFacets.fctMiddle.Hgt = h2;
 			rFacets.fctMiddle.DrawT(cgo.Surface, x0, y0 + rFacets.fctBegin.Hgt + iY, 0, 0, &trf);
 		}
@@ -407,10 +406,12 @@ namespace C4GUI
 		return rtBounds;
 	}
 
-	void Element::SetToolTip(const char *szNewTooltip)
+	void Element::SetToolTip(const char *szNewTooltip, bool is_immediate)
 	{
 		// store tooltip
 		if (szNewTooltip) ToolTip.Copy(szNewTooltip); else ToolTip.Clear();
+		// store immediate flag
+		is_immediate_tooltip = is_immediate;
 	}
 
 	bool Element::DoContext()
@@ -483,28 +484,38 @@ namespace C4GUI
 		}
 	}
 
-	void CMouse::Draw(C4TargetFacet &cgo, bool fDrawToolTip)
+	void CMouse::Draw(C4TargetFacet &cgo, TooltipShowState draw_tool_tips)
 	{
 		// only if owned
 		if (!fActive) return;
-		// dbg: some cursor...
-		//pDraw->DrawFrame(pDraw->lpBack, x-5,y-5,x+5,y+5,2);
+
+		// Make sure to draw the cursor without zoom.
+		ZoomData GuiZoom;
+		pDraw->GetZoom(&GuiZoom);
+		const float oldZoom = GuiZoom.Zoom;
+		GuiZoom.Zoom = 1.0;
+		pDraw->SetZoom(GuiZoom);
 
 		int32_t iOffsetX = -GfxR->fctMouseCursor.Wdt/2;
 		int32_t iOffsetY = -GfxR->fctMouseCursor.Hgt/2;
 		GfxR->fctMouseCursor.Draw(cgo.Surface,x+iOffsetX,y+iOffsetY,0);
 		// ToolTip
-		if (fDrawToolTip && pMouseOverElement)
+		if (pMouseOverElement && draw_tool_tips != TTST_None)
 		{
-			const char *szTip = pMouseOverElement->GetToolTip();
-			if (szTip && *szTip)
+			if (draw_tool_tips == TTST_All || pMouseOverElement->IsImmediateToolTip())
 			{
-				C4TargetFacet cgoTip; cgoTip.Set(cgo.Surface, cgo.X, cgo.Y, cgo.Wdt, cgo.Hgt);
-				Screen::DrawToolTip(szTip, cgoTip, x, y);
+				const char *szTip = pMouseOverElement->GetToolTip();
+				if (szTip && *szTip)
+				{
+					C4TargetFacet cgoTip; cgoTip.Set(cgo.Surface, cgo.X, cgo.Y, cgo.Wdt, cgo.Hgt);
+					Screen::DrawToolTip(szTip, cgoTip, x, y);
+				}
 			}
 		}
-		// drag line
-		//if (LDown) pDraw->DrawLine(cgo.Surface, LDownX, LDownY, x,y, 4);
+
+		// And restore old zoom settings.
+		GuiZoom.Zoom = oldZoom;
+		pDraw->SetZoom(GuiZoom);
 	}
 
 	void CMouse::ReleaseElements()
@@ -707,7 +718,7 @@ namespace C4GUI
 		// get dialog with matching handle
 		Dialog *pDlg;
 		for (Element *pEl = pLast; pEl; pEl = pEl->GetPrev())
-			if (pDlg = pEl->GetDlg())
+			if ((pDlg = pEl->GetDlg()))
 				if (pDlg->pWindow && pDlg->pWindow->hWindow == hWindow)
 					return pDlg;
 		return NULL;
@@ -735,7 +746,8 @@ namespace C4GUI
 	void Screen::RenderMouse(C4TargetFacet &cgo)
 	{
 		// draw mouse cursor
-		Mouse.Draw(cgo, Mouse.IsMouseStill() && Mouse.IsActiveInput());
+		// All tool tips hidden during keyboard input. Immediate tooltips hidden if mouse was moving recently.
+		Mouse.Draw(cgo, Mouse.IsActiveInput() ? Mouse.IsMouseStill() ? CMouse::TTST_All : CMouse::TTST_Immediate : CMouse::TTST_None);
 	}
 
 	void Screen::Draw(C4TargetFacet &cgo, bool fDoBG)
@@ -837,6 +849,7 @@ namespace C4GUI
 		float fY = float(iPxY) / fZoom;
 		// forward to mouse
 		Mouse.Input(iButton, fX, fY, dwKeyParam);
+
 		// dragging
 		if (Mouse.pDragElement)
 		{
@@ -1004,14 +1017,14 @@ namespace C4GUI
 	{
 		CStdFont *pUseFont = &(::GraphicsResource.TooltipFont);
 		StdStrBuf sText;
-		pUseFont->BreakMessage(szTip, Min<int32_t>(C4GUI_MaxToolTipWdt, Max<int32_t>(cgo.Wdt, 50)), &sText, true);
+		pUseFont->BreakMessage(szTip, std::min<int32_t>(C4GUI_MaxToolTipWdt, std::max<int32_t>(cgo.Wdt, 50)), &sText, true);
 		// get tooltip rect
 		int32_t tWdt,tHgt;
 		if (pUseFont->GetTextExtent(sText.getData(), tWdt, tHgt, true))
 		{
 			tWdt+=6; tHgt+=4;
 			int32_t tX, tY;
-			if (y < cgo.Y+cgo.TargetY+tHgt+5) tY = Min<int32_t>(y+5, cgo.TargetY+cgo.Hgt-tHgt); else tY = y-tHgt-5;
+			if (y < cgo.Y+cgo.TargetY+tHgt+5) tY = std::min<int32_t>(y+5, cgo.TargetY+cgo.Hgt-tHgt); else tY = y-tHgt-5;
 			tX = Clamp<int32_t>(x-tWdt/2, cgo.TargetX+cgo.X, cgo.TargetX+cgo.Wdt-tWdt);
 			// draw tooltip box
 			pDraw->DrawBoxDw(cgo.Surface, tX,tY,tX+tWdt-1,tY+tHgt-2, C4GUI_ToolTipBGColor);
@@ -1152,8 +1165,8 @@ namespace C4GUI
 		int32_t iSectSizeXO = iSectSizeX, iSectSizeYO = iSectSizeY;
 		int32_t iSectSizeXMax = (rcClientArea.Wdt-iMarginX) / iSectXMax - iMarginX;
 		int32_t iSectSizeYMax = (rcClientArea.Hgt-iMarginY) / iSectYMax - iMarginY;
-		if (iSectSizeX<0 || fCenterPos) iSectSizeX=iSectSizeXMax; else iSectSizeX=Min<int32_t>(iSectSizeX, iSectSizeXMax);
-		if (iSectSizeY<0 || fCenterPos) iSectSizeY=iSectSizeYMax; else iSectSizeY=Min<int32_t>(iSectSizeY, iSectSizeYMax);
+		if (iSectSizeX<0 || fCenterPos) iSectSizeX=iSectSizeXMax; else iSectSizeX=std::min<int32_t>(iSectSizeX, iSectSizeXMax);
+		if (iSectSizeY<0 || fCenterPos) iSectSizeY=iSectSizeYMax; else iSectSizeY=std::min<int32_t>(iSectSizeY, iSectSizeYMax);
 		rcTemp.x = iSectX * (iSectSizeX+iMarginX) + iMarginX + rcClientArea.x;
 		rcTemp.y = iSectY * (iSectSizeY+iMarginY) + iMarginY + rcClientArea.y;
 		rcTemp.Wdt = iSectSizeX * iSectNumX + iMarginX*(iSectNumX-1); rcTemp.Hgt = iSectSizeY * iSectNumY + iMarginY*(iSectNumY-1);

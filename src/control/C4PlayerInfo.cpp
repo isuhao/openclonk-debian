@@ -363,7 +363,7 @@ bool C4PlayerInfo::LoadBigIcon(C4FacetSurface &fctTarget)
 		if (Plr.Open(pRes ? pRes->getFile() : GetFilename()))
 			if (Plr.AccessEntry(C4CFN_BigIcon, &iBigIconSize))
 				if (iBigIconSize<=C4NetResMaxBigicon*1024)
-					if (fctTarget.Load(Plr, C4CFN_BigIcon))
+					if (fctTarget.Load(Plr, C4CFN_BigIcon, C4FCT_Full, C4FCT_Full, false, 0))
 						fSuccess = true;
 	return fSuccess;
 }
@@ -859,7 +859,7 @@ bool C4PlayerInfoList::AssignPlayerIDs(C4ClientPlayerInfos *pNewClientInfo)
 int32_t C4PlayerInfoList::GetFreePlayerSlotCount()
 {
 	// number of free slots depends on max player setting
-	return Max<int32_t>(Game.Parameters.MaxPlayers - GetStartupCount(), 0);
+	return std::max<int32_t>(Game.Parameters.MaxPlayers - GetStartupCount(), 0);
 }
 
 void C4PlayerInfoList::AssignTeams(C4ClientPlayerInfos *pNewClientInfo, bool fByHost)
@@ -1775,7 +1775,7 @@ void C4PlayerInfoList::FixIDCounter()
 		int32_t j=0; C4PlayerInfo *pInfo;
 		while ((pInfo = ppClients[i]->GetPlayerInfo(j++)))
 		{
-			iLastPlayerID = Max<int32_t>(pInfo->GetID(), iLastPlayerID);
+			iLastPlayerID = std::max<int32_t>(pInfo->GetID(), iLastPlayerID);
 		}
 	}
 }

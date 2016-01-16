@@ -22,19 +22,9 @@
 
 C4UpperBoard::C4UpperBoard()
 {
-	Default();
 }
 
 C4UpperBoard::~C4UpperBoard()
-{
-	Clear();
-}
-
-void C4UpperBoard::Default()
-{
-}
-
-void C4UpperBoard::Clear()
 {
 }
 
@@ -51,7 +41,7 @@ void C4UpperBoard::Draw(C4Facet &cgo)
 {
 	if (!cgo.Surface) return;
 	// Background
-	pDraw->BlitSurfaceTile(::GraphicsResource.fctUpperBoard.Surface,Output.Surface,0,0,Output.Wdt,Output.Hgt);
+	pDraw->BlitSurfaceTile(::GraphicsResource.fctUpperBoard.Surface,Output.Surface,0,0,Output.Wdt,Output.Hgt,0,0,NULL);
 	// Logo
 	C4Facet cgo2;
 	float fLogoZoom = 1.0f;
@@ -81,9 +71,7 @@ void C4UpperBoard::Init(C4Facet &cgo)
 	Output = cgo;
 	if (!::GraphicsResource.fctUpperBoard.Surface) return;
 	// in newgfx, the upperboard may be larger and overlap the scene
-	Output.Hgt = Max(Output.Hgt, ::GraphicsResource.fctUpperBoard.Hgt);
-	// surface should not be too small
-	::GraphicsResource.fctUpperBoard.EnsureSize(128, Output.Hgt);
+	Output.Hgt = std::max(Output.Hgt, ::GraphicsResource.fctUpperBoard.Hgt);
 	// Generate textposition
 	sprintf(cTimeString,"%02d:%02d:%02d", Game.Time/3600,(Game.Time%3600)/60,Game.Time%60);
 	TextWidth = ::GraphicsResource.FontRegular.GetTextWidth(cTimeString);

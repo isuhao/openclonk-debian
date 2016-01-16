@@ -67,7 +67,6 @@ struct C4NetFilenameAdapt
 		}
 #endif
 	}
-	ALLOW_TEMP_TO_REF(C4NetFilenameAdapt)
 	template <class T> bool operator == (const T &rVal) { return FileName == rVal; }
 	template <class T> C4NetFilenameAdapt &operator = (const T &rVal) { FileName = rVal; return *this; }
 };
@@ -167,7 +166,8 @@ enum C4PacketType
 	CID_EMMoveObj     = CID_First | 0x30,
 	CID_EMDrawTool    = CID_First | 0x31,
 
-	CID_DebugRec      = CID_First | 0x40
+	CID_DebugRec      = CID_First | 0x40,
+	CID_MenuCommand   = CID_First | 0x41,
 };
 
 // packet classes

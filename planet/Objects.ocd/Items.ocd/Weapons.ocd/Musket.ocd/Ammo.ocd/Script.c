@@ -7,6 +7,7 @@ public func MaxStackCount() { return 8; }
 public func IsMusketAmmo() { return true; }
 
 public func ProjectileDamage() { return 15; }
+public func TumbleStrength() { return 100; }
 public func FlightTime() { return 30; }
 
 protected func Hit()
@@ -15,7 +16,7 @@ protected func Hit()
 	{
 		RemoveEffect("HitCheck",this);
 	
-		Sound("BulletHitGround?");
+		Sound("Objects::Weapons::Musket::BulletHitGround?");
 		
 		CreateParticle("StarSpark", 0, 0, PV_Random(-20, 20), PV_Random(-20, 20), PV_Random(10, 20), Particles_Glimmer(), 3);
 		
@@ -41,23 +42,26 @@ public func Launch(object shooter, int angle, int dist, int speed, int offset_x,
 	CreateObjectAbove(BulletTrail,0,0)->Set(2, 200, this);
 	
 	// sound
-	Sound("BulletShot?");
+	Sound("Objects::Weapons::Musket::BulletShot?");
 }
 
 public func HitObject(object obj)
 {
-	ProjectileHit(obj,ProjectileDamage(),ProjectileHit_tumble);
+	if (WeaponCanHit(obj))
+	{
+		if (obj->GetAlive())
+			Sound("Hits::ProjectileHitLiving?");
+		else
+			Sound("Objects::Weapons::Musket::BulletHitGround?");
+		
+		obj->~OnProjectileHit(this);
+		WeaponDamage(obj, this->ProjectileDamage(), FX_Call_EngObjHit, false);
+		WeaponTumble(obj, this->TumbleStrength());
+		if (!this) return;
+	}
 	RemoveObject();
 }
 
-// called by successful hit of object after from ProjectileHit(...)
-public func OnStrike(object obj)
-{
-	if(obj->GetAlive())
-		Sound("ProjectileHitLiving?");
-	else
-		Sound("BulletHitGround?");
-}
 
 func UpdatePicture()
 {
@@ -127,4 +131,3 @@ local ActMap = {
 local Name = "$Name$";
 local Description = "$Description$";
 local Collectible = 1;
-local Rebuy = true;

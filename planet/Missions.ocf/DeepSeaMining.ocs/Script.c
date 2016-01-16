@@ -32,7 +32,16 @@ protected func PostIntroInitialize()
 		goal_site->CreateContents(Amethyst,5);
 	}
 	
+	// Rules
+	var respawn_rule = FindObject(Find_ID(Rule_BaseRespawn));
+	if (respawn_rule)
+	{
+		respawn_rule->SetInventoryTransfer(true);
+		respawn_rule->SetFreeCrew(true);
+	}
+	
 	// Initialize different parts of the scenario.
+	InitializeAmbience();
 	InitEnvironment();
 	InitVegetation();
 	InitAnimals();
@@ -40,9 +49,10 @@ protected func PostIntroInitialize()
 	
 	// NPC
 	g_tuesday_pos = FindMainIslandPosition(0, 100, true);
-	npc_tuesday = CreateObjectAbove(Clonk, g_tuesday_pos[0]+20, g_tuesday_pos[1]-10);
+	npc_tuesday = CreateObjectAbove(Clonk, g_tuesday_pos[0]+20, g_tuesday_pos[1]-20);
 	npc_tuesday->SetDir(DIR_Left);
 	npc_tuesday->SetColor(0x804000);
+	npc_tuesday->SetAlternativeSkin("Sage"); // DarkSkinned
 	npc_tuesday->SetName("$Tuesday$");
 	
 	return true;
@@ -50,7 +60,13 @@ protected func PostIntroInitialize()
 
 func DoInit(int first_player)
 {
-	StartSequence("Intro", 0, GetCrew(first_player));
+	if (!SCEN_TEST)
+		StartSequence("Intro", 0, GetCrew(first_player));
+	else
+	{
+		PostIntroInitialize();
+		g_intro_done = true;
+	}
 	return true;
 }
 
@@ -92,11 +108,24 @@ protected func InitializePlayer(int plr)
 // Initializes environment and disasters.
 private func InitEnvironment()
 {
-	// Water refill from sides
-	var initial_water_level = 0;
-	while (GetMaterial(0,initial_water_level) != Material("Water")) ++initial_water_level;
-	ScheduleCall(nil, this.EnsureWaterLevel, 20, 999999999, initial_water_level);
-
+	// Set infinite wate rreflow from sides
+	var water = Material("Water");
+	for (var x in [0, LandscapeWidth()-1])
+		for (var y=1,y0=0; y<=LandscapeHeight(); ++y)
+		{
+			if (GetMaterial(x, y) == water)
+			{
+				// Water section begins here
+				if (!y0) y0 = y;
+			}
+			else if (y0)
+			{
+				// Water section ends 1px above - apply auto-refill texture
+				DrawMaterialQuad("Water", x, y0, x+1, y0, x+1, y, x, y, "Water");
+				y0 = 0;
+			}
+		}
+		
 	// Set a certain parallax.
 	SetSkyParallax(0, 20, 20);
 	
@@ -104,17 +133,6 @@ private func InitEnvironment()
 	//Meteor->SetChance(5); Cloud->SetLightning(16);
 	
 	return;
-}
-
-// Ensures that the sea doesn't disappear
-func EnsureWaterLevel(int level, bool no_recursion)
-{
-	var water_mat = Material("Water");
-	if (GetMaterial(0,level) != water_mat) CastPXS("Water", 100, 20, 0,level, 90, 10);
-	if (GetMaterial(LandscapeWidth()-1,level) != water_mat) CastPXS("Water", 100, 20, LandscapeWidth()-1,level, 270, 10);
-	// Extra insertion at a lower level so it's not easy to block off
-	if (!no_recursion && !Random(3)) EnsureWaterLevel(level + 50 + Random(450), true);
-	return true;
 }
 
 private func InitVegetation()
@@ -164,7 +182,7 @@ private func InitAnimals()
 	return true;
 }
 
-private func GetFishArea() { return Rectangle(50, main_island_y, LandscapeWidth() - 100, LandscapeHeight()/2 - main_island_y); }
+private func GetFishArea() { return Shape->Rectangle(50, main_island_y, LandscapeWidth() - 100, LandscapeHeight() / 2 - main_island_y); }
 
 private func EnsureAnimals()
 {
@@ -222,9 +240,9 @@ private func InitMainIsland()
 		pos = FindMainIslandPosition(nil, nil, true);
 		CreateObjectAbove(Sawmill, pos[0], pos[1]);
 		pos = FindMainIslandPosition(nil, nil, true);
-		CreateObjectAbove(ChemicalLab, pos[0], pos[1]);
+		var lab = CreateObjectAbove(ChemicalLab, pos[0], pos[1]);
 		pos = FindMainIslandPosition(nil, nil, true);
-		CreateObjectAbove(ToolsWorkshop, pos[0], pos[1]);
+		var workshop = CreateObjectAbove(ToolsWorkshop, pos[0], pos[1]);
 	
 		lorry->CreateContents(Barrel, 1);
 		lorry->CreateContents(Bucket, 1);
@@ -232,6 +250,11 @@ private func InitMainIsland()
 		lorry->CreateContents(DynamiteBox, 1);
 		lorry->CreateContents(WallKit, 4);
 		//lorry->CreateContents(Boompack, 1);	
+		
+		lab->CreateContents(Dynamite, 5);
+		lab->CreateContents(DynamiteBox, 1);
+		
+		workshop->CreateContents(Metal, 5);
 	}
 	
 	return;

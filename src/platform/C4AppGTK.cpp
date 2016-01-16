@@ -112,9 +112,6 @@ gtk_clipboard_store_all (void)
 void C4AbstractApp::Clear()
 {
 	gtk_clipboard_store_all();
-#if USE_CONSOLE && HAVE_LIBREADLINE
-	rl_callback_handler_remove();
-#endif
 }
 
 void C4AbstractApp::Quit()
@@ -132,7 +129,7 @@ bool C4AbstractApp::FlushMessages()
 	return true;
 }
 
-bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigned int iColorDepth, unsigned int iRefreshRate, unsigned int iMonitor, bool fFullScreen)
+bool C4AbstractApp::SetVideoMode(int iXRes, int iYRes, unsigned int iColorDepth, unsigned int iRefreshRate, unsigned int iMonitor, bool fFullScreen)
 {
 	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
 	if (!fFullScreen)
@@ -153,7 +150,7 @@ bool C4AbstractApp::SetVideoMode(unsigned int iXRes, unsigned int iYRes, unsigne
 		XRRScreenSize * sizes = XRRConfigSizes(conf, &n);
 		for (int i = 0; i < n; ++i)
 		{
-			if (sizes[i].width == iXRes && sizes[i].height == iYRes)
+			if (int(sizes[i].width) == iXRes && int(sizes[i].height) == iYRes)
 			{
 #ifdef _DEBUG
 				LogF("XRRSetScreenConfig %d", i);
@@ -202,98 +199,6 @@ bool C4AbstractApp::GetIndexedDisplayMode(int32_t iIndex, int32_t *piXRes, int32
 		return true;
 	}
 	return false;
-}
-
-static XRROutputInfo* GetXRROutputInfoForWindow(Display* dpy, Window w)
-{
-	XRRScreenResources * r = XRRGetScreenResources(dpy, w);
-	if (!r) return NULL;
-
-	XRROutputInfo * info = NULL;
-	RROutput output = XRRGetOutputPrimary(dpy, w);
-	if(output != 0)
-	{
-		info = XRRGetOutputInfo(dpy, r, output);
-		if (!info)
-		{
-			XRRFreeScreenResources(r);
-			return NULL;
-		}
-	}
-
-	if(!info || info->connection == RR_Disconnected || info->crtc == 0)
-	{
-		// The default "primary" output does not seem to be connected
-		// to a piece of actual hardware. As a fallback, go through
-		// all outputs and choose the first active one.
-		XRRFreeOutputInfo(info);
-		info = NULL;
-		for(int i = 0; i < r->noutput; ++i)
-		{
-			info = XRRGetOutputInfo(dpy, r, r->outputs[i]);
-			if(info->connection != RR_Disconnected && info->crtc != 0)
-				break;
-
-			XRRFreeOutputInfo(info);
-			info = NULL;
-		}
-	}
-	XRRFreeScreenResources(r);
-	if(!info) return NULL;
-
-	return info;
-}
-
-bool C4AbstractApp::ApplyGammaRamp(struct _GAMMARAMP& ramp, bool fForce)
-{
-	if (!Active && !fForce) return false;
-	if (Priv->xrandr_major_version < 1 || (Priv->xrandr_major_version == 1 && Priv->xrandr_minor_version < 3)) return false;
-	if (Priv->gammasize != 256) return false;
-	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
-	XRRCrtcGamma g = { Priv->gammasize, ramp.red, ramp.green, ramp.blue };
-
-	XRROutputInfo* i = GetXRROutputInfoForWindow(dpy, pWindow->wnd);
-	if (!i)
-	{
-		Log("  Error setting gamma ramp: No XRROutputInfo available");
-		return false;
-	}
-	XRRSetCrtcGamma(dpy, i->crtc, &g);
-	XRRFreeOutputInfo(i);
-	return true;
-}
-
-bool C4AbstractApp::SaveDefaultGammaRamp(struct _GAMMARAMP& ramp)
-{
-	if (Priv->xrandr_major_version < 1 || (Priv->xrandr_major_version == 1 && Priv->xrandr_minor_version < 3)) return false;
-	Display * const dpy = gdk_x11_display_get_xdisplay(gdk_display_get_default());
-	XRROutputInfo* i = GetXRROutputInfoForWindow(dpy, pWindow->wnd);
-	if (!i)
-	{
-		Log("  Error getting default gamma ramp: No XRROutputInfo available");
-		return false;
-	}
-
-	XRRCrtcGamma * g = XRRGetCrtcGamma(dpy, i->crtc);
-	XRRFreeOutputInfo(i);
-	if (!g)
-	{
-		Log("  Error getting default gamma ramp: XRRGetCrtcGamma");
-		return false;
-	}
-	Priv->gammasize = g->size;
-	if (Priv->gammasize != 256)
-	{
-		LogF("  Size of GammaRamp is %d, not 256", Priv->gammasize);
-	}
-	else
-	{
-		memcpy(ramp.red, g->red, sizeof(ramp.red));
-		memcpy(ramp.green, g->green, sizeof(ramp.green));
-		memcpy(ramp.blue, g->blue, sizeof(ramp.blue));
-	}
-	XRRFreeGamma(g);
-	return true;
 }
 
 // Copy the text to the clipboard or the primary selection

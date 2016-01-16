@@ -10,9 +10,10 @@ local armed; // If true, explodes on contact
 public func ControlUse(object clonk, int x, int y)
 {
 	// if already activated, nothing (so, throw)
-	if(GetEffect("FuseBurn", this))
+	if (GetEffect("FuseBurn", this))
 	{
-		return false;
+		clonk->ControlThrow(this, x, y);
+		return true;
 	}
 	else
 	{
@@ -34,10 +35,10 @@ func FxFuseBurnTimer(object bomb, int num, int timer)
 	var y = -Cos(GetR(), i);
 	CreateParticle("Smoke", x, y, x, y, PV_Random(18, 36), Particles_Smoke(), 2);
 
-	if(timer == 1) Sound("FuseLoop",nil,nil,nil,+1);
+	if(timer == 1) Sound("Fire::FuseLoop",nil,nil,nil,+1);
 	if(timer >= 90)
 	{
-		Sound("FuseLoop",nil,nil,nil,-1);
+		Sound("Fire::FuseLoop",nil,nil,nil,-1);
 		DoExplode();
 		return -1;
 	}
@@ -56,9 +57,9 @@ func DoExplode()
 		i--;
 	}
 	if(GBackLiquid())
-		Sound("BlastLiquid2");
+		Sound("Fire::BlastLiquid2");
 	else
-		Sound("BlastMetal");
+		Sound("Fire::BlastMetal");
 	CreateParticle("Smoke", PV_Random(-30, 30), PV_Random(-30, 30), 0, 0, PV_Random(40, 60), Particles_Smoke(), 60);
 	Explode(30);
 }
@@ -81,6 +82,14 @@ protected func RejectEntrance()
 	return GetAction() == "Fuse" || GetAction() == "Ready";
 }
 
+// Drop fusing bomb on death to prevent explosion directly after respawn
+public func IsDroppedOnDeath(object clonk)
+{
+	return !!GetEffect("FuseBurn", this);
+}
+
+public func HasExplosionOnImpact() { return armed; }
+
 public func IsWeapon() { return true; }
 public func IsArmoryProduct() { return true; }
 public func IsGrenadeLauncherAmmo() { return true; }
@@ -89,6 +98,5 @@ local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = true;
 local BlastIncinerate = 1;
 local ContactIncinerate = 1;

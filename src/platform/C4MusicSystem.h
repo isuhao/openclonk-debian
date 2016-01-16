@@ -35,16 +35,18 @@ public:
 	C4MusicSystem();
 	~C4MusicSystem();
 	void Clear();
-	int SetVolume(int);
-	void Execute();
+	void ClearGame();
+	void UpdateVolume(); // compute volume from game + config data
+	void Execute(bool force_buffer_checks = false);
 	void NotifySuccess();
 	bool Init(const char * PlayList = NULL);
 	bool InitForScenario(C4Group & hGroup);
-	bool Play(const char *szSongname = NULL, bool fLoop = false, int fadetime_ms = 0);
+	bool Play(const char *szSongname = NULL, bool fLoop = false, int fadetime_ms = 0, double max_resume_time = 0.0, bool allow_break = false);
+	bool Play(C4MusicFile *NewFile, bool fLoop, double max_resume_time);
 	bool Stop();
 	void FadeOut(int fadeout_ms);
 
-	int SetPlayList(const char *szPlayList, bool fForceSwitch = false, int fadetime_ms = 0);
+	int SetPlayList(const char *szPlayList, bool fForceSwitch = false, int fadetime_ms = 0, double max_resume_time = 0.0);
 
 	bool ToggleOnOff(); // keyboard callback
 
@@ -58,8 +60,12 @@ protected:
 	int Volume; bool Loop;
 
 	// fading between two songs
-	C4MusicFile *FadeMusicFile;
+	C4MusicFile *FadeMusicFile, *upcoming_music_file;
 	C4TimeMilliseconds FadeTimeStart, FadeTimeEnd;
+
+	// Wait time until next song
+	bool is_waiting;
+	C4TimeMilliseconds wait_time_end;
 
 	void LoadDir(const char *szPath); // load some music files (by wildcard / directory)
 	void Load(const char *szFile); // load a music file
@@ -68,7 +74,9 @@ protected:
 
 	bool GrpContainsMusic(C4Group &rGrp); // return whether this group contains music files
 
-	// FMod / SDL_mixer / OpenAL
+	bool ScheduleWaitTime();
+
+	// SDL_mixer / OpenAL
 	bool MODInitialized;
 	bool InitializeMOD();
 	void DeinitializeMOD();
@@ -78,9 +86,35 @@ private:
 	ALCcontext* alcContext;
 public:
 	void SelectContext();
+	ALCcontext *GetContext() const { return alcContext; }
+	ALCdevice *GetDevice() const { return alcDevice; }
 #endif
 public:
 	inline bool IsMODInitialized() {return MODInitialized;}
+
+private:
+	// scenario-defined music level
+	int32_t game_music_level;
+	// current play list
+	StdCopyStrBuf playlist;
+	bool playlist_valid;
+	// Set to nonzero to allow pauses between songs
+	int32_t music_break_min, music_break_max, music_break_chance;
+	// Maximum time (in seconds) last position in a song is remembered until it would just be restarted from the beginning
+	int32_t music_max_position_memory;
+
+	static const int32_t DefaultMusicBreak;
+	static const int32_t DefaultMusicBreakChance;
+	static const int32_t DefaultMusicMaxPositionMemory;
+
+public:
+	void CompileFunc(class StdCompiler *comp);
+
+	void SetMusicBreakMin(int32_t val) { music_break_min = std::max<int32_t>(val, 0); }
+	void SetMusicBreakMax(int32_t val) { music_break_max = std::max<int32_t>(val, 0); }
+	void SetMusicBreakChance(int32_t val) { music_break_chance = Clamp<int32_t>(val, 0, 100); }
+	void SetMusicMaxPositionMemory(int32_t val) { music_max_position_memory = val; }
+	int32_t SetGameMusicLevel(int32_t val);
 };
 
 

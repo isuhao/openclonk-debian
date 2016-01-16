@@ -95,7 +95,6 @@ public:
 	C4Action();
 	~C4Action();
 public:
-	//C4PropList * pActionDef;
 	int32_t Dir;
 	int32_t DrawDir; // NoSave // - needs to be calculated for old-style objects.txt anyway
 	int32_t ComDir;
@@ -130,16 +129,16 @@ public:
 	int32_t LastEnergyLossCausePlayer; // last player that caused an energy loss to this Clonk (used to trace kills when player tumbles off a cliff, etc.)
 	int32_t Category;
 	int32_t old_x, old_y; C4LArea Area; // position as currently seen by Game.Objecets.Sectors. UpdatePos to sync.
-	int32_t NoCollectDelay;
 	int32_t Mass, OwnMass;
 	int32_t Damage;
 	int32_t Energy;
 	int32_t Breath;
 	int32_t InMat; // SyncClearance-NoSave //
 	uint32_t Color;
-	int32_t Audible, AudiblePan; // NoSave //
+	int32_t Audible, AudiblePan, AudiblePlayer; // NoSave //
 	int32_t lightRange;
 	int32_t lightFadeoutRange;
+	uint32_t lightColor;
 	C4Real fix_x,fix_y,fix_r; // SyncClearance-Fix //
 	C4Real xdir,ydir,rdir;
 	int32_t iLastAttachMovementFrame; // last frame in which Attach-movement by a SolidMask was done
@@ -212,6 +211,7 @@ public:
 	void UpdateActionFace();
 	void SyncClearance();
 	void SetSolidMask(int32_t iX, int32_t iY, int32_t iWdt, int32_t iHgt, int32_t iTX, int32_t iTY);
+	void SetHalfVehicleSolidMask(bool set);
 	bool CheckSolidMaskRect(); // clip bounds of SolidMask in graphics - return whether the solidmask still exists
 	C4Object *ComposeContents(C4ID id);
 	bool MenuCommand(const char *szCommand);
@@ -232,7 +232,7 @@ public:
 	          C4Real nxdir, C4Real nydir, C4Real nrdir, int32_t iController);
 	void CompileFunc(StdCompiler *pComp, C4ValueNumbers *);
 	virtual void Denumerate(C4ValueNumbers *);
-	void DrawLine(C4TargetFacet &cgo);
+	void DrawLine(C4TargetFacet &cgo, int32_t at_player);
 	bool SetPhase(int32_t iPhase);
 	void AssignRemoval(bool fExitContents=false);
 	enum DrawMode { ODM_Normal=0, ODM_Overlay=1, ODM_BaseOnly=2 };
@@ -269,9 +269,9 @@ public:
 	void GetOCFForPos(int32_t ctx, int32_t cty, DWORD &ocf) const;
 	bool CloseMenu(bool fForce);
 	bool ActivateMenu(int32_t iMenu, int32_t iMenuSelect=0, int32_t iMenuData=0, int32_t iMenuPosition=0, C4Object *pTarget=NULL);
-	int32_t ContactCheck(int32_t atx, int32_t aty, uint32_t *border_hack_contacts=0);
+	int32_t ContactCheck(int32_t atx, int32_t aty, uint32_t *border_hack_contacts=0, bool collide_halfvehic=false);
 	bool Contact(int32_t cnat);
-	void TargetBounds(C4Real &ctco, int32_t limit_low, int32_t limit_hi, int32_t cnat_low, int32_t cnat_hi);
+	void StopAndContact(C4Real & ctco, C4Real limit, C4Real & speed, int32_t cnat);
 	enum { SAC_StartCall = 1, SAC_EndCall = 2, SAC_AbortCall = 4 };
 	C4PropList* GetAction() const;
 	bool SetAction(C4PropList * Act, C4Object *pTarget=NULL, C4Object *pTarget2=NULL, int32_t iCalls = SAC_StartCall | SAC_AbortCall, bool fForce = false);
@@ -303,7 +303,7 @@ public:
 	C4Object* CreateContents(C4PropList *);
 	bool CreateContentsByList(C4IDList &idlist);
 	BYTE GetArea(int32_t &aX, int32_t &aY, int32_t &aWdt, int32_t &aHgt) const;
-	inline int32_t addtop() const { return Max<int32_t>(18-Shape.Hgt,0); } // Minimum top action size for build check
+	inline int32_t addtop() const { return std::max<int32_t>(18-Shape.Hgt,0); } // Minimum top action size for build check
 	inline int32_t Left() const { return GetX()+Shape.x; } // left border of shape
 	inline int32_t Top() const { return GetY()+Shape.y-addtop(); } // top border of shape (+build-top)
 	inline int32_t Width() const { return Shape.Wdt; } // width of shape
@@ -322,12 +322,14 @@ public:
 	int32_t GetValue(C4Object *pInBase, int32_t iForPlayer);
 	bool SetOwner(int32_t iOwner);
 	bool SetLightRange(int32_t iToRange, int32_t iToFadeoutRange);
+	uint32_t GetLightColor() const { return lightColor; }
+	bool SetLightColor(uint32_t iValue);
 	void SetOnFire(bool OnFire) { this->OnFire = OnFire; SetOCF(); }
 	bool GetOnFire() const { return OnFire; }
 	void SetAlive(bool Alive) { this->Alive = Alive; SetOCF(); }
 	bool GetAlive() const { return Alive; }
 	void UpdateLight();
-	void SetAudibilityAt(C4TargetFacet &cgo, int32_t iX, int32_t iY);
+	void SetAudibilityAt(C4TargetFacet &cgo, int32_t iX, int32_t iY, int32_t player);
 	bool IsVisible(int32_t iForPlr, bool fAsOverlay) const;  // return whether an object is visible for the given player
 	void SetRotation(int32_t nr);
 	void PrepareDrawing() const;  // set blit modulation and/or additive blitting
@@ -383,7 +385,6 @@ public:
 
 	bool IsMoveableBySolidMask(int ComparisonPlane) const
 	{
-		//C4PropList* pActionDef = GetAction();
 		return (Status == C4OS_NORMAL)
 		       && !(Category & C4D_StaticBack)
 		       && (ComparisonPlane < GetPlane())

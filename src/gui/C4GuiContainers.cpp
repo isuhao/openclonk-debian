@@ -124,6 +124,10 @@ namespace C4GUI
 		if (pLast) pLast->pNext = pChild; else pFirst = pChild;
 		pChild->pPrev = pLast; pChild->pNext = NULL; pLast = pChild;
 		pChild->pParent = this;
+
+		assert(pChild->pNext != pChild);
+		assert(pChild->pPrev != pChild);
+		assert(pChild->pParent != pChild);
 	}
 
 	void Container::ReaddElement(Element *pChild)
@@ -136,6 +140,10 @@ namespace C4GUI
 		// add to end of list
 		if (pLast) pLast->pNext = pChild; else pFirst = pChild;
 		pChild->pPrev = pLast; pChild->pNext = NULL; pLast = pChild;
+
+		assert(pChild->pNext != pChild);
+		assert(pChild->pPrev != pChild);
+		assert(pChild->pParent != pChild);
 	}
 
 	void Container::InsertElement(Element *pChild, Element *pInsertBefore)
@@ -153,6 +161,10 @@ namespace C4GUI
 			pFirst = pChild;
 		pChild->pNext = pInsertBefore; pInsertBefore->pPrev = pChild;
 		pChild->pParent = this;
+
+		assert(pChild->pNext != pChild);
+		assert(pChild->pPrev != pChild);
+		assert(pChild->pParent != pChild);
 	}
 
 	Element *Container::GetNextNestedElement(Element *pPrevElement, bool fBackwards)
@@ -313,7 +325,7 @@ namespace C4GUI
 		Container::UpdateOwnPos();
 		// set client rect
 		int32_t iMarginL=GetMarginLeft(), iMarginT=GetMarginTop();
-		rcClientRect.Set(rcBounds.x + iMarginL, rcBounds.y + iMarginT, Max<int32_t>(rcBounds.Wdt - iMarginL - GetMarginRight(), 0), Max<int32_t>(rcBounds.Hgt - iMarginT - GetMarginBottom(), 0));
+		rcClientRect.Set(rcBounds.x + iMarginL, rcBounds.y + iMarginT, std::max<int32_t>(rcBounds.Wdt - iMarginL - GetMarginRight(), 0), std::max<int32_t>(rcBounds.Hgt - iMarginT - GetMarginBottom(), 0));
 	}
 
 
@@ -432,11 +444,11 @@ namespace C4GUI
 					OnPosChanged();
 					// start dragging
 					rMouse.pDragElement = this;
-					GUISound("Command");
+					GUISound("UI::Select");
 				}
 			}
 		// sound effekt when buttons are pressed
-		if ((fTopDown || fBottomDown) != fPrevDown) GUISound("ArrowHit");
+		if ((fTopDown || fBottomDown) != fPrevDown) GUISound("UI::Tick");
 	}
 
 	void ScrollBar::DoDragging(CMouse &rMouse, int32_t iX, int32_t iY, DWORD dwKeyParam)
@@ -500,8 +512,11 @@ namespace C4GUI
 		rtBounds.x += rtBounds.Wdt; rtBounds.Wdt = C4GUI_ScrollBarWdt;
 		pScrollBar = new ScrollBar(rtBounds, this);
 		// add self and scroll bar to window
-		pParentWindow->AddElement(this);
-		pParentWindow->AddElement(pScrollBar);
+		if (pParentWindow != this)
+		{
+			pParentWindow->AddElement(this);
+			pParentWindow->AddElement(pScrollBar);
+		}
 	}
 
 	void ScrollWindow::Update()
@@ -509,7 +524,7 @@ namespace C4GUI
 		// not if window is being refilled
 		if (iFrozen) return;
 		// do not scroll outside range
-		iScrollY = Clamp<int32_t>(iScrollY, 0, Max<int32_t>(iClientHeight - GetBounds().Hgt, 0));
+		iScrollY = Clamp<int32_t>(iScrollY, 0, std::max<int32_t>(iClientHeight - GetBounds().Hgt, 0));
 		// update client rect
 		rcClientRect.x = 0;
 		rcClientRect.y = -iScrollY;
@@ -616,11 +631,13 @@ namespace C4GUI
 		Update();
 	}
 
-	void ScrollWindow::SetScrollBarEnabled(bool fToVal)
+	void ScrollWindow::SetScrollBarEnabled(bool fToVal, bool noAutomaticPositioning)
 	{
 		if (fHasBar == fToVal) return;
 		pScrollBar->SetVisibility(fHasBar = fToVal);
-		UpdateOwnPos();
+		// in some cases the windows will already care for the correct positioning themselves (see C4ScriptGuiWindow)
+		if (!noAutomaticPositioning)
+			UpdateOwnPos();
 	}
 
 	void ScrollWindow::MouseInput(CMouse &rMouse, int32_t iButton, int32_t iX, int32_t iY, DWORD dwKeyParam)

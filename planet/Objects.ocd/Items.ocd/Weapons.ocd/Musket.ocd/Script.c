@@ -11,7 +11,7 @@
 
 func Hit()
 {
-	Sound("GeneralHit?");
+	Sound("Hits::GeneralHit?");
 }
 
 local fAiming;
@@ -21,7 +21,7 @@ public func GetCarrySpecial(clonk) { if(fAiming > 0) return "pos_hand2"; }
 public func GetCarryBone()	{	return	"main";	}
 public func GetCarryTransform()
 {
-	return Trans_Rotate(-90, 0, 1, 0);
+	return Trans_Rotate(90, 1, 0, 0);
 }
 
 local animation_set;
@@ -60,15 +60,13 @@ local MuskUp; local MuskFront; local MuskDown; local MuskOffset;
 
 protected func HoldingEnabled() { return true; }
 
+func RejectUse(object clonk)
+{
+	return !clonk->HasHandAction();
+}
+
 func ControlUseStart(object clonk, int x, int y)
 {
-	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction())
-	{
-		holding = true;
-		return true;
-	}
-
 	// nothing in extraslot?
 	if(!Contents(0))
 	{
@@ -84,6 +82,7 @@ func ControlUseStart(object clonk, int x, int y)
 	if(!Contents(0))
 	{
 		clonk->CancelUse();
+		Sound("Objects::Weapons::Musket::Click*");
 		return true;
 	}
 
@@ -165,7 +164,7 @@ private func FireWeapon(object clonk, int angle)
 	loaded = false;
 	SetProperty("PictureTransformation",Trans_Mul(Trans_Translate(1500,0,-1500),Trans_Rotate(170,0,1,0),Trans_Rotate(30,0,0,1)));
 
-	Sound("GunShoot?");
+	Sound("Objects::Weapons::Musket::GunShoot?");
 
 	// Muzzle Flash & gun smoke
 	var x = Sin(angle, 20);
@@ -193,4 +192,3 @@ local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = true;

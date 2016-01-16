@@ -3,8 +3,11 @@
 #include Library_Structure
 #include Library_Ownable
 #include Library_Producer
+#include Library_LampPost
 
 local hold_production;
+
+public func LampPosition(id def) { return [GetCalcDir()*24,2]; }
 
 func Construction(object creator)
 {
@@ -22,35 +25,30 @@ public func IsProduct(id product_id)
 private func ProductionTime(id toProduce) { return 100; }
 public func PowerNeed() { return 40; }
 
-public func NeedRawMaterial(id rawmat_id)
-{
-	return true;
-}
-
 public func OnProductionStart(id product)
 {
 	AddEffect("Working", this, 100, 1, this);
 	hold_production = false;
-	Sound("Boiling", false, nil, nil, 1);
+	Sound("Liquids::Boiling", false, nil, nil, 1);
 }
 
 public func OnProductionHold(id product)
 {
 	hold_production = true;
-	Sound("Boiling", false, nil, nil, -1);
-	Sound("Blowout");
+	Sound("Liquids::Boiling", false, nil, nil, -1);
+	Sound("Fire::Blowout");
 }
 
 public func OnProductionContinued(id product)
 {
 	hold_production = false;
-	Sound("Boiling", false, nil, nil, 1);
+	Sound("Liquids::Boiling", false, nil, nil, 1);
 }
 
 public func OnProductionFinish(id product)
 {
 	RemoveEffect("Working", this);
-	Sound("Boiling", false, nil, nil, -1);
+	Sound("Liquids::Boiling", false, nil, nil, -1);
 }
 
 protected func FxWorkingTimer()

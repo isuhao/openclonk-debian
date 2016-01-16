@@ -88,21 +88,27 @@ global func PlaceObjects(id id, int amount, string mat_str, int x, int y, int wd
 
 global func CastObjects(id def, int am, int lev, int x, int y, int angs, int angw)
 {
+	var objects = [];
+	var objects_index = 0;
 	if (!angw)
 		angw = 360;
 	for (var i = 0; i < am; i++)
 	{
-		var obj = CreateObjectAbove(def, x, y, NO_OWNER);
+		var obj = CreateObjectAbove(def, x, y);
+		// Some objects might directly remove themselves on creation.
+		if (!obj) continue;
 		var ang = angs - 90 + RandomX(-angw / 2, angw / 2);
 		var xdir = Cos(ang, lev) + RandomX(-3, 3);
 		obj->SetR(Random(360));
 		obj->SetXDir(xdir);
 		obj->SetYDir(Sin(ang, lev) + RandomX(-3, 3));
-		if(xdir != 0) obj->SetRDir((10 + Random(21)) * (xdir / Abs(xdir)));
+		if(xdir != 0)
+			obj->SetRDir((10 + Random(21)) * (xdir / Abs(xdir)));
 		else
 			obj->SetRDir(-10 + Random(21));
+		objects[objects_index++] = obj;
 	}
-	return;
+	return objects;
 }
 
 global func CastPXS(string mat, int am, int lev, int x, int y, int angs, int angw)

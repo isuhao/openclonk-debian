@@ -14,6 +14,9 @@ static intro_init;
 
 protected func Initialize()
 {
+	// Show wealth in HUD.
+	GUI_Controller->ShowWealth();
+	
 	// Goal: construct an airplane and fill it with gold bars.
 	var goal = CreateObject(Goal_Script);
 	// Add an effect to check whether the goal is fulfilled.
@@ -23,11 +26,12 @@ protected func Initialize()
 	// Set goal name and description.	
 	goal.Name = "$GoalName$";
 	goal.Description = Format("$GoalDesc$", effect.barcnt);
+	goal.Picture = Krakatoa_GoalIcon;
+	goal.PictureName = Format("%d", SCENPAR_Difficulty);
 
 	// Some rules.
 	CreateObject(Rule_TeamAccount);
 	CreateObject(Rule_BuyAtFlagpole);
-	CreateObject(Rule_StructureHPBars);
 	
 	// Rescale chasm exits.
 	var map_zoom = GetScenarioVal("MapZoom", "Landscape");
@@ -90,7 +94,7 @@ protected func InitializePlayer(int plr)
 global func FxGoalCheckTimer(object target, proplist effect)
 {
 	// Complete goal if there is an airplane with the required amount of gold bars.
-	for (var plane in FindObjects(Find_ID(Plane), Find_Not(Find_Func("IsBroken"))))
+	for (var plane in FindObjects(Find_ID(Airplane), Find_Not(Find_Func("IsBroken"))))
 	{
 		if (plane->ContentsCount(GoldBar) >= effect.barcnt)
 		{
@@ -110,10 +114,10 @@ private func InitEnvironment(int difficulty)
 	// Adjust the mood, orange sky, darker feeling in general.
 	var dark = 10;
 	SetSkyAdjust(RGB(150, 42, 0));
-	SetGamma(RGB(0, 0, 0), RGB(128 - dark, 128 - dark, 128 - dark), RGB(255 - 2 * dark, 255 - 2 * dark, 255 - 2 * dark));
+	SetGamma(100 - dark, 100 - dark, 100 - dark);
 	
 	// Time of days and celestials.
-	var time = CreateObject(Environment_Time);
+	var time = CreateObject(Time);
 	time->SetTime(60 * 20);
 	time->SetCycleSpeed(20);
 		
@@ -144,8 +148,8 @@ private func InitVegetation(int map_size)
 	// Create an effect to make sure there will always grow some new trees.	
 	AddEffect("EnsureTrees", nil, 100, 20, nil);
 	// Some large cave mushrooms, equals amounts on both sides.
-	LargeCaveMushroom->Place(12 + 4 * map_size, Rectangle(0, hgt / 2, wdt / 2, hgt / 2), { terraform = false });
-	LargeCaveMushroom->Place(12 + 4 * map_size, Rectangle(wdt / 2, hgt / 2, wdt / 2, hgt / 2), { terraform = false });
+	LargeCaveMushroom->Place(12 + 4 * map_size, Shape->Rectangle(0, hgt / 2, wdt / 2, hgt / 2), { terraform = false });
+	LargeCaveMushroom->Place(12 + 4 * map_size, Shape->Rectangle(wdt / 2, hgt / 2, wdt / 2, hgt / 2), { terraform = false });
 	// Some dead tree trunks.
 	for (var i = 0; i < 16 + Random(4); i++)
 	{
@@ -227,7 +231,7 @@ global func FxBigVolcanoTimer(object target, proplist effect)
 	{
 		var pos = chasm_exits[i];
 		var lava = FindLocation(Loc_Material("DuroLava"), Loc_InRect(pos[0] - 100, pos[1] - 100, 200, 200));
-		InsertMaterial(Material("DuroLava"), lava.x, lava.y);
+		if (lava) InsertMaterial(Material("DuroLava"), lava.x, lava.y);
 	}
 	
 	// At more rare occasions there will be a bigger eruption with chunks.
@@ -267,7 +271,7 @@ global func FxBigEruptionStart(object target, proplist effect, int temporary, in
 	// Duration of 6-9 seconds.
 	effect.Duration = (6 + Random(4)) * 36;
 	// Use earthquake sound for this eruption.
-	Sound("Earthquake", true, 100, nil, 1);
+	Sound("Environment::Disasters::Earthquake", true, 100, nil, 1);
 	// Shake also the viewport a bit on a big eruption.
 	ShakeViewport(3200, x, y);
 	return FX_OK;
@@ -314,8 +318,8 @@ global func FxBigEruptionStop(object target, proplist effect, int reason, bool t
 	if (temporary)
 		return FX_OK;
 	// Stop eruption sound.
-	Sound("Earthquake", true, 100, nil, -1);
-	Sound("EarthquakeEnd",true);
+	Sound("Environment::Disasters::Earthquake", true, 100, nil, -1);
+	Sound("Environment::Disasters::EarthquakeEnd",true);
 	return FX_OK;
 }
 

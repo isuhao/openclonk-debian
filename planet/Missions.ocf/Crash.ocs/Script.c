@@ -7,13 +7,21 @@
 
 static g_is_initialized, g_has_bought_plans, npc_pyrit;
 
+public func Initialize()
+{
+	// Show wealth in HUD.
+	GUI_Controller->ShowWealth();
+	return true;
+}
+
 func DoInit(int first_player)
 {
+
 	CreateObjectAbove(Windmill, 152, 825+48, 0);
 
 	// Set time of day to evening and create some clouds and celestials.
 	Cloud->Place(20);
-	var time = CreateObject(Environment_Time);
+	var time = CreateObject(Time);
 	time->SetTime(600);
 	time->SetCycleSpeed(20);
 	// Waterfall
@@ -23,7 +31,7 @@ func DoInit(int first_player)
 	if (windmill) windmill->SetOwner(first_player);
 	
 	// Goal
-	CreateObject(Goal_Plane);
+	CreateObject(Goal_Airplane);
 	
 	// Rules
 	CreateObject(Rule_TeamAccount, 50, 50);
@@ -31,17 +39,28 @@ func DoInit(int first_player)
 	// NPC: Merchant.
 	var merchant = CreateObjectAbove(Clonk, 76, 870);
 	merchant->MakeInvincible();
-	merchant->MakeNonFlammable();
-	merchant->SetSkin(1);
+	merchant->SetColor(RGB(55, 65, 75)); // currently overridden by skin
+	merchant->SetAlternativeSkin("Leather");
 	merchant->SetName("$NameMerchant$");
-	merchant->SetColor(RGB(55, 65, 75));
 	merchant->SetDir(DIR_Left);
 	merchant->SetObjectLayer(merchant);
 	merchant->SetDialogue("Merchant", true);
 	
+	// Newbies like to kill off all trees
+	var tree_area = Shape->Rectangle(166, 774, 300, 170);
+	ScheduleCall(nil, Scenario.EnsureTrees, 100, 99999999, tree_area);
+	
 	// Start intro if not yet started
 	StartSequence("Intro", 0, GetCrew(first_player));
 	
+	return true;
+}
+
+func EnsureTrees(proplist area)
+{
+	var nr_trees = ObjectCount(Find_Func("IsTree"), area->Find_In());
+	if (nr_trees < 2)
+		PlaceVegetation(Tree_Coniferous, 0, 0, LandscapeWidth(), LandscapeHeight(), 10, area);
 	return true;
 }
 

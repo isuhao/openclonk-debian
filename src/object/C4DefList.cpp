@@ -37,8 +37,6 @@ namespace
 	{
 		virtual StdMeshSkeleton* GetSkeletonByDefinition(const char* definition) const
 		{
-			//DebugLogF("GetSkeletonByDefinition %s", definition);
-
 			// find the definition
 			C4Def* def = ::Definitions.ID2Def(C4ID(definition));
 			if (!def)
@@ -85,10 +83,11 @@ int32_t C4DefList::Load(C4Group &hGroup, DWORD dwLoadWhat,
 	C4Group hChild;
 	bool fPrimaryDef=false;
 	bool fThisSearchMessage=false;
+	bool can_be_primary_def = SEqualNoCase(GetExtension(hGroup.GetName()), "ocd");
 
 	// This search message
 	if (fSearchMessage)
-		if (SEqualNoCase(GetExtension(hGroup.GetName()),"ocd")
+		if (can_be_primary_def
 		    || SEqualNoCase(GetExtension(hGroup.GetName()),"ocs")
 		    || SEqualNoCase(GetExtension(hGroup.GetName()),"ocf"))
 		{
@@ -99,12 +98,19 @@ int32_t C4DefList::Load(C4Group &hGroup, DWORD dwLoadWhat,
 	if (fThisSearchMessage) { LogF("%s...",GetFilename(hGroup.GetName())); }
 
 	// Load primary definition
-	if ((nDef=new C4Def))
+	if (can_be_primary_def)
 	{
-		if (nDef->Load(hGroup, *SkeletonLoader, dwLoadWhat, szLanguage, pSoundSystem) && Add(nDef, fOverload))
-			{ iResult++; fPrimaryDef=true; }
-		else
-			{ delete nDef; }
+		if ((nDef = new C4Def))
+		{
+			if (nDef->Load(hGroup, *SkeletonLoader, dwLoadWhat, szLanguage, pSoundSystem) && Add(nDef, fOverload))
+			{
+				iResult++; fPrimaryDef = true;
+			}
+			else
+			{
+				delete nDef;
+			}
+		}
 	}
 
 	// Load sub definitions
@@ -114,8 +120,8 @@ int32_t C4DefList::Load(C4Group &hGroup, DWORD dwLoadWhat,
 		if (hChild.OpenAsChild(&hGroup,szEntryname))
 		{
 			// Hack: Assume that there are sixteen sub definitions to avoid unnecessary I/O
-			int iSubMinProgress = Min<int32_t>(iMaxProgress, iMinProgress + ((iMaxProgress - iMinProgress) * i) / 16);
-			int iSubMaxProgress = Min<int32_t>(iMaxProgress, iMinProgress + ((iMaxProgress - iMinProgress) * (i + 1)) / 16);
+			int iSubMinProgress = std::min(iMaxProgress, iMinProgress + ((iMaxProgress - iMinProgress) * i) / 16);
+			int iSubMaxProgress = std::min(iMaxProgress, iMinProgress + ((iMaxProgress - iMinProgress) * (i + 1)) / 16);
 			++i;
 			iResult += Load(hChild,dwLoadWhat,szLanguage,pSoundSystem,fOverload,fSearchMessage,iSubMinProgress,iSubMaxProgress);
 			hChild.Close();

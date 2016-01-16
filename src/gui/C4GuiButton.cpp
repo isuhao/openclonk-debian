@@ -107,8 +107,6 @@ namespace C4GUI
 		    ::GraphicsResource.CaptionFont) :
 				   ::GraphicsResource.TitleFont);
 		iTextHgt = rUseFont.GetLineHeight();
-		//CStdFont &rShadowFont = GetRes()->MiniFont;
-		//pDraw->TextOut(Text, rShadowFont, (float) iTextHgt/rShadowFont.GetLineHeight(), cgo.Surface, (x0+x1)/2 + iTxtOff, (y0+y1-iTextHgt)/2 + iTxtOff, C4GUI_ButtonFontShadowClr, ACenter, true);
 		pDraw->TextOut(sText.getData(), rUseFont, 1.0f, cgo.Surface, (x0+x1)/2 + iTxtOff, (y0+y1-iTextHgt)/2 + iTxtOff, C4GUI_ButtonFontClr, ACenter, true);
 	}
 
@@ -189,7 +187,7 @@ namespace C4GUI
 		// already down?
 		if (fDown) return;
 		// play sound
-		GUISound("ArrowHit");
+		GUISound("UI::Tick");
 		// set down
 		fDown = true;
 	}
@@ -199,7 +197,7 @@ namespace C4GUI
 		// already up?
 		if (!fDown) return;
 		// play sound
-		GUISound(fPress ? "Click" : "ArrowHit");
+		GUISound(fPress ? "UI::Click" : "UI::Tick");
 		// set up
 		fDown = false;
 	}
@@ -237,12 +235,19 @@ namespace C4GUI
 		}
 	}
 
-	IconButton::IconButton(Icons eUseIcon, const C4Rect &rtBounds, char caHotkey)
+	IconButton::IconButton(Icons eUseIcon, const C4Rect &rtBounds, char caHotkey, const char *tooltip_text)
 			: Button("", rtBounds), dwClr(0u), fHasClr(false), fHighlight(false)
 	{
 		// ctor
 		cHotkey = caHotkey;
 		SetIcon(eUseIcon);
+		// set tooltip and expand hotkey
+		if (tooltip_text)
+		{
+			StdStrBuf tooltip_text_buf(tooltip_text);
+			if (!cHotkey) ExpandHotkeyMarkup(tooltip_text_buf, cHotkey, true);
+			SetToolTip(tooltip_text_buf.getData(), true);
+		}
 	}
 
 	void IconButton::SetIcon(Icons eUseIcon)

@@ -62,6 +62,7 @@ public func FxIntBurningTimer(object target, proplist effect, int time)
 	CreateParticle("Smoke", PV_Random(x - 1, x + 1), PV_Random(y - 1, y + 1), PV_Random(-2, 2), PV_Random(-2, 2), 40 + Random(20), particle_smoke, burn_level / 30);
 	// Light level.
 	SetLightRange(burn_level / 3, burn_level / 3);
+	SetLightColor(FIRE_LIGHT_COLOR);
 	return 1;
 
 }
@@ -92,7 +93,7 @@ public func HitObject(object obj)
 	// ContactIncinerate = 10 implies 37-43% incinaration.
 	// Hitting the same clonk twice with a fire arrow usually means it while burn indefinitely.
 	// Check before incinerating if the hit was blocked by the clonk, its shield or an effect.
-	if (obj.ContactIncinerate && !obj->QueryCatchBlow(this))
+	if (obj.ContactIncinerate && !obj->~QueryCatchBlow(this))
 		obj->Incinerate(BoundBy(100 - 7 * (obj.ContactIncinerate - 1) + Random(7), 0, 100), GetController());
 	// Additional damage from normal arrow hit, however, reduced.
 	return _inherited(obj, ...);

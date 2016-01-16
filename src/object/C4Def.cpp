@@ -45,7 +45,7 @@ public:
 		C4Surface* surface = new C4Surface;
 		// Suppress error message here, StdMeshMaterial loader
 		// will show one.
-		if (!surface->Read(Group, GetExtension(filename)))
+		if (!surface->Read(Group, GetExtension(filename), C4SF_MipMap))
 			{ delete surface; surface = NULL; }
 		return surface;
 	}
@@ -59,27 +59,21 @@ public:
 
 	virtual void AddShaderSlices(C4Shader& shader, int ssc)
 	{
+#ifndef USE_CONSOLE
 		// Add mesh-independent slices
-		shader.AddFragmentSlice(-1, "#define OPENCLONK");
-		shader.AddVertexSlice(-1, "#define OPENCLONK");
+		shader.AddDefine("OPENCLONK");
+		shader.AddDefine("OC_MESH");
 
-		if (ssc & C4SSC_MOD2) shader.AddFragmentSlice(-1, "#define CLRMOD_MOD2");
-		if (ssc & C4SSC_LIGHT) shader.AddFragmentSlice(-1, "#define HAVE_LIGHT");
+		if (ssc & C4SSC_MOD2) shader.AddDefine("OC_CLRMOD_MOD2");
+		if (ssc & C4SSC_LIGHT) shader.AddDefine("OC_DYNAMIC_LIGHT");
 
-		shader.LoadSlices(&::GraphicsResource.Files, "UtilShader.glsl");
-		shader.LoadSlices(&::GraphicsResource.Files, "ObjectBaseShader.glsl");
-		shader.LoadSlices(&::GraphicsResource.Files, "MeshShader.glsl");
+		// Note these are never set for meshes at the moment:
+		if (ssc & C4SSC_BASE) shader.AddDefine("OC_HAVE_BASE");
+		if (ssc & C4SSC_OVERLAY) shader.AddDefine("OC_HAVE_OVERLAY");
 
-		// Note that these shader slices are always loaded, even if lighting
-		// is disabled. The shaders then assume a default light if HAVE_LIGHT
-		// is not defined. This avoids completely flat shading for meshes
-		// that are shown as picture graphics for example.
-		shader.LoadSlices(&::GraphicsResource.Files, "ObjectLightShader.glsl");
-		shader.LoadSlices(&::GraphicsResource.Files, "LightShader.glsl");
-		shader.LoadSlices(&::GraphicsResource.Files, "AmbientShader.glsl");
-
-		if (ssc & C4SSC_BASE) shader.LoadSlices(&::GraphicsResource.Files, "SpriteTextureShader.glsl");
-		if (ssc & C4SSC_OVERLAY) shader.LoadSlices(&::GraphicsResource.Files, "SpriteOverlayShader.glsl");
+		shader.LoadFragmentSlices(&::GraphicsResource.Files, "CommonShader.glsl");
+		shader.LoadFragmentSlices(&::GraphicsResource.Files, "ObjectShader.glsl");
+#endif
 	}
 
 private:
@@ -113,7 +107,6 @@ void C4Def::DefaultDefCore()
 	Float=0;
 	ColorByOwner=0;
 	NoHorizontalMove=0;
-	BorderBound=0;
 	LiftTop=0;
 	GrabPutGet=0;
 	UprightAttach=0;
@@ -150,11 +143,6 @@ bool C4Def::LoadDefCore(C4Group &hGroup)
 		if (!Compile(Source.getData(), Name.getData()))
 			return false;
 		Source.Clear();
-
-		// Let's be bold: Rewrite, with current version
-		/*rC4XVer[0] = C4XVER1; rC4XVer[1] = C4XVER2;
-		hGroup.Rename(C4CFN_DefCore, C4CFN_DefCore ".old");
-		Save(hGroup);*/
 
 		// Check mass
 		if (Mass < 0)
@@ -255,7 +243,6 @@ void C4Def::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(Float,                         "Float",              0                 ));
 	pComp->Value(mkNamingAdapt(ColorByOwner,                  "ColorByOwner",       0                 ));
 	pComp->Value(mkNamingAdapt(NoHorizontalMove,              "HorizontalFix",      0                 ));
-	pComp->Value(mkNamingAdapt(BorderBound,                   "BorderBound",        0                 ));
 	pComp->Value(mkNamingAdapt(LiftTop,                       "LiftTop",            0                 ));
 	pComp->Value(mkNamingAdapt(UprightAttach,                 "UprightAttach",      0                 ));
 	pComp->Value(mkNamingAdapt(GrowthType,                    "StretchGrowth",      0                 ));
@@ -570,7 +557,7 @@ void C4Def::LoadRankFaces(C4Group &hGroup)
 	if (hGroup.AccessEntry(C4CFN_RankFacesPNG))
 	{
 		pRankSymbols = new C4FacetSurface();
-		if (!pRankSymbols->GetFace().ReadPNG(hGroup)) { delete pRankSymbols; pRankSymbols = NULL; }
+		if (!pRankSymbols->GetFace().ReadPNG(hGroup, false)) { delete pRankSymbols; pRankSymbols = NULL; }
 	}
 	// set size
 	if (pRankSymbols)
@@ -583,7 +570,7 @@ void C4Def::LoadRankFaces(C4Group &hGroup)
 			if (pRankNames)
 			{
 				// if extended rank names are defined, subtract those from the symbol count. The last symbols are used as overlay
-				iNumRankSymbols = Max<int32_t>(1, iNumRankSymbols - pRankNames->GetExtendedRankNum());
+				iNumRankSymbols = std::max<int32_t>(1, iNumRankSymbols - pRankNames->GetExtendedRankNum());
 			}
 			fRankSymbolsOwned = true;
 		}
@@ -593,15 +580,20 @@ void C4Def::LoadRankFaces(C4Group &hGroup)
 void C4Def::LoadSounds(C4Group &hGroup, C4SoundSystem* pSoundSystem)
 {
 	if (pSoundSystem)
-		pSoundSystem->LoadEffects(hGroup);
+		pSoundSystem->LoadEffects(hGroup, (id == C4ID::None) ? NULL : id.ToString(), true);
 }
 
-void C4Def::Draw(C4Facet &cgo, bool fSelected, DWORD iColor, C4Object *pObj, int32_t iPhaseX, int32_t iPhaseY, C4DrawTransform* trans)
+void C4Def::Draw(C4Facet &cgo, bool fSelected, DWORD iColor, C4Object *pObj, int32_t iPhaseX, int32_t iPhaseY, C4DrawTransform* trans, const char *graphicsName)
 {
 	if(fSelected)
 		pDraw->DrawBoxDw(cgo.Surface, cgo.X, cgo.Y, cgo.X + cgo.Wdt - 1, cgo.Y + cgo.Hgt - 1, C4RGB(0xca, 0, 0));
 
 	C4DefGraphics* graphics = pObj ? pObj->GetGraphics() : &Graphics;
+	if (graphicsName)
+	{
+		C4DefGraphics *other = graphics->Get(graphicsName);
+		if (other) graphics = other;
+	}
 	graphics->Draw(cgo, iColor, pObj, iPhaseX, iPhaseY, trans);
 }
 

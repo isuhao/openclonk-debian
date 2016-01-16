@@ -4,9 +4,11 @@
 
 static const Sword_Standard_StrikingLength = 15; // in frames
 
+local movement_effect;
+
 func Hit()
 {
-	Sound("LightMetalHit?");
+	Sound("Hits::Materials::Metal::LightMetalHit?");
 }
 
 public func Initialize()
@@ -20,21 +22,20 @@ public func GetCarryBone() { return "main"; }
 public func GetCarrySpecial(clonk) { return carry_bone; }
 public func GetCarryTransform(clonk, sec, back)
 {
-	if(back) return Trans_Mul(Trans_Rotate(180,0,0,1), Trans_Rotate(90,0,1,0), Trans_Translate(0,-7000,0));
-	return Trans_Rotate(90, 0, 1, 0);
+	if(back) return Trans_Mul(Trans_Rotate(180,0,1,0), Trans_Rotate(-90,1,0,0), Trans_Translate(-7000,0,0));
+	return Trans_Rotate(-90, 1, 0, 0);
 }
 
 local magic_number;
 local carry_bone;
-public func ControlUse(object clonk, int x, int y)
+
+public func RejectUse(object clonk)
 {
-	// cooldown?
-	if(!CanStrikeWithWeapon(clonk)) return true;
-	
-	// if the clonk doesn't have an action where he can use it's hands do nothing
-	if(!clonk->HasHandAction())
-		return true;
-		
+	return !clonk->HasHandAction() || !CanStrikeWithWeapon(clonk) || !(clonk->IsWalking() || clonk->IsJumping());
+}
+
+public func ControlUse(object clonk, int x, int y)
+{	
 	var slow=GetEffect("SwordStrikeSlow", clonk);
 
 	var arm = "R";
@@ -54,8 +55,9 @@ public func ControlUse(object clonk, int x, int y)
 	if(clonk->IsWalking())
 	{
 		if(!GetEffect("SwordStrikeStop", clonk))
-			AddEffect("SwordStrikeStop", clonk, 2, length, this);
-	} else
+			movement_effect = AddEffect("SwordStrikeStop", clonk, 2, length, nil, GetID());
+	}
+	else
 	if(clonk->IsJumping())
 	{
 		rand = 1;
@@ -87,8 +89,6 @@ public func ControlUse(object clonk, int x, int y)
 			}
 		}
 	}
-	//else return true;*/
-	if(!clonk->IsWalking() && !clonk->IsJumping()) return true;
 
 	if(!downwards_stab)
 	{
@@ -108,7 +108,7 @@ public func ControlUse(object clonk, int x, int y)
 	magic_number = ObjectNumber();
 	StartWeaponHitCheckEffect(clonk, length, 1);
 	
-	this->Sound("WeaponSwing?");
+	this->Sound("Objects::Weapons::WeaponSwing?");
 	return true;
 }
 
@@ -179,7 +179,7 @@ func CheckStrike(iTime)
 	if(!(Contained()->GetContact(-1) & CNAT_Bottom))
 		offset_y=10;
 	
-	var width=10;
+	var width=15;
 	var height=20;
 	var angle=0;
 	
@@ -198,7 +198,7 @@ func CheckStrike(iTime)
 							   Find_Exclude(Contained()),
 							   Find_Layer(GetObjectLayer())))
 	{
-		if (obj->~IsProjectileTarget(this, Contained()) || obj->GetOCF() & OCF_Alive)
+		if (obj->~IsProjectileTarget(this, Contained()))
 		{
 			var effect_name=Format("HasBeenHitBySwordEffect%d", magic_number);
 			var sword_name=Format("HasBeenHitBySword%d", this->ObjectNumber());
@@ -226,11 +226,11 @@ func CheckStrike(iTime)
 					continue;
 					
 				// Sound before damage to prevent null pointer access if callbacks delete this
-				Sound("WeaponHit?", false);
+				Sound("Objects::Weapons::WeaponHit?", false);
 				
 				// fixed damage (9)
 				var damage = SwordDamage(shield);
-				ProjectileHit(obj, damage, ProjectileHit_no_query_catch_blow_callback | ProjectileHit_exact_damage | ProjectileHit_no_on_projectile_hit_callback, FX_Call_EngGetPunched);
+				WeaponDamage(obj, damage, FX_Call_EngGetPunched, true);
 				
 				// object has not been deleted?
 				if(obj)
@@ -278,6 +278,7 @@ func FxSwordStrikeStopStop(pTarget, effect, iCause, iTemp)
 {
 	if(iTemp) return;
 	pTarget->PopActionSpeed("Walk");
+	if (this) movement_effect = nil;
 }
 
 func FxSwordStrikeStopTimer(pTarget, effect)
@@ -324,6 +325,16 @@ func FxSwordStrikeSlowStop(pTarget, effect, iCause, iTemp)
 	pTarget->PopActionSpeed("Walk");
 }
 
+private func Departure(object container)
+{
+	// Always end the movement impairing effect when exiting
+	if (movement_effect)
+	{
+		RemoveEffect(nil, container, movement_effect);
+		movement_effect = nil;
+	}
+}
+
 public func IsWeapon() { return true; }
 public func IsArmoryProduct() { return true; }
 
@@ -335,4 +346,3 @@ local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
 local Collectible = 1;
-local Rebuy = true;

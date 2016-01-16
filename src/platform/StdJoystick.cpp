@@ -20,14 +20,6 @@
 #include "C4Include.h"
 #include <StdJoystick.h>
 
-static uint32_t dwStdGamepadAxis1 = 0;
-static uint32_t dwStdGamepadAxis2 = 1;
-
-static uint32_t dwStdGamepadMaxX = 0;
-static uint32_t dwStdGamepadMinX = 0;
-static uint32_t dwStdGamepadMaxY = 0;
-static uint32_t dwStdGamepadMinY = 0;
-
 #include <C4windowswrapper.h>
 #include <windowsx.h>
 
@@ -105,8 +97,8 @@ CStdGamePad::AxisPos CStdGamePad::GetAxisPos(int idAxis, int32_t *out_strength)
 		if (fAxisCalibrated[idAxis])
 		{
 			// update it
-			dwAxisMin[idAxis] = Min<uint32_t>(dwAxisMin[idAxis], dwPos);
-			dwAxisMax[idAxis] = Max<uint32_t>(dwAxisMax[idAxis], dwPos);
+			dwAxisMin[idAxis] = std::min(dwAxisMin[idAxis], dwPos);
+			dwAxisMax[idAxis] = std::max(dwAxisMax[idAxis], dwPos);
 			// Calculate center
 			DWORD dwCenter = (dwAxisMin[idAxis] + dwAxisMax[idAxis]) / 2;
 			// Axis strength

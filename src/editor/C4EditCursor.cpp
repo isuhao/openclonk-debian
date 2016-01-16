@@ -75,7 +75,7 @@ void C4EditCursor::Execute()
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	}
 	if (!::Game.iTick35)
-		Console.PropertyDlgUpdate(Selection);
+		Console.PropertyDlgUpdate(Selection, false);
 }
 
 bool C4EditCursor::Init()
@@ -193,7 +193,9 @@ void C4EditCursor::UpdateStatusBar()
 		break;
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	case C4CNS_ModeDraw:
-		str.Format("%i/%i (%s)",X,Y,MatValid(GBackMat(X,Y)) ? ::MaterialMap.Map[GBackMat(X,Y)].Name : LoadResStr("IDS_CNS_NOTHING") );
+		str.Format("%i/%i (fg: %s, bg: %s)",X,Y,
+                           MatValid(::Landscape.GetMat(X,Y)) ? ::MaterialMap.Map[::Landscape.GetMat(X,Y)].Name : LoadResStr("IDS_CNS_NOTHING"),
+                           MatValid(::Landscape.GetBackMat(X,Y)) ? ::MaterialMap.Map[::Landscape.GetBackMat(X,Y)].Name : LoadResStr("IDS_CNS_NOTHING") );
 		break;
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	}
@@ -202,7 +204,7 @@ void C4EditCursor::UpdateStatusBar()
 
 void C4EditCursor::OnSelectionChanged()
 {
-	Console.PropertyDlgUpdate(Selection);
+	Console.PropertyDlgUpdate(Selection, false);
 	Console.ObjectListDlg.Update(Selection);
 }
 
@@ -478,7 +480,7 @@ bool C4EditCursor::OpenPropTools()
 	{
 	case C4CNS_ModeEdit: case C4CNS_ModePlay:
 		Console.PropertyDlgOpen();
-		Console.PropertyDlgUpdate(Selection);
+		Console.PropertyDlgUpdate(Selection, false);
 		break;
 	case C4CNS_ModeDraw:
 		Console.ToolsDlg.Open();
@@ -519,7 +521,6 @@ void C4EditCursor::Draw(C4TargetFacet &cgo)
 			cobj->ColorMod = 0xffffffff;
 			cobj->BlitMode = C4GFXBLIT_CLRSFC_MOD2 | C4GFXBLIT_ADDITIVE;
 
-			StdMeshInstance::FaceOrdering old_fo = StdSubMeshInstance::FO_Fixed;
 			if(cobj->pMeshInstance)
 				cobj->pMeshInstance->SetFaceOrdering(StdSubMeshInstance::FO_NearestToFarthest);
 
@@ -536,8 +537,8 @@ void C4EditCursor::Draw(C4TargetFacet &cgo)
 	// Draw drag frame
 	if (DragFrame)
 		pDraw->DrawFrameDw(cgo.Surface,
-		                               Min(X, X2) + cgo.X - cgo.TargetX, Min(Y, Y2) + cgo.Y - cgo.TargetY,
-		                               Max(X, X2) + cgo.X - cgo.TargetX, Max(Y, Y2) + cgo.Y - cgo.TargetY, 0xffffffff);
+		                               std::min(X, X2) + cgo.X - cgo.TargetX, std::min(Y, Y2) + cgo.Y - cgo.TargetY,
+		                               std::max(X, X2) + cgo.X - cgo.TargetX, std::max(Y, Y2) + cgo.Y - cgo.TargetY, 0xffffffff);
 	// Draw drag line
 	if (DragLine)
 		pDraw->DrawLineDw(cgo.Surface,
@@ -583,7 +584,7 @@ void C4EditCursor::DrawSelectMark(C4Facet &cgo, FLOAT_RECT frame)
 
 	const unsigned int n_vertices = sizeof(vertices) / sizeof(vertices[0]);
 
-	pDraw->PerformMultiLines(cgo.Surface, vertices, n_vertices, 1.);
+	pDraw->PerformMultiLines(cgo.Surface, vertices, n_vertices, 1., NULL);
 }
 
 
@@ -599,7 +600,7 @@ void C4EditCursor::FrameSelection()
 	{
 		if (cobj->Status && cobj->OCF & OCF_NotContained)
 		{
-			if (Inside(cobj->GetX(),Min(X,X2),Max(X,X2)) && Inside(cobj->GetY(),Min(Y,Y2),Max(Y,Y2)))
+			if (Inside(cobj->GetX(),std::min(X,X2),std::max(X,X2)) && Inside(cobj->GetY(),std::min(Y,Y2),std::max(Y,Y2)))
 				AddToSelection(cobj);
 		}
 	}
@@ -608,7 +609,9 @@ void C4EditCursor::FrameSelection()
 
 bool C4EditCursor::In(const char *szText)
 {
+	::Console.RegisterRecentInput(szText, C4Console::MRU_Object);
 	EMMoveObject(EMMO_Script, Fix0, Fix0, NULL, &Selection, szText);
+	::Console.PropertyDlgUpdate(Selection, true);
 	return true;
 }
 
@@ -703,7 +706,7 @@ void C4EditCursor::ApplyToolBrush()
 	if (!EditingOK()) return;
 	C4ToolsDlg *pTools=&Console.ToolsDlg;
 	// execute/send control
-	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Brush, ::Landscape.Mode, X,Y,0,0, pTools->Grade, !!pTools->ModeIFT, pTools->Material,pTools->Texture));
+	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Brush, ::Landscape.Mode, X,Y,0,0, pTools->Grade, pTools->Material, pTools->Texture, pTools->BackMaterial, pTools->BackTexture));
 }
 
 void C4EditCursor::ApplyToolLine()
@@ -711,7 +714,7 @@ void C4EditCursor::ApplyToolLine()
 	if (!EditingOK()) return;
 	C4ToolsDlg *pTools=&Console.ToolsDlg;
 	// execute/send control
-	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Line, ::Landscape.Mode, X,Y,X2,Y2, pTools->Grade, !!pTools->ModeIFT, pTools->Material,pTools->Texture));
+	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Line, ::Landscape.Mode, X,Y,X2,Y2, pTools->Grade, pTools->Material,pTools->Texture, pTools->BackMaterial, pTools->BackTexture));
 }
 
 void C4EditCursor::ApplyToolRect()
@@ -719,7 +722,7 @@ void C4EditCursor::ApplyToolRect()
 	if (!EditingOK()) return;
 	C4ToolsDlg *pTools=&Console.ToolsDlg;
 	// execute/send control
-	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Rect, ::Landscape.Mode, X,Y,X2,Y2, pTools->Grade, !!pTools->ModeIFT, pTools->Material,pTools->Texture));
+	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Rect, ::Landscape.Mode, X,Y,X2,Y2, pTools->Grade, pTools->Material, pTools->Texture, pTools->BackMaterial, pTools->BackTexture));
 }
 
 void C4EditCursor::ApplyToolFill()
@@ -727,7 +730,7 @@ void C4EditCursor::ApplyToolFill()
 	if (!EditingOK()) return;
 	C4ToolsDlg *pTools=&Console.ToolsDlg;
 	// execute/send control
-	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Fill, ::Landscape.Mode, X,Y,0,Y2, pTools->Grade, false, pTools->Material));
+	EMControl(CID_EMDrawTool, new C4ControlEMDrawTool(EMDT_Fill, ::Landscape.Mode, X,Y,0,Y2, pTools->Grade, pTools->Material, NULL, NULL, NULL));
 }
 
 bool C4EditCursor::DoContextMenu(DWORD dwKeyState)
@@ -953,15 +956,37 @@ void C4EditCursor::ApplyToolPicker()
 	case C4LSC_Static:
 		{
 			bool material_set = false;
+			int32_t x = X/::Landscape.MapZoom;
+			int32_t y = Y/::Landscape.MapZoom;
 			// Material-texture from map
-			if ((byIndex=::Landscape.GetMapIndex(X/::Landscape.MapZoom,Y/::Landscape.MapZoom)))
+			if ((byIndex = ::Landscape.GetMapIndex(x, y)))
 			{
-				const C4TexMapEntry *pTex = ::TextureMap.GetEntry(byIndex & (IFT-1));
+				const C4TexMapEntry *pTex = ::TextureMap.GetEntry(byIndex);
 				if (pTex && pTex->GetMaterialName() && *pTex->GetMaterialName())
 				{
+					const BYTE byIndexBkg = Landscape.GetBackMapIndex(x, y);
 					Console.ToolsDlg.SelectMaterial(pTex->GetMaterialName());
 					Console.ToolsDlg.SelectTexture(pTex->GetTextureName());
-					Console.ToolsDlg.SetIFT(!!(byIndex & ~(IFT-1)));
+
+					// Set background index if GUI backend supports it
+					if (Console.ToolsDlg.ModeBack)
+					{
+						const C4TexMapEntry *pBgTex = ::TextureMap.GetEntry(byIndexBkg);
+						if (pBgTex && !pBgTex->isNull())
+						{
+							Console.ToolsDlg.SelectBackMaterial(pBgTex->GetMaterialName());
+							Console.ToolsDlg.SelectBackTexture(pBgTex->GetTextureName());
+						}
+						else
+						{
+							Console.ToolsDlg.SelectBackMaterial(C4TLS_MatSky);
+						}
+					}
+					else
+					{
+						Console.ToolsDlg.SetIFT(byIndexBkg != 0);
+					}
+
 					material_set = true;
 				}
 			}
@@ -974,7 +999,7 @@ void C4EditCursor::ApplyToolPicker()
 		if (MatValid(iMaterial=GBackMat(X,Y)))
 		{
 			Console.ToolsDlg.SelectMaterial(::MaterialMap.Map[iMaterial].Name);
-			Console.ToolsDlg.SetIFT(!!GBackIFT(X,Y));
+			Console.ToolsDlg.SetIFT(Landscape.GetBackPix(X, Y) != 0);
 		}
 		else
 			Console.ToolsDlg.SelectMaterial(C4TLS_MatSky);
@@ -995,7 +1020,9 @@ void C4EditCursor::EMMoveObject(C4ControlEMObjectAction eAction, C4Real tx, C4Re
 		for (C4Object *obj : *pObjs)
 		{
 			if (obj && obj->Status)
-				pObjIDs[i] = obj->Number;
+				pObjIDs[i++] = obj->Number;
+			else
+				pObjIDs[i++] = 0;
 		}
 	}
 

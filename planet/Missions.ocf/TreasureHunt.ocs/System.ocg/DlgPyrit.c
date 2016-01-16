@@ -84,13 +84,13 @@ func FxPyritHammeringTimer(object c, proplist fx, int time)
 	var fc = FrameCounter();
 	if (fc < this.anim_continue_frame || c.has_sequence) return FX_OK;
 	this.anim = 0;
-	if (!fx.plane) if (!(fx.plane = FindObject(Find_ID(Plane), Sort_Distance()))) return FX_OK;
+	if (!fx.plane) if (!(fx.plane = FindObject(Find_ID(Airplane), Sort_Distance()))) return FX_OK;
 	// After a while, the plane is finished. Prefer to finish while no players are nearby.
 	if ((fc > 11500 && !ObjectCount(Find_ID(Clonk), Find_InRect(-300,-200,600,400), Find_Not(Find_Owner(NO_OWNER)))) || fc > 24000)
 	{
-		fx.plane->SetMeshMaterial(Plane->GetMeshMaterial());
+		fx.plane->SetMeshMaterial(Airplane->GetMeshMaterial());
 		fx.plane->SetR(90);
-		fx.plane.MeshTransformation=Plane.MeshTransformation;
+		fx.plane.MeshTransformation=Airplane.MeshTransformation;
 		return FX_Execute_Kill;
 	}
 	if ((!Random(20)) || this.was_walk_interrupted)
@@ -109,7 +109,7 @@ func FxPyritHammeringTimer(object c, proplist fx, int time)
 		var anim_idx = Random(4);
 		var anim_name = ["SwordSlash1.L", "SwordSlash1.R", "SwordSlash2.L", "SwordSlash2.R"][anim_idx];
 		var anim_len = c->GetAnimationLength(anim_name);
-		this.anim = c->PlayAnimation(anim_name, 10, Anim_Linear(0,0,anim_len, Pyrit_Hammer_SwingTime, ANIM_Remove), Anim_Const(1000));
+		this.anim = c->PlayAnimation(anim_name, CLONK_ANIM_SLOT_Arms, Anim_Linear(0,0,anim_len, Pyrit_Hammer_SwingTime, ANIM_Remove), Anim_Const(1000));
 		// Schedule effect when hammer hits object
 		var hit_delay = [50,50,30,30][anim_idx] * Pyrit_Hammer_SwingTime / 100;
 		ScheduleCall(c, Dialogue.Pyrit_HitFx, hit_delay, 1);
@@ -122,7 +122,7 @@ func Pyrit_HitFx()
 	var x = (GetDir()*2-1) * 14;
 	var y = 4;
 	CreateParticle("StarSpark", x*9/10,y*9/10, PV_Random(-20, 20), PV_Random(-20, 20), PV_Random(10, 20), Particles_Glimmer(), 10);
-	Sound("Clang?");
+	Sound("Objects::Pickaxe::Clang?");
 	return true;
 }
 

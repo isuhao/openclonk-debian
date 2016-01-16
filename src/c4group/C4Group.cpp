@@ -59,7 +59,6 @@ int iC4GroupRewindFilePtrNoWarn=0;
 char C4Group_TempPath[_MAX_PATH+1]="";
 char C4Group_Ignore[_MAX_PATH+1]="cvs;CVS;Thumbs.db;.orig;.svn";
 const char **C4Group_SortList = NULL;
-time_t C4Group_AssumeTimeOffset=0;
 bool (*C4Group_ProcessCallback)(const char *, int)=NULL;
 
 void C4Group_SetProcessCallback(bool (*fnCallback)(const char *, int))
@@ -405,29 +404,6 @@ void MemScramble(BYTE *bypBuffer, int iSize)
 
 //---------------------------------- C4Group ---------------------------------------------
 
-C4GroupHeader::C4GroupHeader()
-{
-	ZeroMem(this,sizeof(C4GroupHeader));
-}
-
-void C4GroupHeader::Init()
-{
-	SCopy(C4GroupFileID,id,sizeof(id)-1);
-	Ver1=C4GroupFileVer1; Ver2=C4GroupFileVer2;
-	Entries=0;
-	std::memset(reserved, '\0', sizeof(reserved));
-}
-
-C4GroupEntryCore::C4GroupEntryCore()
-{
-	ZeroMem(this,sizeof(C4GroupEntryCore));
-}
-
-C4GroupEntry::C4GroupEntry()
-{
-	ZeroMem(this,sizeof(C4GroupEntry));
-}
-
 C4GroupEntry::~C4GroupEntry()
 {
 	if (HoldBuffer)
@@ -442,14 +418,14 @@ C4GroupEntry::~C4GroupEntry()
 
 void C4GroupEntry::Set(const DirectoryIterator &iter, const char * path)
 {
-	ZeroMem(this,sizeof(C4GroupEntry));
+	InplaceReconstruct(this);
+
 	SCopy(GetFilename(*iter),FileName,_MAX_FNAME);
 	SCopy(*iter, DiskPath, _MAX_PATH-1);
 	Size = FileSize(*iter);
-	//SCopy(path,DiskPath,_MAX_PATH-1); AppendBackslash(DiskPath); SAppend(FileName,DiskPath,_MAX_PATH);
 	Status=C4GRES_OnDisk;
 	Packed=false;
-	ChildGroup=false; //FileGroupCheck(DiskPath);
+	ChildGroup=false;
 	// Notice folder entries are not checked for ChildGroup status.
 	// This would cause extreme performance loss and be good for
 	// use in entry list display only.
@@ -475,12 +451,11 @@ void C4Group::Init()
 	FilePtr=0;
 	EntryOffset=0;
 	Modified=false;
-	Head.Init();
+	InplaceReconstruct(&Head);
 	FirstEntry=NULL;
 	SearchPtr=NULL;
 	pInMemEntry=NULL; iInMemEntrySize=0u;
 	// Folder only
-	//hFdt=-1;
 	FolderSearch.Clear();
 	// Error status
 	SCopy("No Error",ErrorString,C4GroupMaxError);
@@ -568,7 +543,6 @@ bool C4Group::OpenReal(const char *szFilename)
 	// Get original filename
 	if (!szFilename) return false;
 	SCopy(szFilename,FileName,_MAX_FNAME);
-	//MakeOriginalFilename(FileName);
 
 	// Folder
 	if (DirectoryExists(FileName))
@@ -675,7 +649,7 @@ bool C4Group::AddEntry(C4GroupEntry::EntryStatus status,
 				return false;
 			return true;
 
-		case C4GroupEntry::C4GRES_InMemory: // Save buffer to file in folder
+		case C4GroupEntry::C4GRES_InMemory: { // Save buffer to file in folder
 			CStdFile hFile;
 			bool fOkay = false;
 			if (hFile.Create(tfname, !!childgroup))
@@ -686,8 +660,9 @@ bool C4Group::AddEntry(C4GroupEntry::EntryStatus status,
 			if (fHoldBuffer) { if (fBufferIsStdbuf) StdBuf::DeletePointer(membuf); else delete [] membuf; }
 
 			return fOkay;
+		}
 
-			// InGrp & Deleted ignored
+		default: break; // InGrp & Deleted ignored
 		}
 
 		return Error("Add to folder: Invalid request");
@@ -764,7 +739,6 @@ bool C4Group::Close()
 		if (centry->Status != C4GroupEntry::C4GRES_InGroup)
 			fRewrite=true;
 	if (Modified) fRewrite=true;
-	//if (Head.Entries==0) fRewrite=true;
 
 	// No rewrite: just close
 	if (!fRewrite)
@@ -898,7 +872,6 @@ void C4Group::Default()
 	StdFile.Default();
 	Mother = NULL;
 	ExclusiveChild = 0;
-	//hFdt = -1;
 	Init();
 }
 
@@ -920,8 +893,6 @@ void C4Group::Clear()
 		delete Mother;
 		Mother=NULL;
 	}
-	// done in init
-	//FolderSearch.Reset();
 	// Reset
 	Init();
 }
@@ -955,15 +926,6 @@ bool C4Group::AppendEntry2StdFile(C4GroupEntry *centry, CStdFile &hTarget)
 		// Disk item is a directory
 		if (DirectoryExists(centry->DiskPath))
 			return Error("AE2S: Cannot add directory to group file");
-		/*{
-		if (StdOutput) printf("Adding directory %s to group file...\n",centry->FileName);
-		// Temporary file name
-		MakeTempFilename(szFileSource);
-		// Create temporary copy of directory
-		if (!CopyItem(centry->DiskPath,szFileSource)) return Error("Cannot create temporary directory");
-		// Convert directory to temporary group file
-		if (!Folder2Group(szFileSource)) return Error("Cannot convert directory to group file");
-		}*/
 
 		// Resort group if neccessary
 		// (The group might be renamed by adding, forcing a resort)
@@ -1010,7 +972,6 @@ bool C4Group::AppendEntry2StdFile(C4GroupEntry *centry, CStdFile &hTarget)
 	}
 
 	case C4GroupEntry::C4GRES_InMemory: // Copy from mem to std file
-		//if (StdOutput) printf("Saving InMem entry %d...\n",centry->Size);
 		if (!centry->bpMemBuf) return Error("AE2S: no buffer");
 		if (!hTarget.Write(centry->bpMemBuf,centry->Size)) return Error("AE2S: writing error");
 		break;
@@ -1042,6 +1003,7 @@ void C4Group::ResetSearch(bool reload_contents)
 	case GRPF_File:
 		SearchPtr=FirstEntry;
 		break;
+	default: break; // InGrp & Deleted ignored
 	}
 }
 
@@ -1090,6 +1052,7 @@ C4GroupEntry* C4Group::SearchNextEntry(const char *szName)
 				}
 		break;
 		// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	default: break; // InGrp & Deleted ignored
 	}
 	// No entry found: reset search pointer
 	SearchPtr=NULL;
@@ -1168,6 +1131,7 @@ bool C4Group::Read(void *pBuffer, size_t iSize)
 	case GRPF_Folder:
 		if (!StdFile.Read(pBuffer,iSize)) return Error("Read: Error reading from folder contents");
 		break;
+	default: break; // InGrp & Deleted ignored
 	}
 
 	return true;
@@ -1429,6 +1393,7 @@ bool C4Group::DeleteEntry(const char *szFilename, bool fRecycle)
 		break;
 		// refresh file list
 		ResetSearch(true);
+	default: break; // InGrp & Deleted ignored
 	}
 	return true;
 }
@@ -1460,6 +1425,7 @@ bool C4Group::Rename(const char *szFile, const char *szNewName)
 		// refresh file list
 		ResetSearch(true);
 		break;
+	default: break; // InGrp & Deleted ignored
 	}
 
 	return true;
@@ -1511,7 +1477,7 @@ bool C4Group::Extract(const char *szFiles, const char *szExtractTo, const char *
 			if (StdOutput) printf("%s\n",tentry->FileName);
 			cbytes+=tentry->Size;
 			if (fnProcessCallback)
-				fnProcessCallback(tentry->FileName,100*cbytes/Max(tbytes,1));
+				fnProcessCallback(tentry->FileName,100*cbytes/std::max(tbytes,1));
 
 			// Extract
 			if (!ExtractEntry(tentry->FileName,szExtractTo))
@@ -1587,6 +1553,7 @@ bool C4Group::ExtractEntry(const char *szFilename, const char *szExtractTo)
 		if (!CopyItem(szPath,szTargetFName))
 			return Error("ExtractEntry: Cannot copy item");
 		break;
+	default: break; // InGrp & Deleted ignored
 	}
 	return true;
 }
@@ -1768,13 +1735,15 @@ bool C4Group::SetFilePtr2Entry(const char *szName, bool NeedsToBeAGroup)
 		if ((!centry) || (centry->Status != C4GroupEntry::C4GRES_InGroup)) return false;
 		return SetFilePtr(centry->Offset);
 
-	case GRPF_Folder:
+	case GRPF_Folder: {
 		StdFile.Close();
 		char path[_MAX_FNAME+1]; SCopy(FileName,path,_MAX_FNAME);
 		AppendBackslash(path); SAppend(szName,path);
 		bool fSuccess = StdFile.Open(path, NeedsToBeAGroup);
 		return fSuccess;
+	}
 
+	default: break; // InGrp & Deleted ignored
 	}
 	return false;
 }
@@ -1822,7 +1791,7 @@ bool C4Group::Add(const char *szName, StdBuf &pBuffer, bool fChild, bool fHoldBu
 	              szName,
 	              pBuffer.getSize(),
 	              szName,
-	              (BYTE*) pBuffer.getData(),
+	              (BYTE*) pBuffer.getMData(),
 	              false,
 	              fHoldBuffer,
 	              fExecutable,
@@ -1839,7 +1808,7 @@ bool C4Group::Add(const char *szName, StdStrBuf &pBuffer, bool fChild, bool fHol
 	              szName,
 	              pBuffer.getLength(),
 	              szName,
-	              (BYTE*) pBuffer.getData(),
+	              (BYTE*) pBuffer.getMData(),
 	              false,
 	              fHoldBuffer,
 	              fExecutable,
@@ -2223,24 +2192,38 @@ bool C4Group::OpenMother()
 	return true;
 }
 
-int C4Group::PreCacheEntries(const char *szSearchPattern)
+int C4Group::PreCacheEntries(const char *szSearchPattern, bool cache_previous)
 {
 	assert(szSearchPattern);
 	int result = 0;
 	// pre-load entries to memory. return number of loaded entries.
 	for (C4GroupEntry * p = FirstEntry; p; p = p->Next)
 	{
-		// skip some stuff that can not be cached
-		if (p->ChildGroup || p->bpMemBuf || !p->Size) continue;
 		// is this to be cached?
 		if (!WildcardListMatch(szSearchPattern, p->FileName)) continue;
-		// then load it!
-		StdBuf buf;
-		if (!this->LoadEntry(p->FileName, &buf)) continue;
-		p->HoldBuffer = true;
-		p->BufferIsStdbuf = true;
-		p->Size = buf.getSize(); // update size in case group changed on disk between calls
-		p->bpMemBuf = static_cast<BYTE *>(buf.GrabPointer());
+		// if desired, cache all entries up to that one to allow rewind in unpacked memory
+		// (only makes sense for groups)
+		if (cache_previous && Status == GRPF_File)
+		{
+			for (C4GroupEntry * p_pre = FirstEntry; p_pre != p; p_pre = p_pre->Next)
+				if (p_pre->Offset >= FilePtr)
+					PreCacheEntry(p_pre);
+		}
+		// cache the given entry
+		PreCacheEntry(p);
 	}
 	return result;
+}
+
+void C4Group::PreCacheEntry(C4GroupEntry * p)
+{
+	// skip some stuff that can not be cached or has already been cached
+	if (p->ChildGroup || p->bpMemBuf || !p->Size) return;
+	// now load it!
+	StdBuf buf;
+	if (!this->LoadEntry(p->FileName, &buf)) return;
+	p->HoldBuffer = true;
+	p->BufferIsStdbuf = true;
+	p->Size = buf.getSize(); // update size in case group changed on disk between calls
+	p->bpMemBuf = static_cast<BYTE *>(buf.GrabPointer());
 }

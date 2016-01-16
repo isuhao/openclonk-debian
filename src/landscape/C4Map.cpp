@@ -31,7 +31,6 @@ C4MapCreator::C4MapCreator()
 
 void C4MapCreator::Reset()
 {
-	MapIFT=128;
 	MapBuf=NULL;
 	Exclusive=-1;
 }
@@ -96,13 +95,13 @@ void C4MapCreator::Create(CSurface8 *sfcMap,
 	MapBuf->ClearBox8Only(0,0,MapBuf->Wdt, MapBuf->Hgt);
 
 	// Surface
-	ccol=rTexMap.GetIndexMatTex(rLScape.Material)+MapIFT;
+	ccol=rTexMap.GetIndexMatTex(rLScape.Material);
 	float amplitude= (float) rLScape.Amplitude.Evaluate();
 	float phase=     (float) rLScape.Phase.Evaluate();
 	float period=    (float) rLScape.Period.Evaluate();
-	if (rLScape.MapPlayerExtend) period *= Min(iPlayerNum, C4S_MaxMapPlayerExtend);
+	if (rLScape.MapPlayerExtend) period *= std::min(iPlayerNum, C4S_MaxMapPlayerExtend);
 	float natural=   (float) rLScape.Random.Evaluate();
-	int32_t level0=    Min(MapWdt,MapHgt)/2;
+	int32_t level0=    std::min(MapWdt,MapHgt)/2;
 	int32_t maxrange=  level0*3/4;
 	double cy_curve,cy_natural; // -1.0 - +1.0 !
 
@@ -149,7 +148,7 @@ void C4MapCreator::Create(CSurface8 *sfcMap,
 	{
 
 		// Base material
-		Exclusive=rTexMap.GetIndexMatTex(rLScape.Material)+MapIFT;
+		Exclusive=rTexMap.GetIndexMatTex(rLScape.Material);
 
 		int32_t cnt,clayer,layer_num,sptx,spty;
 
@@ -158,7 +157,7 @@ void C4MapCreator::Create(CSurface8 *sfcMap,
 			if (rLScape.Layers.Name[clayer][0])
 			{
 				// Draw layers
-				ccol=rTexMap.GetIndexMatTex(rLScape.Layers.Name[clayer])+MapIFT;
+				ccol=rTexMap.GetIndexMatTex(rLScape.Layers.Name[clayer]);
 				layer_num=rLScape.Layers.Count[clayer];
 				layer_num=layer_num*MapWdt*MapHgt/15000;
 				for (cnt=0; cnt<layer_num; cnt++)

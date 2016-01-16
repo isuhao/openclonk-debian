@@ -52,8 +52,6 @@ public:
 	bool Save(C4Group &hGroup, class C4DefList *pDefs);
 	bool Load(C4Group &hGroup);
 	void Default(C4ID n_id=C4ID::None, class C4DefList *pDefs=NULL, const char *cpNames=NULL);
-	//bool LoadNext(C4Group &hGroup); Old c4o support disabled...
-	//bool Add(C4Group &hGroup);
 	void Promote(int32_t iRank, C4RankSystem &rRanks, bool fForceRankName);
 	bool GetNextRankInfo(C4RankSystem &rDefaultRanks, int32_t *piNextRankExp, StdStrBuf *psNextRankName);
 	void CompileFunc(StdCompiler *pComp);
@@ -67,15 +65,13 @@ protected:
 class C4RoundResult
 {
 public:
-	C4RoundResult();
-public:
 	StdCopyStrBuf Title;
-	uint32_t Date;
-	int32_t Duration;
-	int32_t Won;
-	int32_t Score,FinalScore,TotalScore;
-	int32_t Bonus;
-	int32_t Level;
+	uint32_t Date = 0;
+	int32_t Duration = 0;
+	int32_t Won = 0;
+	int32_t Score = 0, FinalScore = 0, TotalScore = 0;
+	int32_t Bonus = 0;
+	int32_t Level = 0;
 public:
 	void Default();
 	void CompileFunc(StdCompiler *pComp);

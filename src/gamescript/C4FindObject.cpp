@@ -30,7 +30,7 @@ C4FindObject::~C4FindObject()
 	delete pSort;
 }
 
-C4FindObject *C4FindObject::CreateByValue(const C4Value &DataVal, C4SortObject **ppSortObj, const C4Object *context)
+C4FindObject *C4FindObject::CreateByValue(const C4Value &DataVal, C4SortObject **ppSortObj, const C4Object *context, bool *has_layer_check)
 {
 	// Must be an array
 	C4ValueArray *pArray = C4Value(DataVal).getArray();
@@ -54,7 +54,7 @@ C4FindObject *C4FindObject::CreateByValue(const C4Value &DataVal, C4SortObject *
 	case C4FO_Not:
 	{
 		// Create child condition
-		C4FindObject *pCond = C4FindObject::CreateByValue(Data[1], nullptr, context);
+		C4FindObject *pCond = C4FindObject::CreateByValue(Data[1], nullptr, context, has_layer_check);
 		if (!pCond) return NULL;
 		// wrap
 		return new C4FindObjectNot(pCond);
@@ -64,12 +64,12 @@ C4FindObject *C4FindObject::CreateByValue(const C4Value &DataVal, C4SortObject *
 	{
 		// Trivial case (one condition)
 		if (Data.GetSize() == 2)
-			return C4FindObject::CreateByValue(Data[1], nullptr, context);
+			return C4FindObject::CreateByValue(Data[1], nullptr, context, has_layer_check);
 		// Create all childs
 		int32_t i;
 		C4FindObject **ppConds = new C4FindObject *[Data.GetSize() - 1];
 		for (i = 0; i < Data.GetSize() - 1; i++)
-			ppConds[i] = C4FindObject::CreateByValue(Data[i+1], nullptr, context);
+			ppConds[i] = C4FindObject::CreateByValue(Data[i + 1], nullptr, context, has_layer_check);
 		// Count real entries, move them to start of list
 		int32_t iSize = 0;
 		for (i = 0; i < Data.GetSize() - 1; i++)
@@ -211,10 +211,28 @@ C4FindObject *C4FindObject::CreateByValue(const C4Value &DataVal, C4SortObject *
 		return new C4FindObjectController(Data[1].getInt());
 
 	case C4FO_Layer:
+		// explicit layer check given. do not add implicit layer check
+		if (has_layer_check) *has_layer_check = true;
 		return new C4FindObjectLayer(Data[1].getObj());
 
 	case C4FO_InArray:
 		return new C4FindObjectInArray(Data[1].getArray());
+
+	case C4FO_Property:
+	{
+		// Get property name
+		C4String *pStr = Data[1].getStr();
+		if (!pStr) return NULL;
+		// Construct
+		C4FindObjectProperty *pFO = new C4FindObjectProperty(pStr);
+		// Done
+		return pFO;
+	}
+
+	case C4FO_AnyLayer:
+		// do not add implicit layer check
+		if (has_layer_check) *has_layer_check = true;
+		return NULL;
 
 	}
 	return NULL;
@@ -701,7 +719,6 @@ bool C4FindObjectProcedure::Check(C4Object *pObj)
 
 bool C4FindObjectProcedure::IsImpossible()
 {
-	//return procedure < DFA_NONE || procedure >= C4D_MaxDFA;
 	return false;
 }
 
@@ -747,14 +764,14 @@ void C4FindObjectFunc::SetPar(int i, const C4Value &Par)
 
 bool C4FindObjectFunc::Check(C4Object *pObj)
 {
+	assert(Name); // checked in constructor
 	// Function not found?
-	if (!Name) return false;
 	return pObj->Call(Name, &Pars).getBool();
 }
 
 bool C4FindObjectFunc::IsImpossible()
 {
-	return !Name;
+	return false;
 }
 
 // *** C4FindObjectLayer
@@ -786,6 +803,21 @@ bool C4FindObjectInArray::IsImpossible()
 {
 	return !pArray || !pArray->GetSize();
 }
+
+// *** C4FindObjectProperty
+
+bool C4FindObjectProperty::Check(C4Object *pObj)
+{
+	assert(Name); // checked in constructor
+	C4Value value;
+	return pObj->GetPropertyByS(Name, &value) && value.getBool();
+}
+
+bool C4FindObjectProperty::IsImpossible()
+{
+	return false;
+}
+
 
 // *** C4SortObject
 

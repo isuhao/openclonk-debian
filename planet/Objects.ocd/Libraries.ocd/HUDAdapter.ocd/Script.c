@@ -14,229 +14,220 @@
 	@authors Newton
 */
 
-local HUDselector, HUDcontroller;
+local HUDcontroller;
 
-public func SetSelector(object sel)
-{
-	HUDselector = sel;
-	// Ensure controller is set if it was created after creation of this clonk (e.g. after section change)
-	if (!HUDcontroller) HUDcontroller = FindObject(Find_ID(GUI_Controller), Find_Owner(GetOwner()));
-	return true;
-}
-
-public func GetSelector() { return HUDselector; }
-
-public func HUDAdapter()
+public func IsHUDAdapter()
 {
 	return true;
 }
 
-// hotkey control
+// Either returns the current HUD controller or creates one.
+// But only if owner is a human otherwise returns nil.
+private func GetHUDController()
+{
+	var plr = GetOwner();
+	if (GetPlayerType(plr) != C4PT_User) return nil;
+	if (HUDcontroller) return HUDcontroller;
+	HUDcontroller = FindObject(Find_ID(GUI_Controller), Find_Owner(plr));
+	if (!HUDcontroller)
+		HUDcontroller = CreateObject(GUI_Controller, AbsX(0), AbsY(0), plr);
+	return HUDcontroller;
+}
+
+// Update HUD controller e.g. when it was reinitialized
+public func SetHUDController(object new_controller)
+{
+	HUDcontroller = new_controller;
+	return true;
+}
+
+/*-- Engine callbacks --*/
+
+// Bootstrap the HUD on the recruitement of a crew member.
+private func Recruitment(int plr)
+{
+	if (GetHUDController())
+	{
+		HUDcontroller->~OnCrewRecruitment(this, plr, ...);
+		HUDcontroller->~ScheduleUpdateInventory();
+	}
+	return _inherited(plr, ...);
+}
+
+// On savegame load or after section change, ensure that there's a HUD adapter
+public func OnSynchronized(...)
+{
+	if (GetHUDController())
+		HUDcontroller->~ScheduleUpdateInventory();
+	return _inherited(...);
+}
+
+private func DeRecruitment(int plr)
+{
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewDeRecruitment(this, plr, ...);
+	return _inherited(plr, ...);
+}
+
+private func Death(int killed_by)
+{
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewDeath(this, killed_by, ...);
+	return _inherited(killed_by, ...);
+}
+
+private func Destruction()
+{
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewDestruction(this, ...);
+	return _inherited(...);
+}
+
 public func ControlHotkey(int hotindex)
 {
 	if (HUDcontroller)
-		return HUDcontroller->ControlHotkey(hotindex);
+		return HUDcontroller->~ControlHotkey(hotindex);
 }
 
-/* Engine callbacks */
-
-// bootstrap the hud
-protected func Recruitment(int plr)
-{
-	HUDcontroller = FindObject(Find_ID(GUI_Controller), Find_Owner(plr));
-	if (!HUDcontroller)
-		HUDcontroller = CreateObjectAbove(GUI_Controller, 10, 10, plr);
-	
-	HUDcontroller->OnCrewRecruitment(this, plr, ...);
-	HUDcontroller->ScheduleUpdateInventory();
-	
-	return _inherited(plr, ...);
-}
-
-protected func DeRecruitment(int plr)
-{
-	if (HUDcontroller) HUDcontroller->OnCrewDeRecruitment(this, plr, ...);
-	
-	return _inherited(plr, ...);
-}
-
-protected func Death(int killed_by)
-{
-	if (HUDcontroller) HUDcontroller->OnCrewDeath(this, killed_by, ...);
-
-	return _inherited(killed_by,...);
-}
-
-protected func Destruction()
-{
-	if (HUDcontroller) HUDcontroller->OnCrewDestruction(this, ...);
-
-	return _inherited(...);
-}
-
-public func OnDisplayInfoMessage()
+private func OnPromotion()
 {
 	if (HUDcontroller)
-		HUDcontroller->ClearButtonMessages();
-}
-	
-// calls to the crew selector hud
-protected func OnPromotion()
-{
-	if (HUDselector)
-		HUDselector->UpdateRank();
+		HUDcontroller->~OnCrewRankChange(this);
 	return _inherited(...); 
 }
 
-protected func OnEnergyChange()	
+private func OnEnergyChange(int change, int cause, int caused_by)
 {
-	if (HUDselector)
-		HUDselector->UpdateHealthBar();
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewHealthChange(this, change, cause, caused_by);
 	return _inherited(...);
 
 }
-protected func OnBreathChange() {
-	if (HUDselector)
-		HUDselector->UpdateBreathBar();
-	return _inherited(...);
-}
-
-protected func OnMagicEnergyChange() {
-	return _inherited(...);
-}
-
-protected func OnNameChanged()
+private func OnBreathChange(int change)
 {
-	if (HUDselector)
-		HUDselector->UpdateName();
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewBreathChange(this, change);
 	return _inherited(...);
 }
 
-protected func OnPhysicalChange(string physical, int change)
+private func OnMagicEnergyChange(int change)
 {
-	if (HUDselector)
-	{		
-		// all physicals are resetted
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewMagicChange(this, change);
+	return _inherited(...);
+}
+
+private func OnNameChanged()
+{
+	if (HUDcontroller)
+		HUDcontroller->~OnCrewNameChange(this);
+	return _inherited(...);
+}
+
+private func OnPhysicalChange(string physical, int change)
+{
+	if (HUDcontroller)
+	{
 		if (!physical)
 		{
-			HUDselector->UpdateHealthBar();
-			HUDselector->UpdateBreathBar();
-			HUDselector->UpdateMagicBar();
+			HUDcontroller->~OnCrewHealthChange(this, change);
+			HUDcontroller->~OnCrewBreathChange(this, change);
 		}
-		else if (physical == "Energy") HUDselector->UpdateHealthBar();
-		else if (physical == "Breath") HUDselector->UpdateBreathBar();
-		else if (physical == "Magic") HUDselector->UpdateMagicBar();
+		else if (physical == "Energy") HUDcontroller->~OnCrewHealthChange(this, change);
+		else if (physical == "Breath") HUDcontroller->~OnCrewBreathChange(this, change);
 	}
 	return _inherited(physical, change, ...);
 }
 
-// calls to both crew selector and controller
-protected func CrewSelection(bool unselect)
+private func CrewSelection(bool unselect)
 {
-	if (HUDselector)
-		HUDselector->UpdateSelectionStatus();
 	if (HUDcontroller)
-		HUDcontroller->OnCrewSelection(this,unselect);
+		HUDcontroller->~OnCrewSelection(this, unselect);
 	return _inherited(unselect, ...);
 }
 
-// calls to controller
-protected func OnCrewEnabled()
+private func OnCrewEnabled()
 {
 	if (HUDcontroller)
-		HUDcontroller->OnCrewEnabled(this);
+		HUDcontroller->~OnCrewEnabled(this);
 	return _inherited(...);
 }
 
-protected func OnCrewDisabled()
+private func OnCrewDisabled()
 {
 	if (HUDcontroller)
-		HUDcontroller->OnCrewDisabled(this);
+		HUDcontroller->~OnCrewDisabled(this);
 	return _inherited(...);
 }
 
 // from ClonkControl.ocd
-protected func OnSlotFull(int slot)
+private func OnSlotFull(int slot)
 {
 	if (HUDcontroller)
-		HUDcontroller->OnSlotObjectChanged(slot);
-		
+		HUDcontroller->~OnSlotObjectChanged(slot);
 	return _inherited(slot, ...);
 }
 
-protected func OnSlotEmpty(int slot)
+private func OnSlotEmpty(int slot)
 {
 	if (HUDcontroller)
-		HUDcontroller->OnSlotObjectChanged(slot);
-	
+		HUDcontroller->~OnSlotObjectChanged(slot);
 	return _inherited(slot, ...);
 }
 
-// used to add a progress bar to an inventory slot
-// "effect" refers to an effect with the properties "max" and "current" that is used to keep the progress bar state up-to-date
-func SetProgressBarLinkForObject(object what, proplist effect)
-{
-	if(HUDcontroller)
-		HUDcontroller->SetProgressBarLinkForObject(what, effect);
-	return _inherited(what, effect, ...);
-}
-
-protected func OnHandSelectionChange(int old, int new, int handslot)
+// handled by GUI_Controller_ActionBars
+func StartInteractionCheck(object clonk)
 {
 	if (HUDcontroller)
-		HUDcontroller->OnHandSelectionChange(old, new, handslot);
-	return _inherited(old, new, handslot, ...);
+		return HUDcontroller->~StartInteractionCheck(clonk, ...);
 }
 
-protected func OnInventoryHotkeyPress(int slot)
+// handled by GUI_Controller_ActionBars
+func StopInteractionCheck()
 {
 	if (HUDcontroller)
-		HUDcontroller->OnInventoryHotkeyPress(slot);
+		return HUDcontroller->~StopInteractionCheck(...);
+}
+
+private func OnInventoryHotkeyPress(int slot)
+{
+	if (HUDcontroller)
+		HUDcontroller->~OnInventoryHotkeyPress(slot);
 	return _inherited(slot, ...);
 }
 
-protected func OnInventoryHotkeyRelease(int slot)
+private func OnInventoryHotkeyRelease(int slot)
 {
 	if (HUDcontroller)
-		HUDcontroller->OnInventoryHotkeyRelease(slot);
+		HUDcontroller->~OnInventoryHotkeyRelease(slot);
 	return _inherited(slot, ...);
 }
 
 // when something in the inventory changed
-protected func OnInventoryChange()
+private func OnInventoryChange()
 {
 	if (HUDcontroller)
-		HUDcontroller->ScheduleUpdateInventory();
+		HUDcontroller->~ScheduleUpdateInventory();
 	return _inherited(...);
 }
 
-// when a carryheavy object is picked up/dropped
-protected func OnCarryHeavyChange(object carried)
-{
-	if(HUDcontroller)
-		if(GetCursor(GetOwner()) == this)
-			HUDcontroller->OnCarryHeavyChange(carried);
-		
-	return _inherited(carried, ...);
-}
-
-func Collection2()
+public func Collection2()
 {
 	if (HUDcontroller)
-		HUDcontroller->ScheduleUpdateInventory();
+		HUDcontroller->~ScheduleUpdateInventory();
 	return _inherited(...);
 }
 
-func Ejection()
+public func Ejection()
 {
 	if (HUDcontroller)
-		HUDcontroller->ScheduleUpdateInventory();
+		HUDcontroller->~ScheduleUpdateInventory();
 	return _inherited(...);
 }
 
-func ControlContents()
+public func ControlContents()
 {
 	if (HUDcontroller)
-		HUDcontroller->ScheduleUpdateInventory();
+		HUDcontroller->~ScheduleUpdateInventory();
 	return _inherited(...);
 }

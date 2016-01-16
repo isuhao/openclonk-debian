@@ -3,9 +3,12 @@
 #include Library_Structure
 #include Library_Ownable
 #include Library_Producer
+#include Library_LampPost
 
 local animWork;
 local meshAttach;
+
+public func LampPosition(id def) { return [GetCalcDir()*-6,30]; }
 
 func Initialize()
 {
@@ -28,11 +31,6 @@ public func IsProduct(id product_id)
 
 private func ProductionTime(id toProduce) { return 400; }
 public func PowerNeed() { return 80; }
-
-public func NeedRawMaterial(id rawmat_id)
-{
-	return true;
-}
 
 private func FxIntWorkAnimTimer(object target, proplist effect, int timer)
 {

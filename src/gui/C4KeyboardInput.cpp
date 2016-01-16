@@ -213,6 +213,13 @@ const C4KeyCodeMapEntry KeyCodeMap[] = {
 #include "CocoaKeycodeMap.h"
 #endif
 
+void C4KeyCodeEx::FixShiftKeys()
+{
+	// reduce stuff like Ctrl+RightCtrl to simply RightCtrl
+	if ((dwShift & KEYS_Control) && (Key == K_CONTROL_L || Key == K_CONTROL_R)) dwShift &= ~KEYS_Control;
+	if ((dwShift & KEYS_Shift) && (Key == K_SHIFT_L || Key == K_SHIFT_R)) dwShift &= ~KEYS_Shift;
+}
+
 C4KeyCode C4KeyCodeEx::GetKeyByScanCode(const char *scan_code)
 {
 	// scan code is in hex format
@@ -411,7 +418,12 @@ StdStrBuf C4KeyCodeEx::KeyCode2String(C4KeyCode wCode, bool fHumanReadable, bool
 		// for config files and such: dump scancode
 		return FormatString("$%x", static_cast<unsigned int>(wCode));
 	}
-#if defined(_WIN32)
+#if defined(USE_WIN32_WINDOWS)
+
+	// Query map
+	const C4KeyCodeMapEntry *pCheck = KeyCodeMap;
+	while (pCheck->szName)
+		if (wCode == pCheck->wCode) return StdStrBuf((pCheck->szShortName && fShort) ? pCheck->szShortName : pCheck->szName); else ++pCheck;
 
 //  TODO: Works?
 //  StdStrBuf Name; Name.SetLength(1000);
@@ -441,16 +453,13 @@ StdStrBuf C4KeyCodeEx::KeyCode2String(C4KeyCode wCode, bool fHumanReadable, bool
 	KeySym keysym = (KeySym)XkbKeycodeToKeysym(dpy,wCode+8,0,0);
 	char* name = NULL;
 	if (keysym != NoSymbol) { // is the keycode without shift modifiers mapped to a symbol?
-		#if defined(USE_GTK3)
-		name = gtk_accelerator_get_label_with_keycode(dpy, keysym, wCode+8, (GdkModifierType)0);
-		#else
-		name = gtk_accelerator_get_label(keysym, (GdkModifierType)0);
-		#endif
+		name = gtk_accelerator_get_label_with_keycode(gdk_display_get_default(), keysym, wCode+8, (GdkModifierType)0);
 	}
 	if (name) { // is there a string representation of the keysym?
 		// prevent memleak
 		StdStrBuf buf;
-		buf.Take(name);
+		buf.Copy(name);
+		g_free(name);
 		return buf;
 	}
 #elif defined(USE_SDL_MAINLOOP)
@@ -572,7 +581,7 @@ bool C4KeyEventData::operator ==(const struct C4KeyEventData &cmp) const
 /* ----------------- C4CustomKey------------------ */
 
 C4CustomKey::C4CustomKey(const C4KeyCodeEx &DefCode, const char *szName, C4KeyScope Scope, C4KeyboardCallbackInterface *pCallback, unsigned int uiPriority)
-		: Scope(Scope), Name(), uiPriority(uiPriority), iRef(0)
+		: Scope(Scope), Name(), uiPriority(uiPriority), iRef(0), is_down(false)
 {
 	// generate code
 	if (DefCode.Key != KEY_Default) DefaultCodes.push_back(DefCode);
@@ -587,7 +596,7 @@ C4CustomKey::C4CustomKey(const C4KeyCodeEx &DefCode, const char *szName, C4KeySc
 }
 
 C4CustomKey::C4CustomKey(const CodeList &rDefCodes, const char *szName, C4KeyScope Scope, C4KeyboardCallbackInterface *pCallback, unsigned int uiPriority)
-		: DefaultCodes(rDefCodes), Scope(Scope), Name(), uiPriority(uiPriority), iRef(0)
+		: DefaultCodes(rDefCodes), Scope(Scope), Name(), uiPriority(uiPriority), iRef(0), is_down(false)
 {
 	// ctor for default key
 	Name.Copy(szName);
@@ -597,14 +606,6 @@ C4CustomKey::C4CustomKey(const CodeList &rDefCodes, const char *szName, C4KeySco
 		vecCallbacks.push_back(pCallback);
 		pCallback->pOriginalKey = this;
 	}
-}
-
-C4CustomKey::C4CustomKey(const C4KeyCodeEx &Code, const StdStrBuf &rName)
-		: Codes(), DefaultCodes(), Scope(KEYSCOPE_None), Name(), uiPriority(PRIO_None), iRef(0)
-{
-	// ctor for custom key override
-	if (Code.Key != KEY_Default) Codes.push_back(Code);
-	Name.Copy(rName);
 }
 
 C4CustomKey::C4CustomKey(const C4CustomKey &rCpy, bool fCopyCallbacks)
@@ -668,6 +669,8 @@ void C4CustomKey::CompileFunc(StdCompiler *pComp)
 
 bool C4CustomKey::Execute(C4KeyEventType eEv, C4KeyCodeEx key)
 {
+	// remember down-state
+	is_down = (eEv == KEYEV_Down);
 	// execute all callbacks
 	for (CBVec::iterator i = vecCallbacks.begin(); i != vecCallbacks.end(); ++i)
 		if ((*i)->OnKeyEvent(key, eEv))
@@ -891,12 +894,12 @@ bool C4KeyboardInput::DoInput(const C4KeyCodeEx &InKey, C4KeyEventType InEvent, 
 				assert(pKey);
 				// check priority
 				if (pKey->GetPriority() == uiExecPrio)
-					// check scope
-					if (pKey->GetScope() & InScope)
-						// check shift modifier (not on release, because a key release might happen with a different modifier than its pressing!)
-						if (InEvent == KEYEV_Up || pKey->IsCodeMatched(C4KeyCodeEx(FallbackKeys[j], C4KeyShiftState(InKey.dwShift))))
-							// exec it
-							if (pKey->Execute(InEvent, InKey))
+					// check scope and modifier
+					// (not on release of a key that has been down, because a key release might happen with a different modifier or in different scope than its pressing!)
+					if ((InEvent == KEYEV_Up && pKey->IsDown())
+						|| ((pKey->GetScope() & InScope) && pKey->IsCodeMatched(C4KeyCodeEx(FallbackKeys[j], C4KeyShiftState(InKey.dwShift)))))
+						// exec it
+						if (pKey->Execute(InEvent, InKey))
 								return true;
 			}
 		// nothing found in this priority: exec next

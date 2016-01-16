@@ -16,7 +16,7 @@ protected func Initialize()
 	
 	// Mood.
 	SetSkyAdjust(RGBa(255, 255, 255, 127), RGB(255, 200, 150));
-	SetGamma(RGB(40, 35, 30), RGB(140, 135, 130), RGB(255, 250, 245));
+	SetGamma(109, 105, 101);
 	
 	// Chests with weapons.
 	CreateObjectAbove(Chest, 230, 224, NO_OWNER)->MakeInvincible();
@@ -33,19 +33,6 @@ protected func Initialize()
 	// Objects fade after 5 seconds.
 	CreateObject(Rule_ObjectFade)->DoFadeTime(5 * 36);
 
-	// Smooth brick edges.
-	var x=[188, 205, 261, 244, 308, 325];
-	var y=[124, 124, 132, 132, 108, 108];
-	var d=[3, 2, 2, 3, 3, 2];
-	for (var i = 0; i < GetLength(x); i++)
-	{
-		var edge=CreateObjectAbove(BrickEdge, x[i], y[i], NO_OWNER);
-		edge->Initialize();
-		edge->SetP(d[i]);
-		edge->SetPosition(x[i],y[i]);
-		edge->PermaEdge();
-	}
-	
 	AddEffect("DryTime",nil,100,2);
 	return;
 }

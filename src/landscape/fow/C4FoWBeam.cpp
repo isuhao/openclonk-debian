@@ -14,6 +14,8 @@
  */
 
 #include "C4Include.h"
+
+#ifndef USE_CONSOLE
 #include "C4FoWBeam.h"
 
 // Maximum error allowed while merging beams.
@@ -48,7 +50,7 @@ bool C4FoWBeam::MergeRight(int32_t x, int32_t y)
 
 	// Calculate error. Note that simply summing up errors is not correct,
 	// strictly speaking (as new and old error surfaces might overlap). Still,
-	// this is quite elaborate already, no need to make it even more 
+	// this is quite elaborate already, no need to make it even more
 	int32_t iErr = getDoubleTriangleSurface(
 		getLeftEndX(), iLeftEndY,
 		getRightEndX(), iRightEndY,
@@ -140,7 +142,7 @@ void C4FoWBeam::MergeDirty()
 
 	// Figure out how far the new dirty beams reaches. Note that
 	// we might lose information about the landscape here.
-	Dirty(Min(getLeftEndY(), pWith->getLeftEndY()));
+	Dirty(std::min(getLeftEndY(), pWith->getLeftEndY()));
 
 	// Set right
 	iRightX = pWith->iRightX;
@@ -193,3 +195,5 @@ void C4FoWBeam::CompileFunc(StdCompiler *pComp)
 	pComp->Value(mkNamingAdapt(iError, "iError"));
 	pComp->Value(mkNamingAdapt(fDirty, "fDirty"));
 }
+
+#endif

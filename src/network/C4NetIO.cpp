@@ -1224,7 +1224,7 @@ void *C4NetIOTCP::Peer::GetRecvBuf(int iSize) // (mt-safe)
 {
 	CStdLock ILock(&ICSec);
 	// Enlarge input buffer?
-	size_t iIBufSize = Max<size_t>(iMinIBufSize, IBuf.getSize());
+	size_t iIBufSize = std::max<size_t>(iMinIBufSize, IBuf.getSize());
 	while ((size_t)(iIBufUsage + iSize) > iIBufSize)
 		iIBufSize *= 2;
 	if (iIBufSize != IBuf.getSize())
@@ -1886,8 +1886,8 @@ bool C4NetIOUDP::InitBroadcast(addr_t *pBroadcastAddr)
 		for (int iRetries = 1000; iRetries; iRetries--)
 		{
 			// create new - random - address
-			MCAddr.sin_addr.s_addr = MCAddr.sin_addr.s_addr =
-			                           0x000000ef | ((rand() & 0xff) << 24) | ((rand() & 0xff) << 16) | ((rand() & 0xff) << 8);
+			MCAddr.sin_addr.s_addr =
+			   0x000000ef | ((rand() & 0xff) << 24) | ((rand() & 0xff) << 16) | ((rand() & 0xff) << 8);
 			// init broadcast
 			if (!C4NetIOSimpleUDP::InitBroadcast(&MCAddr))
 				return false;
@@ -2018,7 +2018,7 @@ bool C4NetIOUDP::Execute(int iMaxTime, pollfd *) // (mt-safe)
 
 	// adjust maximum block time
 	C4TimeMilliseconds tNow = C4TimeMilliseconds::Now();
-	uint32_t iMaxBlock = Max(tNow, GetNextTick(tNow)) - tNow;
+	uint32_t iMaxBlock = std::max(tNow, GetNextTick(tNow)) - tNow;
 	if (iMaxTime == TO_INF || iMaxTime > (int) iMaxBlock) iMaxTime = iMaxBlock;
 
 	// execute subclass
@@ -2114,14 +2114,14 @@ bool C4NetIOUDP::SetBroadcast(const addr_t &addr, bool fSet) // (mt-safe)
 C4TimeMilliseconds C4NetIOUDP::GetNextTick(C4TimeMilliseconds tNow) // (mt-safe)
 {
 	// maximum time: check interval
-	C4TimeMilliseconds tTiming = tNextCheck.IsInfinite() ? tNow : Max(tNow, tNextCheck);
+	C4TimeMilliseconds tTiming = tNextCheck.IsInfinite() ? tNow : std::max(tNow, tNextCheck);
 	
 	// client timeouts (e.g. connection timeout)
 	CStdShareLock PeerListLock(&PeerListCSec);
 	for (Peer *pPeer = pPeerList; pPeer; pPeer = pPeer->Next)
 		if (!pPeer->Closed())
 			if (!pPeer->GetTimeout().IsInfinite())
-				tTiming = Min(tTiming, pPeer->GetTimeout());
+				tTiming = std::min(tTiming, pPeer->GetTimeout());
 	// return timing value
 	return tTiming;
 }
@@ -2198,7 +2198,7 @@ void C4NetIOUDP::OnPacket(const C4NetIOPacket &Packet, C4NetIO *pNetIO)
 		}
 		// ignore all other packets
 	}
-	else /*if(pPeer)*/
+	else
 	{
 		// address add?
 		if (Packet.getStatus() == IPID_AddAddr)
@@ -2258,7 +2258,7 @@ C4NetIOUDP::Packet::Packet()
 
 }
 
-C4NetIOUDP::Packet::Packet(C4NetIOPacket RREF rnData, nr_t inNr)
+C4NetIOUDP::Packet::Packet(C4NetIOPacket &&rnData, nr_t inNr)
 		: iNr(inNr),
 		Data(rnData),
 		pFragmentGot(NULL)
@@ -2370,7 +2370,7 @@ bool C4NetIOUDP::Packet::AddFragment(const C4NetIOPacket &Packet, const C4NetIO:
 size_t C4NetIOUDP::Packet::FragmentSize(nr_t iFNr) const
 {
 	assert(iFNr < FragmentCnt());
-	return Min(MaxDataSize, Data.getSize() - iFNr * MaxDataSize);
+	return std::min(MaxDataSize, Data.getSize() - iFNr * MaxDataSize);
 }
 
 // * C4NetIOUDP::PacketList
@@ -2552,8 +2552,8 @@ bool C4NetIOUDP::Peer::Check(bool fForceCheck)
 	// instead, ask for other packets that are missing until recheck is allowed
 	bool fNoReCheck = tNextReCheck > C4TimeMilliseconds::Now();
 	if (!fNoReCheck) iLastPacketAsked = iLastMCPacketAsked = 0;
-	unsigned int iStartAt = fNoReCheck ? Max(iLastPacketAsked + 1, iIPacketCounter) : iIPacketCounter;
-	unsigned int iStartAtMC = fNoReCheck ? Max(iLastMCPacketAsked + 1, iIMCPacketCounter) : iIMCPacketCounter;
+	unsigned int iStartAt = fNoReCheck ? std::max(iLastPacketAsked + 1, iIPacketCounter) : iIPacketCounter;
+	unsigned int iStartAtMC = fNoReCheck ? std::max(iLastMCPacketAsked + 1, iIMCPacketCounter) : iIMCPacketCounter;
 	// check if we have something to ask for
 	const unsigned int iMaxAskCnt = 10;
 	unsigned int i, iAskList[iMaxAskCnt], iAskCnt = 0, iMCAskCnt = 0;
@@ -2589,7 +2589,7 @@ void C4NetIOUDP::Peer::OnRecv(const C4NetIOPacket &rPacket) // (mt-safe)
 	const PacketHdr *pHdr = getBufPtr<PacketHdr>(rPacket);
 	bool fBroadcasted = !!(pHdr->StatusByte & 0x80);
 	// save packet nr
-	(fBroadcasted ? iRIMCPacketCounter : iRIPacketCounter) = Max<unsigned int>((fBroadcasted ? iRIMCPacketCounter : iRIPacketCounter), pHdr->Nr);
+	(fBroadcasted ? iRIMCPacketCounter : iRIPacketCounter) = std::max<unsigned int>((fBroadcasted ? iRIMCPacketCounter : iRIPacketCounter), pHdr->Nr);
 #ifdef C4NETIOUDP_OPT_RECV_CHECK_IMMEDIATE
 	// do check
 	if (eStatus == CS_Works)
@@ -2634,7 +2634,7 @@ void C4NetIOUDP::Peer::OnRecv(const C4NetIOPacket &rPacket) // (mt-safe)
 		}
 		// set packet counter
 		if (fBroadcasted)
-			iRIMCPacketCounter = iRIMCPacketCounter = pPkt->Nr;
+			iRIMCPacketCounter = iIMCPacketCounter = pPkt->Nr;
 		else
 			iRIPacketCounter = iIPacketCounter = pPkt->Nr;
 		// clear incoming packets
@@ -2867,7 +2867,7 @@ bool C4NetIOUDP::Peer::SendDirect(const Packet &rPacket, unsigned int iNr)
 	return fSuccess;
 }
 
-bool C4NetIOUDP::Peer::SendDirect(C4NetIOPacket RREF rPacket) // (mt-safe)
+bool C4NetIOUDP::Peer::SendDirect(C4NetIOPacket &&rPacket) // (mt-safe)
 {
 	// insert correct addr
 	if (!(rPacket.getStatus() & 0x80)) rPacket.SetAddr(addr);
@@ -2929,7 +2929,7 @@ void C4NetIOUDP::Peer::CheckCompleteIPackets()
 		// remove packet from queue
 		int iNr = pPkt->GetNr();
 		IPackets.DeletePacket(pPkt);
-		assert(!IPackets.GetPacketFrgm(iNr));
+		assert(!IPackets.GetPacketFrgm(iNr)); (void)iNr;
 	}
 	while ((pPkt = IMCPackets.GetFirstPacketComplete()))
 	{
@@ -2943,7 +2943,7 @@ void C4NetIOUDP::Peer::CheckCompleteIPackets()
 		// remove packet from queue
 		int iNr = pPkt->GetNr();
 		IMCPackets.DeletePacket(pPkt);
-		assert(!IMCPackets.GetPacketFrgm(iNr));
+		assert(!IMCPackets.GetPacketFrgm(iNr)); (void)iNr;
 	}
 }
 
@@ -2996,7 +2996,7 @@ bool C4NetIOUDP::BroadcastDirect(const Packet &rPacket, unsigned int iNr) // (mt
 	return fSuccess;
 }
 
-bool C4NetIOUDP::SendDirect(C4NetIOPacket RREF rPacket) // (mt-safe)
+bool C4NetIOUDP::SendDirect(C4NetIOPacket &&rPacket) // (mt-safe)
 {
 	addr_t toaddr = rPacket.getAddr();
 	// packet meant to be broadcasted?
@@ -3074,7 +3074,7 @@ void C4NetIOUDP::ClearMCPackets()
 		// find minimum acknowledged packet number
 		unsigned int iAckNr = pPeerList->GetMCAckPacketCounter();
 		for (Peer *pPeer = pPeerList->Next; pPeer; pPeer = pPeer->Next)
-			iAckNr = Min(iAckNr, pPeerList->GetMCAckPacketCounter());
+			iAckNr = std::min(iAckNr, pPeerList->GetMCAckPacketCounter());
 		// clear packets
 		OPackets.ClearPackets(iAckNr);
 	}
@@ -3267,7 +3267,7 @@ void C4NetIOUDP::DebugLogPkt(bool fOut, const C4NetIOPacket &Pkt)
 		case IPID_Data:
 		{
 			UPACK(DataPacketHdr); O.AppendFormat(" (f: %d s: %d)", P.FNr, P.Size);
-			for (int iPos = sizeof(DataPacketHdr); iPos < Min<int>(Pkt.getSize(), sizeof(DataPacketHdr) + 16); iPos++)
+			for (int iPos = sizeof(DataPacketHdr); iPos < std::min<int>(Pkt.getSize(), sizeof(DataPacketHdr) + 16); iPos++)
 				O.AppendFormat(" %02x", *getBufPtr<unsigned char>(Pkt, iPos));
 			break;
 		}

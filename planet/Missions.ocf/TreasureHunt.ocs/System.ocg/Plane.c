@@ -1,4 +1,4 @@
-#appendto Plane
+#appendto Airplane
 
 // plane needs oil
 public func ContainedUp(object clonk, ...)
@@ -18,7 +18,7 @@ func FuelCheck(object clonk)
 	if (!FindContents(MetalBarrel))
 	{
 		Dialogue->MessageBox("$PlaneNoOil$", clonk, clonk);
-		clonk->Sound("WipfWhine");
+		clonk->Sound("Animals::Wipf::Whine");
 		return false;
 	}
 	return true;

@@ -28,6 +28,7 @@
 #include "C4PXS.h"
 #include "C4Record.h"
 #include "C4RoundResults.h"
+#include "C4TextureShape.h"
 
 /* This file implements stubs for the parts of the engine that are not used
  * by mape. It also instantiates global variables required by mape that are
@@ -38,6 +39,7 @@
 C4Set<C4PropList *> C4PropList::PropLists;
 #endif
 C4Set<C4PropListNumbered *> C4PropListNumbered::PropLists;
+C4Set<C4PropListScript *> C4PropListScript::PropLists;
 std::vector<C4PropListNumbered *> C4PropListNumbered::ShelvedPropLists;
 int32_t C4PropListNumbered::EnumerationIndex = 0;
 C4StringTable Strings;
@@ -54,7 +56,7 @@ class C4Draw *pDraw = NULL;
 
 bool EraseItemSafe(const char *szFilename) {return false;}
 void Smoke(int32_t tx, int32_t ty, int32_t level, DWORD dwClr) {}
-class C4SoundInstance *StartSoundEffectAt(const char *, int32_t, int32_t, int32_t, int32_t) { return NULL; }
+class C4SoundInstance *StartSoundEffectAt(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, class C4SoundModifier *) { return NULL; }
 
 C4Config::C4Config() {}
 C4Config::~C4Config() {}
@@ -71,7 +73,7 @@ C4Facet C4Facet::TruncateSection(int32_t) { return *this; }
 
 C4Surface::C4Surface() {}
 C4Surface::~C4Surface() {}
-bool C4Surface::Read(CStdStream &, const char *) { return false; }
+bool C4Surface::Read(CStdStream &, const char *, int) { return false; }
 bool C4Surface::Lock() { return false; }
 bool C4Surface::Unlock() { return false; }
 DWORD C4Surface::GetPixDw(int iX, int iY, bool fApplyModulation) { return 0; }
@@ -96,7 +98,6 @@ void C4IDList::CompileFunc(StdCompiler *, bool) {}
 C4IDListChunk::C4IDListChunk() {}
 C4IDListChunk::~C4IDListChunk() {}
 
-C4Shape::C4Shape() {}
 C4DefGraphics::C4DefGraphics(C4Def*) {}
 void C4DefGraphics::Clear() {}
 
@@ -113,7 +114,7 @@ C4Landscape::~C4Landscape() {}
 bool C4Landscape::FindMatSlide(int&, int&, int, int, int) const { return false; }
 int32_t C4Landscape::ExtractMaterial(int32_t, int32_t, bool) { return 0; }
 bool C4Landscape::InsertMaterial(int32_t, int32_t *, int32_t *, int32_t, int32_t, bool) { return false; }
-bool C4Landscape::Incinerate(int32_t, int32_t) { return false; }
+bool C4Landscape::Incinerate(int32_t, int32_t, int32_t) { return false; }
 bool C4Landscape::ClearPix(int32_t, int32_t) { return false; }
 void C4Landscape::CheckInstabilityRange(int32_t, int32_t) {}
 
@@ -155,6 +156,8 @@ bool C4PXSSystem::Create(int, C4Real, C4Real, C4Real, C4Real) { return false; }
 
 void AddDbgRec(C4RecordChunkType, const void *, int) {}
 
+bool C4TextureShape::Load(C4Group &group, const char *filename, int32_t base_tex_wdt, int32_t base_tex_hgt) { return true; }
+
 #if 0
 /* Pulled in by C4Game... */
 CStdFont::CStdFont() {}
@@ -194,3 +197,6 @@ C4Game::~C4Game() {}
 
 C4AulDebug *C4AulDebug::pDebug;
 void C4AulDebug::DebugStep(C4AulBCC*, C4Value*) {}
+
+C4Shader::C4Shader() {}
+C4Shader::~C4Shader() {}

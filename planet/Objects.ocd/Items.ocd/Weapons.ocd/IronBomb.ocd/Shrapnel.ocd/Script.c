@@ -1,6 +1,7 @@
 /* shrapnel */
 
 public func ProjectileDamage() { return 3; }
+public func TumbleStrength() { return 100; }
 public func FlightTime() { return 4; }
 
 protected func Initialize()
@@ -24,7 +25,7 @@ protected func Hit()
 {
 	ShakeFree(6);
 	RemoveEffect("HitCheck",this);
-	Sound("BulletHitGround?");
+	Sound("Objects::Weapons::Musket::BulletHitGround?");
 	CreateParticle("StarSpark", 0, 0, PV_Random(-20, 20), PV_Random(-20, 20), PV_Random(10, 20), Particles_Glimmer(), 3);
 	
 	RemoveObject();
@@ -32,8 +33,16 @@ protected func Hit()
 
 public func HitObject(object obj)
 {
-	ProjectileHit(obj,ProjectileDamage(),ProjectileHit_tumble);
-	Sound("ProjectileHitLiving?");
+	Sound("Hits::ProjectileHitLiving?");
+	
+	if (WeaponCanHit(obj))
+	{
+		obj->~OnProjectileHit(this);
+		WeaponDamage(obj, this->ProjectileDamage(), FX_Call_EngObjHit);
+		WeaponTumble(obj, this->TumbleStrength());
+		if (!this) return;
+	}
+	
 	RemoveObject();
 }
 

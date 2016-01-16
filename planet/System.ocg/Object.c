@@ -1,6 +1,6 @@
 /*--
 		Objects.c
-		Authors: Maikel, boni, Ringwaul, Sven2, flgr, Clonkonaut, Günther, Randrian
+		Authors: Maikel, boni, Ringwaul, Sven2, flgr, Clonkonaut, GÃ¼nther, Randrian
 
 		Functions generally applicable to objects; not enough to be worth distinct scripts though.
 --*/
@@ -55,26 +55,76 @@ global func SetObjAlpha(int by_alpha)
 	return SetClrModulation(clr_mod);
 }
 
-// Makes the calling object invincible.
-global func MakeInvincible()
+global func MakeInvincible(bool allow_fire)
 {
-	if (!this) return nil;
-	var fx;
-	if (fx = GetEffect("IntInvincible", this)) return fx;
-	return AddEffect("IntInvincible", this, 300);
+	if (!this) return false;
+	var fx = GetEffect("IntInvincible", this);
+	if (!fx) fx = AddEffect("IntInvincible", this, 300, 0);
+	if (!fx) return false;
+	fx.allow_fire = allow_fire;
+	if (!allow_fire && this->OnFire()) this->Extinguish();
+	fx.OnShockwaveHit = this.OnShockwaveHit;
+	fx.RejectWindbagForce = this.RejectWindbagForce;
+	fx.QueryCatchBlow = this.QueryCatchBlow;
+	this.OnShockwaveHit = Global.Invincibility_OnShockwaveHit;
+	this.RejectWindbagForce = Global.Invincibility_RejectWindbagForce;
+	this.QueryCatchBlow = Global.Invincibility_QueryCatchBlow;
+	return true;
 }
 
-// REmoves invincibility from object
+global func FxIntInvincibleDamage(target)
+{
+	// avert all damage
+	return 0;
+}
+
+global func FxIntInvincibleEffect(string new_name, object target, proplist fx)
+{
+	// Block fire effects.
+	if (WildcardMatch(new_name, "*Fire*") && !fx.allow_fire)
+		return FX_Effect_Deny;
+	// All other effects are okay.
+	return FX_OK;
+}
+
+global func FxIntInvincibleSaveScen(object obj, proplist fx, proplist props)
+{
+	// this is invincible. Save to scenario.
+	props->AddCall("Invincible", obj, "MakeInvincible", fx.allow_fire);
+	return true;
+}
+
+// Removes invincibility from object
 global func ClearInvincible()
 {
 	if (!this) return nil;
+	var fx = GetEffect("IntInvincible", this);
+	if (fx)
+	{
+		this.OnShockwaveHit = fx.OnShockwaveHit;
+		this.RejectWindbagForce = fx.RejectWindbagForce;
+		this.QueryCatchBlow = fx.QueryCatchBlow;
+	} else { // just to be sure
+		this.OnShockwaveHit = this->GetID().OnShockwaveHit;
+		this.RejectWindbagForce = this->GetID().RejectWindbagForce;
+		this.QueryCatchBlow = this->GetID().QueryCatchBlow;
+	}
 	return RemoveEffect("IntInvincible", this);
 }
 
-global func FxIntInvincibleDamage()
+global func Invincibility_OnShockwaveHit()
 {
-	// Object receives zero damage.
-	return 0;
+	return true;
+}
+
+global func Invincibility_RejectWindbagForce()
+{
+	return true;
+}
+
+global func Invincibility_QueryCatchBlow()
+{
+	return true;
 }
 
 // Move an object by the given parameters relative to its position.
@@ -169,7 +219,7 @@ global func GetMaxBreath()
 global func StartGrowth(int value /* the value the object grows approx. every second, in tenths of percent */)
 {
 	var effect;
-	effect = AddEffect("IntGrowth", this, 1, 35, nil, nil, value);
+	effect = AddEffect("IntGrowth", this, 1, 35, this, nil, value);
 	effect.Time = Random(35);
 	return effect;
 }
@@ -195,6 +245,7 @@ global func FxIntGrowthTimer(object obj, effect)
 {
 	if (obj->OnFire()) return;
 	obj->DoCon(effect.growth, 1000);
+	if (!obj) return FX_Execute_Kill; // Negative growth might have removed the object
 	var done = obj->GetCon(1000) >= 1000;
 	return -done;
 }
@@ -217,12 +268,12 @@ global func StonyObjectHit(int x, int y)
 		while(!GBackSolid(x*i, y*i) && i < average_obj_size) i++;
 	// Check if digfree
 	if (!GetMaterialVal("DigFree", "Material", GetMaterial(x*i, y*i)) && GBackSolid(x*i, y*i))
-		return Sound("RockHit?");
+		return Sound("Hits::Materials::Rock::RockHit?");
 	// Else play standard sound
 	if (Distance(0,0,xdir,ydir) > 10)
-			return Sound("SoftTouch?");
+			return Sound("Hits::SoftTouch?");
 		else
-			return Sound("SoftHit?");
+			return Sound("Hits::SoftHit?");
 }
 
 // Removes all objects of the given type.
@@ -348,4 +399,56 @@ global func InFrontOf(object back)
 		return;
 	
 	return front->FindObject(front->Find_AtPoint(), Find_Not(Find_Exclude(back))) != nil;
+}
+
+// Returns the current left of the object relative to its current position.
+global func GetLeft()
+{
+	var offset_x = GetObjectVal("Offset", nil, 0);
+	if (offset_x == nil)
+		offset_x = GetDefCoreVal("Offset", nil, 0);
+	return offset_x;
+}
+
+// Returns the current right of the object relative to its current position.
+global func GetRight()
+{
+	var offset_x = GetObjectVal("Offset", nil, 0);
+	if (offset_x == nil)
+		offset_x = GetDefCoreVal("Offset", nil, 0);
+	var width = GetObjectVal("Width");
+	return offset_x + width;
+}
+
+// Returns the current top of the object relative to its current position.
+global func GetTop()
+{
+	var offset_y = GetObjectVal("Offset", nil, 1);
+	if (offset_y == nil)
+		offset_y = GetDefCoreVal("Offset", nil, 1);
+	return offset_y;
+}
+
+// Returns the current bottom of the object relative to its current position.
+global func GetBottom()
+{
+	var offset_y = GetObjectVal("Offset", nil, 1);
+	if (offset_y == nil)
+		offset_y = GetDefCoreVal("Offset", nil, 1);
+	var height = GetObjectVal("Height");
+	return offset_y + height;
+}
+
+// Returns the current shape as an array [offset_x, offset_y, width, height].
+global func GetShape()
+{
+	var offset_x = GetObjectVal("Offset", nil, 0);
+	if (offset_x == nil)
+		offset_x= GetDefCoreVal("Offset", nil, 0);
+	var offset_y = GetObjectVal("Offset", nil, 1);
+	if (offset_y == nil)
+		offset_y = GetDefCoreVal("Offset", nil, 1);
+	var width = GetObjectVal("Width");
+	var height = GetObjectVal("Height");
+	return [offset_x, offset_y, width, height];
 }

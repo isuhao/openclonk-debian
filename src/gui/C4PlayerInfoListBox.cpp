@@ -149,8 +149,6 @@ C4PlayerInfoListBox::PlayerListItem::PlayerListItem(C4PlayerInfoListBox *pForLis
 	if (pTeamCombo) AddElement(pTeamCombo);
 	if (pRankIcon) AddElement(pRankIcon);
 	if (pExtraLabel) AddElement(pExtraLabel);
-	// tooltip? (same for all components for now. separate tooltip for status icon later?)
-	//SetToolTip(FormatString("%s %s", LoadResStr("IDS_CTL_PLAYER"), sPlayerName.getData()).getData()); hat so keine nennenswerte Aussage...
 	// add to listbox (will get resized horizontally and moved)
 	pForListBox->InsertElement(this, pInsertBeforeElement, PlayerListBoxIndent);
 	// league score update
@@ -293,7 +291,7 @@ void C4PlayerInfoListBox::PlayerListItem::UpdateIcon(C4PlayerInfo *pInfo, C4Play
 		if (!pIcon->EnsureOwnSurface()) return;
 		// draw join info
 		C4Facet fctDraw = pIcon->GetFacet();
-		int32_t iSizeMax = Max<int32_t>(fctDraw.Wdt, fctDraw.Hgt);
+		int32_t iSizeMax = std::max<int32_t>(fctDraw.Wdt, fctDraw.Hgt);
 		int32_t iCrewClrHgt = iSizeMax/2;
 		fctDraw.Hgt -= iCrewClrHgt; fctDraw.Y += iCrewClrHgt;
 		fctDraw.Wdt = iSizeMax/2;
@@ -540,9 +538,7 @@ C4GUI::ContextMenu *C4PlayerInfoListBox::PlayerListItem::OnContextTakeOver(C4GUI
 				}
 	}
 	// add option to use a new one... TODO
-	//pMenu->AddItem("[.!]From &File...", "Select another player file", C4GUI::Ico_Player, new C4GUI::CBMenuHandler<PlayerListItem>(this, OnCtxTest2));
 	// add option to take over from savegame player TODO
-	//pMenu->AddItem("[.!]From &Savegame", "Use savegame player file", C4GUI::Ico_Player, new C4GUI::CBMenuHandler<PlayerListItem>(this, OnCtxTest2));
 	// open it
 	return pMenu;
 }
@@ -847,7 +843,17 @@ C4GUI::Icons C4PlayerInfoListBox::ClientListItem::GetCurrentStatusIcon()
 	// host?
 	if (GetClient()->isHost()) return C4GUI::Ico_Host;
 	// active client?
-	if (GetClient()->isActivated()) return C4GUI::Ico_Client;
+	if (GetClient()->isActivated())
+	{
+		if (GetClient()->isLobbyReady())
+		{
+			return C4GUI::Ico_Ready;
+		}
+		else
+		{
+			return C4GUI::Ico_Client;
+		}
+	}
 	// observer
 	return C4GUI::Ico_ObserverClient;
 }
@@ -1073,12 +1079,10 @@ void C4PlayerInfoListBox::TeamListItem::Update()
 		if (pTeam && pTeam->HasWon())
 		{
 			pNameLabel->SetColor(C4GUI_WinningTextColor, false);
-			//dwBackground = C4GUI_WinningBackgroundColor;
 		}
 		else
 		{
 			pNameLabel->SetColor(C4GUI_LosingTextColor, false);
-			//dwBackground = C4GUI_LosingBackgroundColor;
 		}
 	}
 }
@@ -1371,6 +1375,7 @@ void C4PlayerInfoListBox::UpdateSavegamePlayers(ListItem **ppCurrInList)
 				new PlayerListItem(this, -1, iInfoID, true, *ppCurrInList);
 		}
 		// 2do: none-label
+		(void) fAnyPlayers;
 	}
 
 }
@@ -1381,14 +1386,11 @@ void C4PlayerInfoListBox::UpdateReplayPlayers(ListItem **ppCurrInList)
 	if (!PlrListItemUpdate(ListItem::ID::PLI_REPLAY, 0, ppCurrInList))
 		new ReplayPlayersListItem(this, *ppCurrInList);
 	// players
-	bool fAnyPlayers = false;
 	C4PlayerInfo *pInfo; int32_t iInfoID=0;
 	while ((pInfo = Game.PlayerInfos.GetNextPlayerInfoByID(iInfoID)))
 	{
 		if (pInfo->IsInvisible()) continue;
 		iInfoID = pInfo->GetID();
-		// players are in the list
-		fAnyPlayers = true;
 		// show them
 		if (!PlrListItemUpdate(ListItem::ID::PLI_PLAYER, iInfoID, ppCurrInList))
 			new PlayerListItem(this, -1, iInfoID, false, *ppCurrInList);

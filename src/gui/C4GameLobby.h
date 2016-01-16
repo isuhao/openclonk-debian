@@ -15,9 +15,6 @@
  */
 // the ingame-lobby
 
-// Tab: NickCompletion (2do TODO) - and can't do this here, because tab is used to cycle controls!
-//if (dwKey == VK_TAB) { /*CompleteNick();*/ return true; }
-
 #ifndef INC_C4GameLobby
 #define INC_C4GameLobby
 
@@ -105,10 +102,11 @@ namespace C4GameLobby
 		C4GUI::Edit *pEdt; // chat input
 		C4GUI::CallbackButton<MainDlg> *btnRun; // host only
 		C4GUI::CallbackButton<MainDlg, C4GUI::IconButton> *btnPlayers, *btnResources, *btnTeams, *btnOptions, *btnScenario, *btnChat; // right list sheet selection
+		C4GUI::CheckBox *checkReady;
 
 	protected:
+		void OnReadyCheck(C4GUI::Element *pCheckBox); // callback: checkbox ticked
 		void OnRunBtn(C4GUI::Control *btn); // callback: run button pressed
-		void OnTestBtn(C4GUI::Control *btn); // callback: test button pressed
 		void OnExitBtn(C4GUI::Control *btn); // callback: exit button pressed
 		bool KeyHistoryUpDown(bool fUp); // key callback
 		C4GUI::Edit::InputResult OnChatInput(C4GUI::Edit *edt, bool fPasting, bool fPastingMore); // callback: chat input performed
@@ -151,6 +149,7 @@ namespace C4GameLobby
 		void OnLog(const char *szLogMsg, DWORD dwClr=C4GUI_LogFontClr); // log callback
 		void OnError(const char *szErrMsg); // error sound + log in red
 		void OnPlayersChange() { UpdatePlayerList(); }
+		void OnClientReadyStateChange() { UpdatePlayerList(); }
 		void OnClientAddPlayer(const char *szFilename, int32_t idClient);
 		// packet callbacks from C4Network2
 		void HandlePacket(char cStatus, const C4PacketBase *pBasePkt, C4Network2Client *pClient);

@@ -171,7 +171,7 @@ void C4ConsoleGUI::PropertyDlgClose()
 	[ctrler(this).objectsPanel orderOut:nil];
 }
 
-void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection)
+void C4ConsoleGUI::PropertyDlgUpdate(C4ObjectList &rSelection, bool force_function_update)
 {	
 	if (![ctrler(this).objectsPanel isVisible])
 		return;
@@ -249,11 +249,6 @@ void C4ToolsDlg::UpdateTextures()
 	[texturesPopup selectItemWithTitle:[NSString stringWithUTF8String:Texture]];
 }
 
-void C4ConsoleGUI::ToolsDlgSetTexture(class C4ToolsDlg *dlg, const char *texture)
-{
-	[ctrler(this).texturesPopup selectItemWithTitle:[NSString stringWithUTF8String:texture]];
-}
-
 void C4ToolsDlg::NeedPreviewUpdate()
 {
 	CGImageRef image = state->CreatePreviewImage();
@@ -292,7 +287,7 @@ CGImageRef C4ToolsDlg::State::CreatePreviewImage()
 	iPrvWdt = [ctrler(&Console).previewView frame].size.width;
 	iPrvHgt = [ctrler(&Console).previewView frame].size.height;
 
-	if (!(sfcPreview=new C4Surface(iPrvWdt,iPrvHgt))) return NULL;
+	if (!(sfcPreview=new C4Surface(iPrvWdt,iPrvHgt,0))) return NULL;
 
 	// fill bg
 	BYTE bCol = 0;
@@ -342,11 +337,6 @@ CGImageRef C4ToolsDlg::State::CreatePreviewImage()
 	return image;
 }
 
-void C4ConsoleGUI::ToolsDlgSetMaterial(class C4ToolsDlg *dlg, const char *material)
-{
-	[ctrler(this).texturesPopup selectItemWithTitle:[NSString stringWithUTF8String:material]];
-}
-
 void C4ToolsDlg::InitGradeCtrl()
 {
 }
@@ -370,6 +360,16 @@ void C4ConsoleGUI::ToolsDlgSelectTexture(C4ToolsDlg *dlg, const char *texture)
 void C4ConsoleGUI::ToolsDlgSelectMaterial(C4ToolsDlg *dlg, const char *material)
 {
 	[ctrler(this).materialsPopup selectItemWithTitle:[NSString stringWithUTF8String:material]];
+}
+
+void C4ConsoleGUI::ToolsDlgSelectBackTexture(C4ToolsDlg *dlg, const char *texture)
+{
+	// TODO
+}
+
+void C4ConsoleGUI::ToolsDlgSelectBackMaterial(C4ToolsDlg *dlg, const char *material)
+{
+	// TODO
 }
 
 void C4ToolsDlg::UpdateIFTControls()
@@ -410,11 +410,6 @@ void C4ToolsDlg::EnableControls()
 	NeedPreviewUpdate();
 }
 
-void C4ConsoleGUI::ClearInput()
-{
-	[ctrler(this).consoleCombo setStringValue:[NSString string]];
-}
-
 void C4ConsoleGUI::ClearPlayerMenu()
 {
 }
@@ -428,6 +423,7 @@ void C4ConsoleGUI::AddNetMenuItemForPlayer(int32_t index, StdStrBuf &text)
 
 void C4ConsoleGUI::SetInputFunctions(std::list<const char*> &functions)
 {
+	[ctrler(this).consoleCombo setStringValue:[NSString string]];
 	[ctrler(this) setInputFunctions:functions];
 }
 

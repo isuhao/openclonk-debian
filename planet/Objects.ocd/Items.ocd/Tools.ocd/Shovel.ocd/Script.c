@@ -2,7 +2,18 @@
 
 private func Hit()
 {
-	Sound("WoodHit?");
+	Sound("Hits::Materials::Wood::WoodHit?");
+}
+
+private func Destruction()
+{
+	if (Contained())
+		if (Contained()->GetAction("Dig"))
+		{
+			// We assume that the clonk digs with this shovel. If not, too bad. You stop shoveling.
+			Contained()->SetAction("Walk");
+			Contained()->SetComDir(COMD_Stop);
+		}
 }
 
 public func GetCarryMode(clonk) { return CARRY_Back; }
@@ -12,6 +23,7 @@ public func GetCarrySpecial(clonk) { if(clonk->~GetAction() == "Dig") return "po
 local fDigging;
 local DigAngle;
 local DigX, DigY;
+local stuck_count;
 
 public func IsDigging() { return fDigging; }
 
@@ -62,6 +74,16 @@ public func ControlUseStop(object clonk, int x, int y)
 
 public func FxShovelDigTimer(object clonk, effect, int time)
 {
+	// Left the clonk?
+	if (Contained() != clonk)
+	{
+		if (clonk->GetAction() == "Dig")
+		{
+			clonk->SetAction("Walk");
+			clonk->SetComDir(COMD_Stop);
+		}
+		return FX_Execute_Kill;
+	}
 	var xdir_boost = 0, ydir_boost = 0;
 	// Currently not digging?
 	if(clonk->GetAction() != "Dig" || clonk->GBackLiquid(0,-4))
@@ -104,6 +126,7 @@ public func FxShovelDigTimer(object clonk, effect, int time)
 	{
 		AddEffect("ShovelDust",clonk,1,1,this);
 		fDigging = true;
+		stuck_count = 0;
 	}
 	if(fDigging)
 	{
@@ -116,8 +139,26 @@ public func FxShovelDigTimer(object clonk, effect, int time)
 
 		// limit angle
 		DigAngle = BoundBy(DigAngle,65,300);
-		clonk->SetXDir(Sin(DigAngle,+speed)+xdir_boost,100);
-		clonk->SetYDir(Cos(DigAngle,-speed)+ydir_boost,100);
+		var dig_xdir = Sin(DigAngle,+speed);
+		var dig_ydir = Cos(DigAngle,-speed);
+
+		// Stuck-check: When player wants to go horizontally while standing on the ground but can't, add a vertical redirect
+		// This helps with Clonks getting "stuck" not moving on certain terrain when dig speed is not sufficient to push him up a slope
+		// It also helps e.g. when just digging through earth just above rock, because it will nudge the clonk over the rock
+		if (!clonk->GetXDir(100) && !clonk->GetYDir(100) && GetContact(-1, CNAT_Bottom) && Abs(dig_xdir) > Abs(dig_ydir) && Abs(dig_xdir) > 10)
+		{
+			if (stuck_count++)
+			{
+				ydir_boost -= 100;
+			}
+		}
+		else
+		{
+			stuck_count = 0;
+		}
+		
+		clonk->SetXDir(dig_xdir+xdir_boost,100);
+		clonk->SetYDir(dig_ydir+ydir_boost,100);
 
 		// Dust
 		if (!Random(10))
@@ -150,9 +191,9 @@ public func Dust(object target)
 			R = (clr >> 16) & 0xff,
 			G = (clr >> 8) & 0xff,
 			B = clr & 0xff,
-			Size = PV_KeyFrames(0, 0, 0, 300, 40, 1000, 15),
+			Size = PV_KeyFrames(0, 0, 0, 300, 20, 1000, 7),
 		};
-		CreateParticle("Dust", groundx, groundy, PV_Random(-3, 3), PV_Random(-3, 3), PV_Random(18, 1 * 36), particles, 3);
+		CreateParticle("Dust", groundx/2, groundy/2, PV_Random(-6, 6), PV_Random(-6, 6), PV_Random(18, 1 * 36), particles, 8);
 	}
 }
 
@@ -167,4 +208,3 @@ local Collectible = 1;
 local Name = "$Name$";
 local Description = "$Description$";
 local UsageHelp = "$UsageHelp$";
-local Rebuy = true;
