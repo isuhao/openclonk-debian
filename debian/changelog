@@ -1,3 +1,9 @@
+openclonk (7.0-1) unstable; urgency=medium
+
+  * Imported Upstream version 7.0
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 17 Jan 2016 13:31:13 +0100
+
 openclonk (6.1-2) unstable; urgency=medium
 
   * Rebuild against libpng-dev. (Closes: #810195)
