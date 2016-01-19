@@ -1,3 +1,12 @@
+openclonk (7.0-2) unstable; urgency=medium
+
+  * Build-depend on libglew-dev (>= 1.5.6)
+  * Build-depend on libopenal-dev and libalut-dev.
+  * Boost is no longer required (all c++14).
+  * System TinyXML detection is now automatic.
+
+ -- Philipp Kern <pkern@debian.org>  Sun, 17 Jan 2016 22:41:16 +0100
+
 openclonk (7.0-1) unstable; urgency=medium
 
   * Imported Upstream version 7.0
