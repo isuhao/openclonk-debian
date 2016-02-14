@@ -1,0 +1,30 @@
+Index: openclonk-debian/CMakeLists.txt
+===================================================================
+--- openclonk-debian.orig/CMakeLists.txt
++++ openclonk-debian/CMakeLists.txt
+@@ -1421,7 +1421,6 @@ ENDIF()
+ set(OC_C4GROUPS
+ 	Graphics.ocg
+ 	Material.ocg
+-	Music.ocg
+ 	Sound.ocg
+ 	System.ocg
+ 	Objects.ocd
+@@ -1466,6 +1465,8 @@ foreach(group ${OC_C4GROUPS})
+ endforeach()
+ 
+ if (NOT APPLE)
++	install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/planet/Music.ocg DESTINATION share/games/openclonk)
++
+ 	add_custom_target(groups DEPENDS ${OC_C4GROUPS})
+ 	add_dependencies(data groups)
+ 	
+@@ -1478,6 +1479,8 @@ if (NOT APPLE)
+ 	install(TARGETS openclonk DESTINATION games)
+ 	install(TARGETS c4group DESTINATION bin)
+ else()
++	# TODO: install Music.ocg's files
++
+ 	install(TARGETS openclonk
+ 		BUNDLE DESTINATION .
+ 	)
