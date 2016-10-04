@@ -1,0 +1,12 @@
+Index: openclonk-debian/openclonk.desktop
+===================================================================
+--- openclonk-debian.orig/openclonk.desktop
++++ openclonk-debian/openclonk.desktop
+@@ -6,6 +6,6 @@ Comment[de]=Ein actiongeladenes Taktiksp
+ GenericName=Multiplayer action, tactics and skill game
+ Icon=openclonk
+ Exec=openclonk
+-Categories=Game;ActionGame;
++Categories=Game;ActionGame;StrategyGame;ArcadeGame;
+ StartupNotify=true
+ MimeType=x-scheme-handler/clonk;
