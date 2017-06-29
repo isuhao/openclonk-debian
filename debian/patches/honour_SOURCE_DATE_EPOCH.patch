@@ -1,0 +1,24 @@
+Description: Honour SOURCE_DATE_EPOCH
+ Honour the SOURCE_DATE_EPOCH environment variable to get the copyright year,
+ to make the build reproducible.
+ See https://reproducible-builds.org/specs/source-date-epoch/
+Author: Alexis BienvenÃ¼e <pado@passoire.fr>
+
+--- openclonk-7.0.orig/cmake/Version.cmake
++++ openclonk-7.0/cmake/Version.cmake
+@@ -24,7 +24,14 @@ git_get_changeset_id(C4REVISION)
+ ############################################################################
+ 
+ IF(CMAKE_HOST_UNIX)
+-	EXECUTE_PROCESS(COMMAND "date" "+%Y" OUTPUT_VARIABLE DATE)
++if (DEFINED ENV{SOURCE_DATE_EPOCH})
++  EXECUTE_PROCESS(
++    COMMAND "date" "-u" "-d" "@$ENV{SOURCE_DATE_EPOCH}" "+%Y"
++    OUTPUT_VARIABLE DATE
++    OUTPUT_STRIP_TRAILING_WHITESPACE)
++else ()
++  EXECUTE_PROCESS(COMMAND "date" "+%Y" OUTPUT_VARIABLE DATE)
++endif ()
+ ELSEIF(CMAKE_HOST_WIN32)
+ 	EXECUTE_PROCESS(COMMAND "cscript.exe" "//nologo" "${CMAKE_CURRENT_SOURCE_DIR}/tools/get_current_year.vbs" OUTPUT_VARIABLE DATE)
+ ENDIF()
