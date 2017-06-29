@@ -1,3 +1,13 @@
+openclonk (7.0-5) unstable; urgency=medium
+
+  * Do not build-depend on OpenSSL, it is no longer needed.
+    (Closes: #854868)
+  * Honor SOURCE_DATE_EPOCH in the environment for the copyright
+    year to make the build reproducible, thanks to Alexis Bienvenüe.
+    (Closes: #823797)
+
+ -- Philipp Kern <pkern@debian.org>  Thu, 29 Jun 2017 22:27:06 +0200
+
 openclonk (7.0-4) unstable; urgency=medium
 
   * Add OpenClonk to the categories StrategyGame and ArcadeGame.
